@@ -1,0 +1,18 @@
+{
+  "name": "envsync",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "Frontend",
+    "Backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w envsync-web",
+    "build": "npm run build -w envsync-web",
+    "start": "npm run start -w envsync-web",
+    "lint": "npm run lint -w envsync-web"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

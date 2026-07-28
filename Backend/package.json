@@ -1,0 +1,11 @@
+{
+  "name": "envsync-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EnvSync API (placeholder)",
+  "scripts": {
+    "dev": "echo \"Backend not implemented yet\"",
+    "build": "echo \"Backend not implemented yet\"",
+    "start": "echo \"Backend not implemented yet\""
+  }
+}
