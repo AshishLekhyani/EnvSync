@@ -240,3 +240,120 @@ export async function deleteSecret(
     await tx.secret.delete({ where: { id: secretId } });
   });
 }
+
+export async function listSecretVersions(secretId: string) {
+  await getSecretWithEnvironment(secretId);
+
+  return prisma.secretVersion.findMany({
+    where: { secretId },
+    select: {
+      id: true,
+      version: true,
+      changeType: true,
+      createdAt: true,
+      author: { select: { id: true, name: true, email: true } },
+    },
+    orderBy: { version: "desc" },
+  });
+}
+
+async function getSecretVersion(secretId: string, version: number) {
+  const secretVersion = await prisma.secretVersion.findUnique({
+    where: { secretId_version: { secretId, version } },
+  });
+
+  if (!secretVersion) {
+    throw new NotFoundError("Secret version not found");
+  }
+
+  return secretVersion;
+}
+
+export async function revealSecretVersion(
+  secretId: string,
+  version: number,
+  actorId: string,
+  ipAddress?: string
+) {
+  const secret = await getSecretWithEnvironment(secretId);
+  const secretVersion = await getSecretVersion(secretId, version);
+  const dek = await getOrCreateOrgDek(secret.environment.project.orgId);
+
+  const value = decryptWithDek(
+    {
+      ciphertext: Buffer.from(secretVersion.ciphertext),
+      iv: Buffer.from(secretVersion.iv),
+      authTag: Buffer.from(secretVersion.authTag),
+    },
+    dek
+  );
+
+  await writeAuditLog(prisma, {
+    orgId: secret.environment.project.orgId,
+    actorId,
+    action: "secret.version_reveal",
+    targetType: "Secret",
+    targetId: secret.id,
+    projectId: secret.environment.projectId,
+    metadata: { key: secret.key, version },
+    ipAddress,
+  });
+
+  return { version, value };
+}
+
+export async function restoreSecretVersion(
+  secretId: string,
+  version: number,
+  actorId: string,
+  ipAddress?: string
+) {
+  const secret = await getSecretWithEnvironment(secretId);
+
+  if (version === secret.currentVersion) {
+    throw new ConflictError("This version is already current");
+  }
+
+  const secretVersion = await getSecretVersion(secretId, version);
+  const nextVersion = secret.currentVersion + 1;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.secret.update({
+      where: { id: secretId },
+      data: {
+        ciphertext: secretVersion.ciphertext,
+        iv: secretVersion.iv,
+        authTag: secretVersion.authTag,
+        currentVersion: nextVersion,
+        updatedById: actorId,
+      },
+    });
+
+    await tx.secretVersion.create({
+      data: {
+        secretId,
+        version: nextVersion,
+        ciphertext: secretVersion.ciphertext,
+        iv: secretVersion.iv,
+        authTag: secretVersion.authTag,
+        changeType: SecretChangeType.RESTORE,
+        createdById: actorId,
+      },
+    });
+
+    await writeAuditLog(tx, {
+      orgId: secret.environment.project.orgId,
+      actorId,
+      action: "secret.restore",
+      targetType: "Secret",
+      targetId: secretId,
+      projectId: secret.environment.projectId,
+      metadata: { key: secret.key, restoredFromVersion: version, newVersion: nextVersion },
+      ipAddress,
+    });
+
+    return result;
+  });
+
+  return toMetadata(updated);
+}

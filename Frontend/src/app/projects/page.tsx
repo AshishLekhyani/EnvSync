@@ -8,42 +8,11 @@ import { useAuth } from "@/lib/auth-context";
 import {
   api,
   ApiError,
+  AuditLogEntry,
   MemberSummary,
   Project,
 } from "@/lib/api";
-
-const audits = [
-  {
-    icon: "edit",
-    iconClass: "text-primary",
-    key: "STRIPE_API_KEY",
-    project: "API Service",
-    member: "Sarah Jenkins",
-    avatar:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuCLLC9hp2vfCqcnkVsqjJm0IfV1hKD9gnwCvtq82USjr8YpKaextJe42cUKdF-x1HQxLNay3YtNlDbJz-oxKwufvLUQxF-IhGzzvGtYK_t4qaGatA9XgOF-B1ZU2Cn3I2gpudONKNR3MzC-7P1s80OyFoAzUWRIPDxPTSKA12r613jpHafmzEwt-4KA9IgasElM7SsXekwcNlCjumZMXEG1Hk6kzPTYdYlMK_otOLgWEOOt_Q-_rBHH7jJTI35LibutKaRPlymDTINa",
-    time: "2m ago",
-  },
-  {
-    icon: "add",
-    iconClass: "text-tertiary",
-    key: "NEXT_PUBLIC_GA_ID",
-    project: "Frontend Web",
-    member: "Marcus Wei",
-    avatar:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuDJLOcsJPPU5PNaX7q2nf8ePBpFvs9yQ12Nndf1EnqPo8ghJ_V-FY5YU6kWRid0VjP12biIndudsVFy_42kAe6V3dvgn-zIWsshaI7mP58jlpz61HYUya4x-BQQLOEUbTQGyUprRENpMGruZXmCI77PMc5Gqgofnq0QhoDMB7AZsF-sj0UmGSm3VZ9BoDIwH0EpOvxGAL7gpCBOSl-NVJTTVeCUdhJFnzgvL-VcyIsnn_WFbOq3HyoOGKMm9tr1tIG_CC8JBDJNxo0D",
-    time: "45m ago",
-  },
-  {
-    icon: "delete",
-    iconClass: "text-error",
-    key: "OLD_LEGACY_TOKEN",
-    project: "Mobile App",
-    member: "Robert Chen",
-    avatar:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuCpmEahEeuQhqHsrvXKok2K7GUtNqe1bulGJoV01r1ggXhaTe3a4zeXeFoIm920wgxq7SIpQUS5KH1Tm4-Z1E7vzl-vfSMQwC-SQjBzR-q7xVgnWK_OLxxCH85UuvO_y4nr_Tpz55p9vHDLyVlVk7psfIQ53DIk81hduJsziLuS8SJYNzDiDxPV7xWB4fDqH2oVCTDUi7iy2WEDzSs_Vwo0f5oLhHEtRrnOGYYuK1hlezl9KN4BJNsYjJX2Wsm2OFT7waRROlrJ5D6G",
-    time: "2h ago",
-  },
-];
+import { getActionDisplay } from "@/lib/auditActions";
 
 function slugify(value: string) {
   return value
@@ -61,6 +30,10 @@ export default function ProjectsPage() {
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(true);
+  const [auditForbidden, setAuditForbidden] = useState(false);
 
   const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [orgName, setOrgName] = useState("");
@@ -93,6 +66,37 @@ export default function ProjectsPage() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [org]);
+
+  useEffect(() => {
+    if (!org) {
+      setAuditLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setAuditLoading(true);
+
+    api
+      .listAuditLogs(org.id, { limit: 5 })
+      .then((logs) => {
+        if (!cancelled) {
+          setAuditLogs(logs);
+          setAuditForbidden(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled && err instanceof ApiError && err.status === 403) {
+          setAuditForbidden(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAuditLoading(false);
       });
 
     return () => {
@@ -353,64 +357,71 @@ export default function ProjectsPage() {
             )}
 
             <div className="mt-xl">
-              <h2 className="mb-xs font-h2 text-h2 text-on-surface">Audit Activity</h2>
-              <p className="mb-md font-body-sm text-body-sm text-secondary">
-                Sample data — the audit log API lands in a later phase.
-              </p>
+              <h2 className="mb-md font-h2 text-h2 text-on-surface">Audit Activity</h2>
               <div className="github-card overflow-hidden rounded-lg">
-                <table className="w-full border-collapse text-left">
-                  <thead className="border-b border-outline-variant bg-surface-container-low">
-                    <tr>
-                      {["Action", "Project", "Member", "Time"].map((h) => (
-                        <th
-                          key={h}
-                          className="px-md py-sm font-label-md text-label-md text-on-surface"
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-outline-variant">
-                    {audits.map((row) => (
-                      <tr
-                        key={row.key}
-                        className="cursor-pointer transition-colors hover:bg-surface-bright"
-                      >
-                        <td className="px-md py-sm">
-                          <div className="flex items-center gap-xs">
-                            <Icon
-                              name={row.icon}
-                              className={row.iconClass}
-                              style={{ fontSize: 18 }}
-                            />
-                            <span className="font-code-md text-code-md text-on-surface">
-                              {row.key}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-md py-sm font-body-sm text-body-sm text-on-surface">
-                          {row.project}
-                        </td>
-                        <td className="px-md py-sm">
-                          <div className="flex items-center gap-xs">
-                            <img
-                              src={row.avatar}
-                              alt=""
-                              className="h-5 w-5 rounded-full object-cover"
-                            />
-                            <span className="font-body-sm text-body-sm text-on-surface">
-                              {row.member}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-md py-sm font-body-sm text-body-sm text-secondary">
-                          {row.time}
-                        </td>
+                {auditLoading ? (
+                  <div className="flex justify-center py-lg text-secondary">
+                    <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 24 }} />
+                  </div>
+                ) : auditForbidden ? (
+                  <p className="px-md py-lg text-center font-body-sm text-body-sm text-secondary">
+                    Audit activity requires Developer access or higher.
+                  </p>
+                ) : auditLogs.length === 0 ? (
+                  <p className="px-md py-lg text-center font-body-sm text-body-sm text-secondary">
+                    No activity yet.
+                  </p>
+                ) : (
+                  <table className="w-full border-collapse text-left">
+                    <thead className="border-b border-outline-variant bg-surface-container-low">
+                      <tr>
+                        {["Action", "Project", "Member", "Time"].map((h) => (
+                          <th
+                            key={h}
+                            className="px-md py-sm font-label-md text-label-md text-on-surface"
+                          >
+                            {h}
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant">
+                      {auditLogs.map((log) => {
+                        const display = getActionDisplay(log.action);
+                        const key =
+                          (log.metadata?.key as string | undefined) ?? log.targetType ?? "—";
+                        return (
+                          <tr
+                            key={log.id}
+                            className="transition-colors hover:bg-surface-bright"
+                          >
+                            <td className="px-md py-sm">
+                              <div className="flex items-center gap-xs">
+                                <Icon
+                                  name={display.icon}
+                                  className={display.iconClass}
+                                  style={{ fontSize: 18 }}
+                                />
+                                <span className="font-code-md text-code-md text-on-surface">
+                                  {key}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-md py-sm font-body-sm text-body-sm text-on-surface">
+                              {log.project?.name ?? "—"}
+                            </td>
+                            <td className="px-md py-sm font-body-sm text-body-sm text-on-surface">
+                              {log.actor?.name ?? "Unknown"}
+                            </td>
+                            <td className="px-md py-sm font-body-sm text-body-sm text-secondary">
+                              {new Date(log.createdAt).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </>

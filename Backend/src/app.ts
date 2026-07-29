@@ -16,6 +16,7 @@ import {
   environmentSecretsRouter,
   secretRouter,
 } from "./modules/secrets/secret.routes";
+import { orgAuditLogsRouter } from "./modules/audit/audit.routes";
 
 export function createApp() {
   const app = express();
@@ -37,6 +38,7 @@ export function createApp() {
   app.use("/api/environments", environmentRouter);
   app.use("/api/environments/:environmentId/secrets", environmentSecretsRouter);
   app.use("/api/secrets", secretRouter);
+  app.use("/api/orgs/:orgId/audit-logs", orgAuditLogsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

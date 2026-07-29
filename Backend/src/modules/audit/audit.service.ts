@@ -18,7 +18,9 @@ export type AuditAction =
   | "secret.create"
   | "secret.update"
   | "secret.delete"
-  | "secret.reveal";
+  | "secret.reveal"
+  | "secret.version_reveal"
+  | "secret.restore";
 
 interface WriteAuditLogInput {
   orgId: string;
@@ -46,5 +48,27 @@ export function writeAuditLog(
       metadata: input.metadata as Prisma.InputJsonValue | undefined,
       ipAddress: input.ipAddress,
     },
+  });
+}
+
+interface ListAuditLogsFilters {
+  projectId?: string;
+  action?: string;
+  limit?: number;
+}
+
+export function listAuditLogs(orgId: string, filters: ListAuditLogsFilters) {
+  return prisma.auditLog.findMany({
+    where: {
+      orgId,
+      projectId: filters.projectId,
+      action: filters.action,
+    },
+    include: {
+      actor: { select: { id: true, name: true, email: true } },
+      project: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: filters.limit ?? 50,
   });
 }

@@ -48,3 +48,18 @@ secretRouter.delete(
   requireEnvironmentAccess("write", environmentIdFromSecretParam()),
   secretController.deleteSecret
 );
+secretRouter.get(
+  "/:secretId/versions",
+  requireEnvironmentAccess("read", environmentIdFromSecretParam()),
+  secretController.listSecretVersions
+);
+secretRouter.get(
+  "/:secretId/versions/:version/reveal",
+  requireEnvironmentAccess("read", environmentIdFromSecretParam()),
+  secretController.revealSecretVersion
+);
+secretRouter.post(
+  "/:secretId/versions/:version/restore",
+  requireEnvironmentAccess("write", environmentIdFromSecretParam()),
+  secretController.restoreSecretVersion
+);

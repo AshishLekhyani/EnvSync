@@ -45,3 +45,28 @@ export const deleteSecret = asyncHandler(async (req, res) => {
   await secretService.deleteSecret(req.params.secretId, req.user!.id, req.ip);
   res.status(204).send();
 });
+
+export const listSecretVersions = asyncHandler(async (req, res) => {
+  const versions = await secretService.listSecretVersions(req.params.secretId);
+  res.status(200).json(versions);
+});
+
+export const revealSecretVersion = asyncHandler(async (req, res) => {
+  const result = await secretService.revealSecretVersion(
+    req.params.secretId,
+    Number(req.params.version),
+    req.user!.id,
+    req.ip
+  );
+  res.status(200).json(result);
+});
+
+export const restoreSecretVersion = asyncHandler(async (req, res) => {
+  const secret = await secretService.restoreSecretVersion(
+    req.params.secretId,
+    Number(req.params.version),
+    req.user!.id,
+    req.ip
+  );
+  res.status(200).json(secret);
+});

@@ -109,6 +109,80 @@ async function main() {
   }
   ok("reveal secret round-trip");
 
+  res = await fetch(`${BASE}/secrets/${secret.id}`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ value: "postgres://user:pass@localhost/db-v2" }),
+  });
+  let updatedSecret = await res.json();
+  if (res.status !== 200 || updatedSecret.currentVersion !== 2) {
+    fail("update secret to version 2", updatedSecret);
+  }
+  ok("update secret to version 2");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ value: "postgres://user:pass@localhost/db-v3" }),
+  });
+  updatedSecret = await res.json();
+  if (res.status !== 200 || updatedSecret.currentVersion !== 3) {
+    fail("update secret to version 3", updatedSecret);
+  }
+  ok("update secret to version 3");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/versions`, {
+    headers: authHeaders(ownerAccessToken),
+  });
+  let versions = await res.json();
+  if (
+    res.status !== 200 ||
+    versions.length !== 3 ||
+    versions[0].version !== 3 ||
+    versions[1].version !== 2 ||
+    versions[2].version !== 1 ||
+    versions[2].changeType !== "CREATE" ||
+    versions[1].changeType !== "UPDATE"
+  ) {
+    fail("list secret versions (newest first)", versions);
+  }
+  ok("list secret versions (newest first, CREATE/UPDATE change types correct)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/versions/1/reveal`, {
+    headers: authHeaders(ownerAccessToken),
+  });
+  const revealedV1 = await res.json();
+  if (res.status !== 200 || revealedV1.value !== "postgres://user:pass@localhost/db") {
+    fail("reveal historical version 1 (should be original value, not current)", revealedV1);
+  }
+  ok("reveal historical version 1 returns original value, not current");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/versions/1/restore`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  const restored = await res.json();
+  if (res.status !== 200 || restored.currentVersion !== 4) {
+    fail("restore version 1", restored);
+  }
+  ok("restore version 1 (currentVersion becomes 4)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/reveal`, { headers: authHeaders(ownerAccessToken) });
+  const revealedAfterRestore = await res.json();
+  if (res.status !== 200 || revealedAfterRestore.value !== "postgres://user:pass@localhost/db") {
+    fail("live value after restore should match original", revealedAfterRestore);
+  }
+  ok("live secret value after restore matches original (restore actually took effect)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/versions`, {
+    headers: authHeaders(ownerAccessToken),
+  });
+  versions = await res.json();
+  if (res.status !== 200 || versions.length !== 4 || versions[0].changeType !== "RESTORE") {
+    fail("versions list after restore should have 4 entries, top one RESTORE", versions);
+  }
+  ok("versions list after restore has 4 entries, newest is RESTORE");
+
   res = await fetch(`${BASE}/environments/${prodEnv.id}/secrets`, {
     method: "POST",
     headers: authHeaders(ownerAccessToken),
@@ -164,6 +238,61 @@ async function main() {
   });
   if (res.status !== 200) fail("viewer reveal dev secret should be 200", await res.text());
   ok("viewer can reveal dev secret (200)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/versions`, {
+    headers: authHeaders(viewerAccessToken),
+  });
+  if (res.status !== 200) fail("viewer list dev secret versions should be 200", await res.text());
+  ok("viewer can list dev secret versions (200)");
+
+  res = await fetch(`${BASE}/secrets/${prodSecret.id}/versions`, {
+    headers: authHeaders(viewerAccessToken),
+  });
+  if (res.status !== 403) fail("viewer list prod secret versions should be 403", await res.text());
+  ok("viewer cannot list prod secret versions (403)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/versions/1/restore`, {
+    method: "POST",
+    headers: authHeaders(viewerAccessToken),
+  });
+  if (res.status !== 403) fail("viewer restore should be 403", await res.text());
+  ok("viewer cannot restore a version (403, write access required)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?limit=50`, {
+    headers: authHeaders(ownerAccessToken),
+  });
+  const auditLogs = await res.json();
+  if (res.status !== 200) fail("owner list audit logs", auditLogs);
+  const actions = new Set((auditLogs as Array<{ action: string }>).map((l) => l.action));
+  const expectedActions = [
+    "secret.create",
+    "secret.update",
+    "secret.version_reveal",
+    "secret.restore",
+    "member.add",
+  ];
+  const missing = expectedActions.filter((a) => !actions.has(a));
+  if (missing.length > 0) fail("audit logs missing expected actions", { missing, actions: [...actions] });
+  ok("audit logs contain all expected action types");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs`, {
+    headers: authHeaders(viewerAccessToken),
+  });
+  if (res.status !== 403) fail("viewer list audit logs should be 403", await res.text());
+  ok("viewer cannot read audit logs (403, DEVELOPER+ required)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?projectId=${projectId}`, {
+    headers: authHeaders(ownerAccessToken),
+  });
+  const filteredLogs = await res.json();
+  if (
+    res.status !== 200 ||
+    !Array.isArray(filteredLogs) ||
+    filteredLogs.some((l: { projectId: string | null }) => l.projectId !== projectId)
+  ) {
+    fail("audit logs filtered by projectId", filteredLogs);
+  }
+  ok("audit logs projectId filter returns only matching rows");
 
   res = await fetch(`${BASE}/auth/refresh`, {
     method: "POST",

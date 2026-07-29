@@ -127,6 +127,7 @@ enum SecretChangeType {
   CREATE
   UPDATE
   DELETE
+  RESTORE
 }
 
 model SecretVersion {

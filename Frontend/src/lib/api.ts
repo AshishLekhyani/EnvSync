@@ -105,6 +105,29 @@ export interface MemberSummary {
   user: { id: string; name: string; email: string };
 }
 
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  projectId: string | null;
+  project: { id: string; name: string } | null;
+  actor: { id: string; name: string; email: string } | null;
+  metadata: Record<string, unknown> | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+export type SecretChangeType = "CREATE" | "UPDATE" | "DELETE" | "RESTORE";
+
+export interface SecretVersionMetadata {
+  id: string;
+  version: number;
+  changeType: SecretChangeType;
+  author: { id: string; name: string; email: string };
+  createdAt: string;
+}
+
 export const api = {
   signup: (input: { name: string; email: string; password: string }) =>
     request<{ user: PublicUser }>("/auth/signup", {
@@ -187,5 +210,30 @@ export const api = {
     request<MemberSummary>(`/orgs/${orgId}/members`, {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+
+  listAuditLogs: (
+    orgId: string,
+    params?: { projectId?: string; action?: string; limit?: number }
+  ) => {
+    const qs = new URLSearchParams();
+    if (params?.projectId) qs.set("projectId", params.projectId);
+    if (params?.action) qs.set("action", params.action);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<AuditLogEntry[]>(`/orgs/${orgId}/audit-logs${suffix}`);
+  },
+
+  listSecretVersions: (secretId: string) =>
+    request<SecretVersionMetadata[]>(`/secrets/${secretId}/versions`),
+
+  revealSecretVersion: (secretId: string, version: number) =>
+    request<{ version: number; value: string }>(
+      `/secrets/${secretId}/versions/${version}/reveal`
+    ),
+
+  restoreSecretVersion: (secretId: string, version: number) =>
+    request<SecretMetadata>(`/secrets/${secretId}/versions/${version}/restore`, {
+      method: "POST",
     }),
 };

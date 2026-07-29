@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { Fragment, FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
@@ -12,7 +12,9 @@ import {
   EnvironmentSummary,
   MemberSummary,
   SecretMetadata,
+  SecretVersionMetadata,
 } from "@/lib/api";
+import { getActionDisplay } from "@/lib/auditActions";
 
 const MASKED = "••••••••••••••••••••••••";
 
@@ -42,6 +44,14 @@ export default function EnvironmentSecretsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+  const [versionsCache, setVersionsCache] = useState<Record<string, SecretVersionMetadata[]>>({});
+  const [versionsLoading, setVersionsLoading] = useState<string | null>(null);
+  const [versionRevealed, setVersionRevealed] = useState<Record<string, string>>({});
+  const [versionVisible, setVersionVisible] = useState<Record<string, boolean>>({});
+  const [revealingVersionKey, setRevealingVersionKey] = useState<string | null>(null);
+  const [restoringVersionKey, setRestoringVersionKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,6 +157,81 @@ export default function EnvironmentSecretsPage() {
       setSecrets((prev) => prev.filter((s) => s.id !== secretId));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to delete secret");
+    }
+  };
+
+  const loadVersions = async (secretId: string) => {
+    setVersionsLoading(secretId);
+    setError(null);
+    try {
+      const versions = await api.listSecretVersions(secretId);
+      setVersionsCache((prev) => ({ ...prev, [secretId]: versions }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load version history");
+    } finally {
+      setVersionsLoading(null);
+    }
+  };
+
+  const onToggleHistory = (secretId: string) => {
+    if (expandedHistoryId === secretId) {
+      setExpandedHistoryId(null);
+      return;
+    }
+    setExpandedHistoryId(secretId);
+    if (!versionsCache[secretId]) {
+      loadVersions(secretId);
+    }
+  };
+
+  const onToggleVersionReveal = async (secretId: string, version: number) => {
+    const key = `${secretId}:${version}`;
+
+    if (versionVisible[key]) {
+      setVersionVisible((prev) => ({ ...prev, [key]: false }));
+      return;
+    }
+
+    if (versionRevealed[key] !== undefined) {
+      setVersionVisible((prev) => ({ ...prev, [key]: true }));
+      return;
+    }
+
+    setRevealingVersionKey(key);
+    setError(null);
+    try {
+      const result = await api.revealSecretVersion(secretId, version);
+      setVersionRevealed((prev) => ({ ...prev, [key]: result.value }));
+      setVersionVisible((prev) => ({ ...prev, [key]: true }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to reveal version");
+    } finally {
+      setRevealingVersionKey(null);
+    }
+  };
+
+  const onRestore = async (secretId: string, version: number) => {
+    if (!window.confirm(`Restore version ${version}? This creates a new current version.`)) {
+      return;
+    }
+
+    const key = `${secretId}:${version}`;
+    setRestoringVersionKey(key);
+    setError(null);
+    try {
+      const updated = await api.restoreSecretVersion(secretId, version);
+      setSecrets((prev) => prev.map((s) => (s.id === secretId ? updated : s)));
+      setRevealed((prev) => {
+        const next = { ...prev };
+        delete next[secretId];
+        return next;
+      });
+      setVisible((prev) => ({ ...prev, [secretId]: false }));
+      await loadVersions(secretId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to restore version");
+    } finally {
+      setRestoringVersionKey(null);
     }
   };
 
@@ -314,7 +399,8 @@ export default function EnvironmentSecretsPage() {
                   </thead>
                   <tbody className="divide-y divide-outline-variant">
                     {secrets.map((secret) => (
-                      <tr key={secret.id} className="variable-row group transition-colors">
+                      <Fragment key={secret.id}>
+                      <tr className="variable-row group transition-colors">
                         <td className="px-md py-sm">
                           <span className="rounded border border-outline-variant bg-surface-container px-xs py-[2px] font-code-md text-code-md text-on-surface">
                             {secret.key}
@@ -390,6 +476,16 @@ export default function EnvironmentSecretsPage() {
                           <div className="flex justify-end gap-sm">
                             <button
                               type="button"
+                              onClick={() => onToggleHistory(secret.id)}
+                              className={`transition-colors hover:text-primary ${
+                                expandedHistoryId === secret.id ? "text-primary" : "text-secondary"
+                              }`}
+                              aria-label="View history"
+                            >
+                              <Icon name="history" style={{ fontSize: 18 }} />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => {
                                 setEditingId(secret.id);
                                 setEditValue("");
@@ -410,6 +506,114 @@ export default function EnvironmentSecretsPage() {
                           </div>
                         </td>
                       </tr>
+                      {expandedHistoryId === secret.id && (
+                        <tr>
+                          <td colSpan={5} className="bg-surface-container-low px-md py-md">
+                            {versionsLoading === secret.id ? (
+                              <div className="flex justify-center py-md text-secondary">
+                                <Icon
+                                  name="progress_activity"
+                                  className="animate-spin"
+                                  style={{ fontSize: 20 }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-sm">
+                                {(versionsCache[secret.id] ?? []).map((v) => {
+                                  const versionKey = `${secret.id}:${v.version}`;
+                                  const display = getActionDisplay(
+                                    `secret.${v.changeType.toLowerCase()}`
+                                  );
+                                  const isCurrent = v.version === secret.currentVersion;
+                                  return (
+                                    <div
+                                      key={v.id}
+                                      className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-lowest px-md py-sm"
+                                    >
+                                      <div className="flex items-center gap-sm">
+                                        <span className="rounded bg-surface-container-highest px-xs py-[2px] font-code-sm text-code-sm text-on-surface-variant">
+                                          v{v.version}
+                                        </span>
+                                        <Icon
+                                          name={display.icon}
+                                          className={display.iconClass}
+                                          style={{ fontSize: 16 }}
+                                        />
+                                        <span className="font-body-sm text-body-sm text-on-surface">
+                                          {display.label}
+                                        </span>
+                                        {isCurrent && (
+                                          <span className="rounded-full bg-primary/10 px-sm py-[1px] text-[10px] font-bold uppercase text-primary">
+                                            Current
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-md">
+                                        <span
+                                          className={`font-code-md text-code-md text-secondary ${
+                                            versionVisible[versionKey] ? "" : "masked-value"
+                                          }`}
+                                        >
+                                          {versionVisible[versionKey]
+                                            ? versionRevealed[versionKey]
+                                            : MASKED}
+                                        </span>
+                                        <span className="font-body-sm text-body-sm text-on-surface-variant">
+                                          {v.author.name}
+                                        </span>
+                                        <span className="font-body-sm text-body-sm text-secondary">
+                                          {new Date(v.createdAt).toLocaleString()}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          disabled={revealingVersionKey === versionKey}
+                                          onClick={() => onToggleVersionReveal(secret.id, v.version)}
+                                          className="text-primary"
+                                          aria-label={
+                                            versionVisible[versionKey] ? "Hide value" : "Reveal value"
+                                          }
+                                        >
+                                          <Icon
+                                            name={
+                                              revealingVersionKey === versionKey
+                                                ? "progress_activity"
+                                                : versionVisible[versionKey]
+                                                  ? "visibility_off"
+                                                  : "visibility"
+                                            }
+                                            className={
+                                              revealingVersionKey === versionKey ? "animate-spin" : ""
+                                            }
+                                            style={{ fontSize: 18 }}
+                                          />
+                                        </button>
+                                        {!isCurrent && (
+                                          <button
+                                            type="button"
+                                            disabled={restoringVersionKey === versionKey}
+                                            onClick={() => onRestore(secret.id, v.version)}
+                                            className="font-label-md text-label-md text-xs font-bold text-primary hover:underline disabled:opacity-50"
+                                          >
+                                            {restoringVersionKey === versionKey
+                                              ? "Restoring..."
+                                              : "Restore"}
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {(versionsCache[secret.id] ?? []).length === 0 && (
+                                  <p className="py-sm text-center font-body-sm text-body-sm text-secondary">
+                                    No history yet.
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
 
                     {secrets.length === 0 && (

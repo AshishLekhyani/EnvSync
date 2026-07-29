@@ -1,47 +1,51 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
-
-const logs = [
-  {
-    icon: "edit",
-    iconClass: "text-primary",
-    action: "Changed",
-    key: "API_KEY",
-    project: "API Service",
-    member: "Ashish",
-    time: "12:05 PM",
-  },
-  {
-    icon: "delete",
-    iconClass: "text-error",
-    action: "Deleted",
-    key: "STRIPE_SECRET",
-    project: "API Service",
-    member: "Sarah Jenkins",
-    time: "11:42 AM",
-  },
-  {
-    icon: "history",
-    iconClass: "text-tertiary",
-    action: "Restored",
-    key: "JWT_SECRET",
-    project: "Frontend Web",
-    member: "Marcus Chen",
-    time: "10:18 AM",
-    detail: "version 7",
-  },
-  {
-    icon: "download",
-    iconClass: "text-primary",
-    action: "Downloaded",
-    key: "Production secrets",
-    project: "API Service",
-    member: "Alex Rivera",
-    time: "Yesterday",
-  },
-];
+import { useAuth } from "@/lib/auth-context";
+import { api, ApiError, AuditLogEntry } from "@/lib/api";
+import { getActionDisplay } from "@/lib/auditActions";
 
 export default function AuditPage() {
+  const { organizations } = useAuth();
+  const org = organizations[0] ?? null;
+
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!org) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+
+    api
+      .listAuditLogs(org.id, { limit: 50 })
+      .then((result) => {
+        if (!cancelled) {
+          setLogs(result);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : "Failed to load audit logs");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [org]);
+
   return (
     <AppShell searchPlaceholder="Search audit logs...">
       <div className="mx-auto max-w-container-max pb-xl">
@@ -55,52 +59,83 @@ export default function AuditPage() {
           </div>
           <button
             type="button"
-            className="flex items-center gap-xs rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface shadow-sm transition-colors hover:bg-surface-container-high dark:border-outline-variant dark:bg-surface-container-high"
+            disabled
+            title="Coming soon"
+            className="flex cursor-not-allowed items-center gap-xs rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface opacity-60 shadow-sm dark:border-outline-variant dark:bg-surface-container-high"
           >
             <Icon name="download" />
             Export Logs
           </button>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
-          <div className="border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
-            <h2 className="font-label-md text-label-md font-bold uppercase tracking-wider text-on-surface-variant">
-              Recent Activity
-            </h2>
+        {error && (
+          <div className="mb-md rounded-lg border border-[#CF222E]/30 bg-[#FFEBE9] px-md py-sm font-body-sm text-body-sm text-[#CF222E] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+            {error}
           </div>
-          <div className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
-            {logs.map((log) => (
-              <div
-                key={`${log.key}-${log.time}`}
-                className="flex items-center justify-between px-md py-md transition-colors hover:bg-[#F6F8FA] dark:hover:bg-surface-container-low"
-              >
-                <div className="flex items-center gap-md">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container-low">
-                    <Icon name={log.icon} className={log.iconClass} />
-                  </div>
-                  <div>
-                    <p className="font-body-md text-body-md text-on-surface">
-                      <span className="font-bold">{log.member}</span>{" "}
-                      <span className="text-secondary">{log.action}</span>{" "}
-                      <span className="rounded border border-outline-variant bg-surface-container px-xs py-[2px] font-code-md text-code-md">
-                        {log.key}
-                      </span>
-                      {log.detail ? (
-                        <span className="text-secondary"> ({log.detail})</span>
-                      ) : null}
-                    </p>
-                    <p className="mt-xs font-body-sm text-body-sm text-on-surface-variant">
-                      {log.project}
-                    </p>
-                  </div>
-                </div>
-                <span className="font-body-sm text-body-sm text-secondary">
-                  {log.time}
-                </span>
+        )}
+
+        {!org && (
+          <div className="github-card rounded-lg p-xl text-center font-body-md text-body-md text-secondary">
+            Create an organization on the Projects page first.
+          </div>
+        )}
+
+        {org && (
+          <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
+            <div className="border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
+              <h2 className="font-label-md text-label-md font-bold uppercase tracking-wider text-on-surface-variant">
+                Recent Activity
+              </h2>
+            </div>
+
+            {loading ? (
+              <div className="flex justify-center py-xl text-secondary">
+                <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 24 }} />
               </div>
-            ))}
+            ) : logs.length === 0 ? (
+              <p className="px-md py-xl text-center font-body-md text-body-md text-secondary">
+                No activity yet.
+              </p>
+            ) : (
+              <div className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
+                {logs.map((log) => {
+                  const display = getActionDisplay(log.action);
+                  const key =
+                    (log.metadata?.key as string | undefined) ?? log.targetType ?? "—";
+                  return (
+                    <div
+                      key={log.id}
+                      className="flex items-center justify-between px-md py-md transition-colors hover:bg-[#F6F8FA] dark:hover:bg-surface-container-low"
+                    >
+                      <div className="flex items-center gap-md">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container-low">
+                          <Icon name={display.icon} className={display.iconClass} />
+                        </div>
+                        <div>
+                          <p className="font-body-md text-body-md text-on-surface">
+                            <span className="font-bold">
+                              {log.actor?.name ?? "Unknown"}
+                            </span>{" "}
+                            <span className="text-secondary">{display.label}</span>{" "}
+                            <span className="rounded border border-outline-variant bg-surface-container px-xs py-[2px] font-code-md text-code-md">
+                              {key}
+                            </span>
+                          </p>
+                          <p className="mt-xs font-body-sm text-body-sm text-on-surface-variant">
+                            {log.project?.name ?? "—"}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="font-body-sm text-body-sm text-secondary">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </div>
     </AppShell>
   );
