@@ -10,7 +10,10 @@
     "dev": "npm run dev -w envsync-web",
     "build": "npm run build -w envsync-web",
     "start": "npm run start -w envsync-web",
-    "lint": "npm run lint -w envsync-web"
+    "lint": "npm run lint -w envsync-web",
+    "dev:api": "npm run dev -w envsync-api",
+    "build:api": "npm run build -w envsync-api",
+    "start:api": "npm run start -w envsync-api"
   },
   "engines": {
     "node": ">=18"
