@@ -92,6 +92,28 @@ export async function updateOrganization(
   });
 }
 
-export async function deleteOrganization(orgId: string) {
-  await prisma.organization.delete({ where: { id: orgId } });
+export async function deleteOrganization(
+  orgId: string,
+  actorId: string,
+  ipAddress?: string
+) {
+  const org = await prisma.organization.findUnique({ where: { id: orgId } });
+
+  if (!org) {
+    throw new NotFoundError("Organization not found");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await writeAuditLog(tx, {
+      orgId,
+      actorId,
+      action: "org.delete",
+      targetType: "Organization",
+      targetId: orgId,
+      metadata: { name: org.name, slug: org.slug },
+      ipAddress,
+    });
+
+    await tx.organization.delete({ where: { id: orgId } });
+  });
 }

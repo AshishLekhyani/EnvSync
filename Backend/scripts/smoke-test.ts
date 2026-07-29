@@ -856,6 +856,243 @@ async function main() {
   if (res.status !== 200 || markedRead.read !== true) fail("mark notification read", markedRead);
   ok("mark notification read flips the read flag");
 
+  res = await fetch(`${BASE}/orgs/${orgId}`, { headers: authHeaders(ownerAccessToken) });
+  const gotOrg = await res.json();
+  if (res.status !== 200 || gotOrg.id !== orgId) fail("get org", gotOrg);
+  ok("get org (200)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ name: "Acme Inc Renamed" }),
+  });
+  const renamedOrg = await res.json();
+  if (res.status !== 200 || renamedOrg.name !== "Acme Inc Renamed") fail("update org", renamedOrg);
+  ok("update org (200, name changed)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}`, {
+    method: "PATCH",
+    headers: authHeaders(viewerAccessToken),
+    body: JSON.stringify({ name: "Hijacked" }),
+  });
+  if (res.status !== 403) fail("viewer update org should be 403 (member, insufficient role)", await res.text());
+  ok("viewer cannot update org (403, member but insufficient role)");
+
+  const thirdEmail = `third-${rand}@example.com`;
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Third User", email: thirdEmail, password }),
+  });
+  if (res.status !== 201) fail("signup third user", await res.text());
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: thirdEmail, password }),
+  });
+  const thirdLogin = await res.json();
+  if (res.status !== 200) fail("login third user", thirdLogin);
+  const thirdAccessToken: string = thirdLogin.accessToken;
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: thirdEmail, role: "VIEWER" }),
+  });
+  const thirdMembership = await res.json();
+  if (res.status !== 201) fail("add third member", thirdMembership);
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members/${thirdMembership.id}`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ role: "DEVELOPER" }),
+  });
+  const promotedMember = await res.json();
+  if (res.status !== 200 || promotedMember.role !== "DEVELOPER") fail("update member role", promotedMember);
+  ok("update member role (200)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members/${thirdMembership.id}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("remove member", await res.text());
+  ok("remove member (204)");
+
+  res = await fetch(`${BASE}/projects/${projectId}`, { headers: authHeaders(ownerAccessToken) });
+  const gotProject = await res.json();
+  if (res.status !== 200 || gotProject.id !== projectId) fail("get project", gotProject);
+  ok("get project (200)");
+
+  res = await fetch(`${BASE}/projects/${projectId}`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ name: "Core API Renamed" }),
+  });
+  const renamedProject = await res.json();
+  if (res.status !== 200 || renamedProject.name !== "Core API Renamed") fail("update project", renamedProject);
+  ok("update project (200, name changed)");
+
+  res = await fetch(`${BASE}/environments/${devEnv.id}`, { headers: authHeaders(ownerAccessToken) });
+  const gotEnv = await res.json();
+  if (res.status !== 200 || gotEnv.id !== devEnv.id) fail("get environment", gotEnv);
+  ok("get environment (200)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, { headers: authHeaders(ownerAccessToken) });
+  const invitesList = await res.json();
+  if (res.status !== 200 || !invitesList.some((i: { id: string }) => i.id === createdInvite.id)) {
+    fail("list invites", invitesList);
+  }
+  ok("list invites (200, includes previously created invite)");
+
+  res = await fetch(`${BASE}/environments/${devEnv.id}/secrets`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ key: "THROWAWAY_DELETE_ME", value: "temp" }),
+  });
+  const throwawaySecret = await res.json();
+  if (res.status !== 201) fail("create throwaway secret", throwawaySecret);
+
+  res = await fetch(`${BASE}/secrets/${throwawaySecret.id}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("delete secret", await res.text());
+  res = await fetch(`${BASE}/secrets/${throwawaySecret.id}`, { headers: authHeaders(ownerAccessToken) });
+  if (res.status !== 404) fail("deleted secret should 404 afterward", await res.text());
+  ok("delete secret (204) and it's gone (404 afterward)");
+
+  res = await fetch(`${BASE}/projects/${projectId}/environments`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ type: "STAGING" }),
+  });
+  const throwawayEnv = await res.json();
+  if (res.status !== 201) fail("create throwaway staging environment", throwawayEnv);
+
+  res = await fetch(`${BASE}/environments/${throwawayEnv.id}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("delete environment", await res.text());
+  ok("delete environment (204)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/tokens`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ name: "Cross-Org Test Token" }),
+  });
+  const crossOrgToken = await res.json();
+  if (res.status !== 201) fail("create cross-org test token", crossOrgToken);
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, { headers: authHeaders(crossOrgToken.token) });
+  if (res.status !== 200) fail("API token should work for its own org", await res.text());
+  ok("API token works normally within its own org");
+
+  const org2Slug = `second-org-${rand}`;
+  res = await fetch(`${BASE}/orgs`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ name: "Second Org", slug: org2Slug }),
+  });
+  const org2 = await res.json();
+  if (res.status !== 201) fail("create second org", org2);
+  const org2Id = org2.id;
+
+  res = await fetch(`${BASE}/orgs/${org2Id}/projects`, { headers: authHeaders(crossOrgToken.token) });
+  if (res.status !== 403) fail("API token scoped to org 1 should be 403 against org 2", await res.text());
+  ok("API token minted for org 1 is rejected against org 2 (403, cross-org scoping enforced)");
+
+  res = await fetch(`${BASE}/orgs/${org2Id}`, { headers: authHeaders(viewerAccessToken) });
+  if (res.status !== 404) fail("org viewer has zero membership in should 404, not 403", await res.text());
+  ok("accessing an org you have zero membership in returns 404, not 403 (no existence leak)");
+
+  res = await fetch(`${BASE}/projects/${projectId}`, {
+    method: "PATCH",
+    headers: authHeaders(viewerAccessToken),
+    body: JSON.stringify({ name: "should fail" }),
+  });
+  if (res.status !== 403) fail("viewer updating a project in their own org should still be 403", await res.text());
+  ok("insufficient role within your own org still returns 403, not 404");
+
+  res = await fetch(`${BASE}/projects/${org2Id}/environments`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ type: "DEVELOPMENT" }),
+  });
+  if (res.status !== 404) fail("creating an environment under a bogus projectId should 404", await res.text());
+  ok("creating an environment under a nonexistent projectId returns 404");
+
+  res = await fetch(`${BASE}/orgs/${org2Id}/projects`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ name: "Org2 Project", slug: `org2-project-${rand}` }),
+  });
+  const org2Project = await res.json();
+  if (res.status !== 201) fail("create org2 project", org2Project);
+
+  res = await fetch(`${BASE}/projects/${org2Project.id}/environments`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ type: "DEVELOPMENT" }),
+  });
+  const org2Env = await res.json();
+  if (res.status !== 201) fail("create org2 environment", org2Env);
+
+  res = await fetch(`${BASE}/environments/${org2Env.id}`, { headers: authHeaders(viewerAccessToken) });
+  if (res.status !== 404) fail("environment in an org you have zero membership in should 404", await res.text());
+  ok("accessing an environment in an org you have zero membership in returns 404, not 403");
+
+  res = await fetch(`${BASE}/orgs/${org2Id}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("delete org", await res.text());
+
+  res = await fetch(`${BASE}/orgs/${org2Id}`, { headers: authHeaders(ownerAccessToken) });
+  if (res.status !== 404) fail("deleted org should 404 afterward", await res.text());
+
+  const orgDeleteAuditRow = await prisma.auditLog.findFirst({
+    where: { action: "org.delete", targetId: org2Id },
+  });
+  if (
+    !orgDeleteAuditRow ||
+    orgDeleteAuditRow.orgId !== null ||
+    (orgDeleteAuditRow.metadata as { slug?: string } | null)?.slug !== org2Slug
+  ) {
+    fail("org.delete audit entry should survive with orgId nulled and metadata snapshot intact", orgDeleteAuditRow);
+  }
+  ok("deleting an org writes an audit entry that survives the cascade (orgId nulled, metadata snapshot intact)");
+
+  res = await fetch(`${BASE}/auth/github`, { redirect: "manual" });
+  const githubLocation = res.headers.get("location") ?? "";
+  if (res.status < 300 || res.status >= 400 || !githubLocation.includes("error=oauth_not_configured")) {
+    fail("GET /auth/github with no client credentials configured should redirect to oauth_not_configured", {
+      status: res.status,
+      location: githubLocation,
+    });
+  }
+  ok("GET /auth/github redirects to oauth_not_configured when unconfigured (route-level coverage)");
+
+  res = await fetch(`${BASE}/auth/google`, { redirect: "manual" });
+  const googleLocation = res.headers.get("location") ?? "";
+  if (res.status < 300 || res.status >= 400 || !googleLocation.includes("error=oauth_not_configured")) {
+    fail("GET /auth/google with no client credentials configured should redirect to oauth_not_configured", {
+      status: res.status,
+      location: googleLocation,
+    });
+  }
+  ok("GET /auth/google redirects to oauth_not_configured when unconfigured (route-level coverage)");
+
+  res = await fetch(`${BASE}/notifications/read-all`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("mark all notifications read", await res.text());
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(ownerAccessToken) });
+  const allNotifs = await res.json();
+  if (allNotifs.some((n: { read: boolean }) => !n.read)) fail("all notifications should be read after mark-all-read", allNotifs);
+  ok("mark all notifications read (204, all subsequently read:true)");
+
   const hammerEmail = `hammer-${rand}@example.com`;
   res = await fetch(`${BASE}/auth/signup`, {
     method: "POST",

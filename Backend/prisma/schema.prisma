@@ -172,7 +172,7 @@ model OrgEncryptionKey {
 
 model AuditLog {
   id         String   @id @default(cuid())
-  orgId      String
+  orgId      String?
   actorId    String?
   action     String
   targetType String?
@@ -182,7 +182,7 @@ model AuditLog {
   ipAddress  String?
   createdAt  DateTime @default(now())
 
-  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org     Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
   actor   User?        @relation("ActorUser", fields: [actorId], references: [id], onDelete: SetNull)
   project Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
 

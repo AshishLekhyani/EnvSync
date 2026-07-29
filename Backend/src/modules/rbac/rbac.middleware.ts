@@ -23,11 +23,19 @@ export function requireOrgRole(minRole: OrgRole, resolveOrgId: OrgIdResolver) {
       throw new NotFoundError();
     }
 
+    if (req.apiTokenOrgId && req.apiTokenOrgId !== orgId) {
+      throw new ForbiddenError();
+    }
+
     const membership = await prisma.orgMembership.findUnique({
       where: { userId_orgId: { userId: req.user.id, orgId } },
     });
 
-    if (!membership || !hasAtLeastRole(membership.role, minRole)) {
+    if (!membership) {
+      throw new NotFoundError();
+    }
+
+    if (!hasAtLeastRole(membership.role, minRole)) {
       throw new ForbiddenError();
     }
 
@@ -99,6 +107,10 @@ export function requireEnvironmentAccess(
       throw new NotFoundError();
     }
 
+    if (req.apiTokenOrgId && req.apiTokenOrgId !== environment.project.orgId) {
+      throw new ForbiddenError();
+    }
+
     const membership = await prisma.orgMembership.findUnique({
       where: {
         userId_orgId: { userId: req.user.id, orgId: environment.project.orgId },
@@ -106,7 +118,7 @@ export function requireEnvironmentAccess(
     });
 
     if (!membership) {
-      throw new ForbiddenError();
+      throw new NotFoundError();
     }
 
     const effective = await getEffectiveAccess(

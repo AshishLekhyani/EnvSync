@@ -9,6 +9,7 @@ declare global {
       };
       membership?: OrgMembership;
       apiTokenId?: string;
+      apiTokenOrgId?: string;
     }
   }
 }

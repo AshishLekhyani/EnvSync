@@ -4,7 +4,7 @@ import * as authController from "./auth.controller";
 import * as githubController from "./github.controller";
 import * as googleController from "./google.controller";
 import { requireAuth } from "./auth.middleware";
-import { loginRateLimiter, signupRateLimiter } from "./auth.rateLimit";
+import { loginRateLimiter, refreshRateLimiter, signupRateLimiter } from "./auth.rateLimit";
 import { loginSchema, signupSchema } from "./auth.validators";
 
 export const authRouter = Router();
@@ -21,7 +21,7 @@ authRouter.post(
   validate({ body: loginSchema }),
   authController.login
 );
-authRouter.post("/refresh", authController.refresh);
+authRouter.post("/refresh", refreshRateLimiter, authController.refresh);
 authRouter.post("/logout", authController.logout);
 authRouter.get("/me", requireAuth, authController.me);
 authRouter.get("/sessions", requireAuth, authController.listSessions);

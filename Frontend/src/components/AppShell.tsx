@@ -18,6 +18,12 @@ const MOBILE = [
   { href: "/team", label: "Team", icon: "group", match: (p: string) => p.startsWith("/team") },
   { href: "/audit", label: "Logs", icon: "history", match: (p: string) => p.startsWith("/audit") },
   {
+    href: "/integrations",
+    label: "Integrations",
+    icon: "hub",
+    match: (p: string) => p.startsWith("/integrations"),
+  },
+  {
     href: "/settings",
     label: "Settings",
     icon: "settings",

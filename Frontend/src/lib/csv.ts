@@ -1,6 +1,11 @@
+const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
 export function buildCsv(headers: string[], rows: (string | number | null)[][]) {
   const escape = (value: string | number | null) => {
-    const str = value === null || value === undefined ? "" : String(value);
+    let str = value === null || value === undefined ? "" : String(value);
+    if (FORMULA_PREFIX.test(str)) {
+      str = `'${str}`;
+    }
     if (/[",\n]/.test(str)) {
       return `"${str.replace(/"/g, '""')}"`;
     }

@@ -19,6 +19,7 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
     }
     req.user = { id: apiToken.createdBy.id, email: apiToken.createdBy.email };
     req.apiTokenId = apiToken.id;
+    req.apiTokenOrgId = apiToken.orgId;
     return next();
   }
 

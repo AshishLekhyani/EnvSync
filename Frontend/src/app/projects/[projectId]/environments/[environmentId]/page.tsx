@@ -124,11 +124,11 @@ export default function EnvironmentSecretsPage() {
   const onToggleReveal = async (secretId: string) => {
     if (visible[secretId]) {
       setVisible((prev) => ({ ...prev, [secretId]: false }));
-      return;
-    }
-
-    if (revealed[secretId] !== undefined) {
-      setVisible((prev) => ({ ...prev, [secretId]: true }));
+      setRevealed((prev) => {
+        const next = { ...prev };
+        delete next[secretId];
+        return next;
+      });
       return;
     }
 
@@ -173,7 +173,11 @@ export default function EnvironmentSecretsPage() {
     try {
       const updated = await api.updateSecret(secretId, { value: editValue });
       setSecrets((prev) => prev.map((s) => (s.id === secretId ? updated : s)));
-      setRevealed((prev) => ({ ...prev, [secretId]: editValue }));
+      setRevealed((prev) => {
+        const next = { ...prev };
+        delete next[secretId];
+        return next;
+      });
       setVisible((prev) => ({ ...prev, [secretId]: false }));
       setEditingId(null);
       setEditValue("");
@@ -224,11 +228,11 @@ export default function EnvironmentSecretsPage() {
 
     if (versionVisible[key]) {
       setVersionVisible((prev) => ({ ...prev, [key]: false }));
-      return;
-    }
-
-    if (versionRevealed[key] !== undefined) {
-      setVersionVisible((prev) => ({ ...prev, [key]: true }));
+      setVersionRevealed((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
       return;
     }
 
@@ -790,10 +794,8 @@ export default function EnvironmentSecretsPage() {
                   </span>
                 </div>
                 <div className="rounded border border-outline-variant bg-surface-container-low p-md font-code-md text-code-md text-on-surface-variant">
-                  <span className="font-bold text-primary">envsync</span> env pull{" "}
-                  {environment.type.toLowerCase()}
-                  <br />
-                  <span className="text-secondary"># CLI coming in a later phase</span>
+                  <span className="font-bold text-primary">envsync</span> pull --project{" "}
+                  {projectId} --environment {environmentId}
                 </div>
               </div>
             </div>

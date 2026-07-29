@@ -13,12 +13,15 @@ export interface AccessTokenPayload {
 
 export function signAccessToken(payload: AccessTokenPayload): string {
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+    algorithm: "HS256",
     expiresIn: ACCESS_TOKEN_TTL,
   });
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
-  return jwt.verify(token, env.JWT_ACCESS_SECRET) as AccessTokenPayload;
+  return jwt.verify(token, env.JWT_ACCESS_SECRET, {
+    algorithms: ["HS256"],
+  }) as AccessTokenPayload;
 }
 
 export function generateRefreshToken(): string {

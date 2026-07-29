@@ -126,10 +126,12 @@ export async function authenticateApiToken(rawToken: string) {
     return null;
   }
 
-  void prisma.apiToken.update({
-    where: { id: token.id },
-    data: { lastUsedAt: new Date() },
-  });
+  void prisma.apiToken
+    .update({
+      where: { id: token.id },
+      data: { lastUsedAt: new Date() },
+    })
+    .catch((err) => console.error("Failed to update API token lastUsedAt", err));
 
   return token;
 }
