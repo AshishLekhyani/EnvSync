@@ -52,7 +52,7 @@ export default function EnvironmentPage() {
               </span>
             </h1>
           </div>
-          <div className="flex items-center gap-xs rounded-lg border border-green-200 bg-green-50 px-md py-sm text-green-700 shadow-sm">
+          <div className="flex items-center gap-xs rounded-lg border border-green-200 bg-green-50 px-md py-sm text-green-700 shadow-sm dark:border-[#40C463]/30 dark:bg-[#1F883D]/20 dark:text-[#40C463]">
             <Icon
               name="lock"
               filled
@@ -65,22 +65,22 @@ export default function EnvironmentPage() {
         </div>
 
         <div className="mb-xl grid grid-cols-1 gap-md md:grid-cols-4">
-          <div className="rounded-xl border border-outline-variant bg-white p-md shadow-sm">
+          <div className="rounded-xl border border-outline-variant bg-white p-md shadow-sm dark:bg-surface-container-lowest">
             <p className="mb-xs font-label-md text-label-md text-secondary">
               Total Secrets
             </p>
             <p className="font-h2 text-h2 font-black text-on-surface">142</p>
           </div>
-          <div className="rounded-xl border border-outline-variant bg-white p-md shadow-sm">
+          <div className="rounded-xl border border-outline-variant bg-white p-md shadow-sm dark:bg-surface-container-lowest">
             <p className="mb-xs font-label-md text-label-md text-secondary">
               Sync Status
             </p>
-            <div className="flex items-center gap-xs text-green-600">
+            <div className="flex items-center gap-xs text-green-600 dark:text-green-400">
               <Icon name="sync" style={{ fontSize: 18 }} />
               <p className="font-label-md text-label-md font-bold">Healthy</p>
             </div>
           </div>
-          <div className="rounded-xl border border-outline-variant bg-white p-md shadow-sm">
+          <div className="rounded-xl border border-outline-variant bg-white p-md shadow-sm dark:bg-surface-container-lowest">
             <p className="mb-xs font-label-md text-label-md text-secondary">
               Last Change
             </p>
@@ -88,7 +88,7 @@ export default function EnvironmentPage() {
               2 mins ago
             </p>
           </div>
-          <div className="flex items-center justify-between rounded-xl border border-outline-variant bg-white p-md shadow-sm">
+          <div className="flex items-center justify-between rounded-xl border border-outline-variant bg-white p-md shadow-sm dark:bg-surface-container-lowest">
             <div>
               <p className="mb-xs font-label-md text-label-md text-secondary">
                 Project Health
@@ -107,7 +107,7 @@ export default function EnvironmentPage() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
           <div className="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-md py-sm">
             <h2 className="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">
               Production Variables
@@ -270,7 +270,7 @@ export default function EnvironmentPage() {
 
         <div className="mt-xl">
           <h3 className="mb-md font-h3 text-h3 text-on-surface">Quick Access</h3>
-          <div className="rounded-xl border border-outline-variant bg-white p-md shadow-sm">
+          <div className="rounded-xl border border-outline-variant bg-white p-md shadow-sm dark:bg-surface-container-lowest">
             <div className="mb-sm flex items-center justify-between">
               <span className="font-label-md text-[11px] uppercase tracking-widest text-secondary">
                 CLI Commands
@@ -293,13 +293,13 @@ export default function EnvironmentPage() {
           </div>
         </div>
 
-        <div className="mt-xl flex items-start gap-md rounded-xl border border-[#CF222E]/20 bg-[#FFEBE9] p-md">
-          <Icon name="warning" className="text-[#CF222E]" filled />
+        <div className="mt-xl flex items-start gap-md rounded-xl border border-[#CF222E]/20 bg-[#FFEBE9] p-md dark:border-red-500/30 dark:bg-red-500/10">
+          <Icon name="warning" className="text-[#CF222E] dark:text-red-400" filled />
           <div>
-            <p className="font-label-md text-label-md font-bold text-[#CF222E]">
+            <p className="font-label-md text-label-md font-bold text-[#CF222E] dark:text-red-400">
               Critical Variable Alert
             </p>
-            <p className="font-body-sm text-body-sm text-[#CF222E]/80">
+            <p className="font-body-sm text-body-sm text-[#CF222E]/80 dark:text-red-400/80">
               3 variables in this environment will expire in less than 48 hours.
               Please rotate keys to avoid service interruption.
             </p>

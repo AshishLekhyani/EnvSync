@@ -1,4 +1,5 @@
 ﻿import Link from "next/link";
+import { ThemeToggle } from "./ThemeToggle";
 
 const LINKS = [
   { href: "#features", label: "Features" },
@@ -27,6 +28,7 @@ export function MarketingHeader() {
         </nav>
       </div>
       <div className="flex items-center gap-sm md:gap-md">
+        <ThemeToggle />
         <Link
           href="/login"
           className="px-md py-sm font-label-md text-label-md text-secondary transition-colors hover:text-primary"

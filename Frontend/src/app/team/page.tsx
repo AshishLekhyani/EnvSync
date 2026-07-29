@@ -70,7 +70,7 @@ export default function TeamPage() {
           <div className="flex gap-sm">
             <button
               type="button"
-              className="flex items-center gap-xs rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-[#24292F] shadow-sm transition-colors hover:bg-surface-container-high"
+              className="flex items-center gap-xs rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-[#24292F] shadow-sm transition-colors hover:bg-surface-container-high dark:border-outline-variant dark:bg-surface-container-high dark:text-on-surface"
             >
               <Icon name="download" />
               Export Audit Log
@@ -87,8 +87,8 @@ export default function TeamPage() {
 
         <div className="grid grid-cols-1 items-start gap-lg xl:grid-cols-12">
           <div className="flex flex-col gap-md xl:col-span-7">
-            <div className="overflow-hidden rounded-xl border border-[#D0D7DE] bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-[#D0D7DE] bg-surface-container-low px-md py-sm">
+            <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
                 <h3 className="font-label-md text-label-md font-bold text-on-surface">
                   Team Members
                   <span className="ml-sm rounded bg-outline-variant px-base py-[2px] text-[10px] text-on-surface-variant">
@@ -111,11 +111,11 @@ export default function TeamPage() {
                 </div>
               </div>
 
-              <div className="divide-y divide-[#D0D7DE]">
+              <div className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
                 {members.map((m) => (
                   <div
                     key={m.email}
-                    className={`group flex cursor-pointer items-center justify-between px-md py-md transition-colors hover:bg-[#F6F8FA] ${
+                    className={`group flex cursor-pointer items-center justify-between px-md py-md transition-colors hover:bg-[#F6F8FA] dark:hover:bg-surface-container-low ${
                       m.selected ? "bg-primary/5" : ""
                     }`}
                   >
@@ -209,8 +209,8 @@ export default function TeamPage() {
           </div>
 
           <div className="flex flex-col gap-md xl:col-span-5">
-            <div className="overflow-hidden rounded-xl border border-[#D0D7DE] bg-white shadow-sm">
-              <div className="border-b border-[#D0D7DE] bg-surface-container-low px-md py-sm">
+            <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
+              <div className="border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
                 <h3 className="font-label-md text-label-md font-bold text-on-surface">
                   Permission Matrix
                 </h3>
@@ -222,14 +222,14 @@ export default function TeamPage() {
                       {["Role", "Dev", "Staging", "Prod"].map((h) => (
                         <th
                           key={h}
-                          className="border-b border-[#D0D7DE] px-md py-sm text-[10px] font-bold uppercase text-on-surface-variant"
+                          className="border-b border-[#D0D7DE] dark:border-outline-variant px-md py-sm text-[10px] font-bold uppercase text-on-surface-variant"
                         >
                           {h}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#D0D7DE]">
+                  <tbody className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
                     <tr>
                       <td className="px-md py-md font-body-sm text-body-sm font-bold text-on-surface">
                         Owner
@@ -281,7 +281,7 @@ export default function TeamPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="border-t border-[#D0D7DE] bg-surface-container-low p-md">
+              <div className="border-t border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low p-md">
                 <div className="flex flex-col gap-sm">
                   <div className="flex items-center gap-sm">
                     <Icon
@@ -318,8 +318,8 @@ export default function TeamPage() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-[#D0D7DE] bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-[#D0D7DE] bg-surface-container-low px-md py-sm">
+            <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
                   CLI Role Management
                 </span>
@@ -345,18 +345,18 @@ export default function TeamPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-[#CF222E]/30 bg-[#FFEBE9] p-md">
-              <h4 className="flex items-center gap-sm font-body-md text-body-md font-bold text-[#CF222E]">
+            <div className="rounded-xl border border-[#CF222E]/30 bg-[#FFEBE9] p-md dark:border-red-500/30 dark:bg-red-500/10">
+              <h4 className="flex items-center gap-sm font-body-md text-body-md font-bold text-[#CF222E] dark:text-red-400">
                 <Icon name="gpp_maybe" />
                 Sensitive Operations
               </h4>
-              <p className="mt-xs font-body-sm text-body-sm text-[#CF222E]/80">
+              <p className="mt-xs font-body-sm text-body-sm text-[#CF222E]/80 dark:text-red-400/80">
                 Changing &apos;Owner&apos; status requires Multi-Factor
                 Authentication and a 24-hour verification window.
               </p>
               <button
                 type="button"
-                className="mt-md rounded-lg border border-[#CF222E] bg-transparent px-md py-sm font-body-sm text-body-sm font-bold text-[#CF222E] transition-all hover:bg-[#CF222E] hover:text-white"
+                className="mt-md rounded-lg border border-[#CF222E] bg-transparent px-md py-sm font-body-sm text-body-sm font-bold text-[#CF222E] transition-all hover:bg-[#CF222E] hover:text-white dark:border-red-500/50 dark:text-red-400"
               >
                 Request Role Ownership Change
               </button>

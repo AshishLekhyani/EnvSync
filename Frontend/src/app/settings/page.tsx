@@ -150,7 +150,7 @@ export default function SettingsPage() {
             </div>
             <div className="mt-auto flex items-center justify-between border-t border-outline-variant pt-md">
               <div className="flex items-center gap-xs">
-                <span className="rounded-full border border-[#40C463] bg-[#E6FFEC] px-2 py-0.5 text-[10px] font-bold text-[#116329]">
+                <span className="rounded-full border border-[#40C463] bg-[#E6FFEC] px-2 py-0.5 text-[10px] font-bold text-[#116329] dark:border-[#40C463]/30 dark:bg-[#1F883D]/20 dark:text-[#40C463]">
                   AES-256
                 </span>
                 <span className="font-body-sm text-[11px] text-on-surface-variant">

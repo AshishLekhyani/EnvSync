@@ -10,7 +10,7 @@ const secrets = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#F6F8FA] font-body-md text-body-md text-on-surface antialiased">
+    <div className="min-h-screen bg-[#F6F8FA] dark:bg-background font-body-md text-body-md text-on-surface antialiased">
       <MarketingHeader />
 
       <main className="mx-auto max-w-[1280px] overflow-x-hidden px-margin-mobile py-xl md:px-margin-desktop">
@@ -44,7 +44,7 @@ export default function LandingPage() {
 
           {/* Dashboard preview */}
           <div className="relative mt-24 w-full max-w-5xl">
-            <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-2xl">
+            <div className="overflow-hidden rounded-xl border border-outline-variant bg-white dark:bg-surface-container-lowest shadow-2xl">
               <div className="flex h-10 items-center gap-sm border-b border-outline-variant bg-surface-container px-md">
                 <div className="h-3 w-3 rounded-full bg-error/40" />
                 <div className="h-3 w-3 rounded-full bg-primary/40" />
@@ -189,7 +189,7 @@ export default function LandingPage() {
             ].map((card) => (
               <div
                 key={card.title}
-                className="bento-card flex flex-col gap-md rounded-xl border border-outline-variant bg-white p-lg"
+                className="bento-card flex flex-col gap-md rounded-xl border border-outline-variant bg-white dark:bg-surface-container-lowest p-lg"
               >
                 <div
                   className={`flex h-12 w-12 items-center justify-center rounded-lg ${card.iconWrap}`}
@@ -320,7 +320,7 @@ export default function LandingPage() {
               </Link>
               <a
                 href="mailto:sales@envsync.io"
-                className="rounded-lg border border-outline-variant bg-white px-xl py-md font-bold text-on-surface transition-all hover:bg-surface-container"
+                className="rounded-lg border border-outline-variant bg-white dark:bg-surface-container-lowest px-xl py-md font-bold text-on-surface transition-all hover:bg-surface-container"
               >
                 Talk to Sales
               </a>

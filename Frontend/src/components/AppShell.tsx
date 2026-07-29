@@ -44,7 +44,7 @@ export function AppShell({
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-[#F6F8FA] font-body-md text-body-md text-on-surface antialiased">
+    <div className="min-h-screen bg-[#F6F8FA] dark:bg-background font-body-md text-body-md text-on-surface antialiased">
       <TopNav
         searchPlaceholder={searchPlaceholder}
         showSearch={showSearch}

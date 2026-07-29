@@ -20,7 +20,7 @@ export function AuthCard({
   };
 
   return (
-    <div className="w-full max-w-md rounded-xl border border-outline-variant bg-white p-xl shadow-[0_1px_0_rgba(27,31,35,0.04)]">
+    <div className="w-full max-w-md rounded-xl border border-outline-variant bg-white dark:bg-surface-container-lowest p-xl shadow-[0_1px_0_rgba(27,31,35,0.04)]">
       <div className="mb-xl text-center">
         <Link
           href="/"
@@ -41,7 +41,7 @@ export function AuthCard({
       <button
         type="button"
         onClick={() => router.push("/projects")}
-        className="mb-md flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container-high"
+        className="mb-md flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container-high dark:bg-surface-container dark:hover:bg-surface-container-high"
       >
         <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden>
           <path

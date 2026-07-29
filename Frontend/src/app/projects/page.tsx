@@ -245,10 +245,10 @@ export default function ProjectsPage() {
                         key={src.slice(-20)}
                         src={src}
                         alt=""
-                        className="h-6 w-6 rounded-full border-2 border-white object-cover"
+                        className="h-6 w-6 rounded-full border-2 border-white object-cover dark:border-surface-container-lowest"
                       />
                     ))}
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-surface-variant text-[10px] font-bold text-on-surface">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-surface-variant text-[10px] font-bold text-on-surface dark:border-surface-container-lowest">
                       {project.extra}
                     </div>
                   </div>

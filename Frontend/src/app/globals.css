@@ -1,10 +1,12 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /*
   Exact tokens from Design Page code.html tailwind.config
   Keep class names identical to the design HTML.
 */
-@theme inline {
+@theme {
   --color-on-primary: #ffffff;
   --color-on-surface: #241913;
   --color-surface-variant: #f3dfd3;
@@ -52,7 +54,9 @@
   --color-on-tertiary-container: #003b57;
   --color-surface-container-lowest: #ffffff;
   --color-primary: #964900;
+}
 
+@theme inline {
   --spacing-xl: 32px;
   --spacing-md: 16px;
   --spacing-lg: 24px;
@@ -140,14 +144,68 @@
   --container-7xl: 80rem;
 }
 
+[data-theme="dark"] {
+  --color-on-primary: #ffffff;
+  --color-on-surface: #dfe2eb;
+  --color-surface-variant: #31353c;
+  --color-on-tertiary-fixed-variant: #404751;
+  --color-surface-container-high: #262a31;
+  --color-surface-tint: #f48120;
+  --color-outline: #8a7264;
+  --color-on-primary-fixed: #311300;
+  --color-surface-bright: #353940;
+  --color-inverse-on-surface: #2d3137;
+  --color-error-container: #93000a;
+  --color-tertiary-container: #99a1ac;
+  --color-on-secondary-fixed-variant: #004492;
+  --color-error: #ba1a1a;
+  --color-tertiary: #bfc7d3;
+  --color-secondary-fixed-dim: #acc7ff;
+  --color-on-secondary-container: #f8f8ff;
+  --color-on-secondary: #ffffff;
+  --color-on-surface-variant: #ddc1b0;
+  --color-primary-fixed-dim: #ffb787;
+  --color-secondary: #8b949e;
+  --color-surface: #10141a;
+  --color-surface-dim: #10141a;
+  --color-inverse-primary: #ffb787;
+  --color-surface-container-highest: #31353c;
+  --color-secondary-fixed: #d7e2ff;
+  --color-background: #10141a;
+  --color-primary-fixed: #ffdcc7;
+  --color-outline-variant: #31353c;
+  --color-tertiary-fixed: #dbe3ef;
+  --color-surface-container: #1c2026;
+  --color-inverse-surface: #dfe2eb;
+  --color-secondary-container: #056ee3;
+  --color-on-primary-fixed-variant: #723600;
+  --color-on-error-container: #ffdad6;
+  --color-on-error: #ffffff;
+  --color-on-tertiary-fixed: #141c25;
+  --color-on-primary-container: #5a2900;
+  --color-on-secondary-fixed: #001a40;
+  --color-on-background: #dfe2eb;
+  --color-surface-container-low: #181c22;
+  --color-on-tertiary: #29313a;
+  --color-tertiary-fixed-dim: #bfc7d3;
+  --color-primary-container: #f48120;
+  --color-on-tertiary-container: #303841;
+  --color-surface-container-lowest: #0a0e14;
+  --color-primary: #f48120;
+}
+
 @layer base {
   html {
     color-scheme: light;
   }
 
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+
   body {
-    background-color: #f6f8fa;
-    color: #24292f;
+    background-color: var(--color-background);
+    color: var(--color-on-background);
     font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
     font-size: 14px;
     line-height: 1.5;
@@ -193,9 +251,14 @@
 
 .glass-card {
   background: rgba(255, 255, 255, 0.8);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   border: 1px solid #d0d7de;
   box-shadow: 0 1px 0 rgba(27, 31, 35, 0.04);
+}
+[data-theme="dark"] .glass-card {
+  background: rgba(16, 20, 26, 0.8);
+  border-color: #31353c;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -209,6 +272,12 @@
   background: #d0d7de;
   border-radius: 10px;
 }
+[data-theme="dark"] .custom-scrollbar::-webkit-scrollbar-track {
+  background: #181c22;
+}
+[data-theme="dark"] .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #31353c;
+}
 
 .matrix-cell {
   transition: background-color 0.15s ease;
@@ -216,9 +285,15 @@
 .matrix-cell:hover {
   background-color: #f6f8fa;
 }
+[data-theme="dark"] .matrix-cell:hover {
+  background-color: #181c22;
+}
 
 .variable-row:hover {
   background-color: #f0f7ff;
+}
+[data-theme="dark"] .variable-row:hover {
+  background-color: #161b22;
 }
 
 .masked-value {
@@ -234,6 +309,15 @@
 .github-card:hover {
   background: #f6f8fa;
   border-color: #d0d7de;
+}
+[data-theme="dark"] .github-card {
+  background: #0a0e14;
+  border-color: #31353c;
+  box-shadow: none;
+}
+[data-theme="dark"] .github-card:hover {
+  background: #181c22;
+  border-color: #31353c;
 }
 
 .active-project-accent {
@@ -289,4 +373,10 @@
 ::-webkit-scrollbar-thumb {
   background: #d0d7de;
   border-radius: 4px;
+}
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: #181c22;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #31353c;
 }

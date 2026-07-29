@@ -55,24 +55,24 @@ export default function AuditPage() {
           </div>
           <button
             type="button"
-            className="flex items-center gap-xs rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface shadow-sm transition-colors hover:bg-surface-container-high"
+            className="flex items-center gap-xs rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface shadow-sm transition-colors hover:bg-surface-container-high dark:border-outline-variant dark:bg-surface-container-high"
           >
             <Icon name="download" />
             Export Logs
           </button>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-[#D0D7DE] bg-white shadow-sm">
-          <div className="border-b border-[#D0D7DE] bg-surface-container-low px-md py-sm">
+        <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
+          <div className="border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
             <h2 className="font-label-md text-label-md font-bold uppercase tracking-wider text-on-surface-variant">
               Recent Activity
             </h2>
           </div>
-          <div className="divide-y divide-[#D0D7DE]">
+          <div className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
             {logs.map((log) => (
               <div
                 key={`${log.key}-${log.time}`}
-                className="flex items-center justify-between px-md py-md transition-colors hover:bg-[#F6F8FA]"
+                className="flex items-center justify-between px-md py-md transition-colors hover:bg-[#F6F8FA] dark:hover:bg-surface-container-low"
               >
                 <div className="flex items-center gap-md">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container-low">

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AVATAR_SRC, Icon } from "./Icon";
+import { ThemeToggle } from "./ThemeToggle";
 
 const NAV = [
   { href: "/projects", label: "Projects" },
@@ -78,6 +79,7 @@ export function TopNav({
           </div>
         )}
         {trailing}
+        <ThemeToggle />
         <button
           type="button"
           className="relative rounded-lg p-base text-secondary transition-colors hover:bg-surface-container hover:text-primary"

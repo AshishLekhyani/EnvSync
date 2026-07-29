@@ -1,10 +1,12 @@
 ﻿import Link from "next/link";
 import { AuthCard } from "@/components/AuthCard";
 import { Icon } from "@/components/Icon";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function SignupPage() {
   return (
-    <div className="flex min-h-screen bg-[#F6F8FA] font-body-md text-body-md text-on-surface antialiased">
+    <div className="flex min-h-screen bg-[#F6F8FA] dark:bg-background font-body-md text-body-md text-on-surface antialiased">
+      <ThemeToggle className="fixed right-md top-md z-50 bg-surface-container-low shadow-sm" />
       <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-inverse-surface p-xl lg:flex">
         <Link href="/" className="font-h2 text-h2 font-black text-primary-fixed-dim">
           EnvSync
