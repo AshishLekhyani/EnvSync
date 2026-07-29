@@ -13,8 +13,7 @@ const MOBILE = [
     href: "/projects",
     label: "Projects",
     icon: "folder",
-    match: (p: string) =>
-      p === "/projects" || p.startsWith("/environment") || p.startsWith("/projects/"),
+    match: (p: string) => p === "/projects" || p.startsWith("/projects/"),
   },
   { href: "/team", label: "Team", icon: "group", match: (p: string) => p.startsWith("/team") },
   { href: "/audit", label: "Logs", icon: "history", match: (p: string) => p.startsWith("/audit") },
@@ -30,7 +29,6 @@ export function AppShell({
   children,
   searchPlaceholder,
   showSearch = true,
-  activeEnv = "production",
   trailing,
   mainClassName = "flex-1 p-xl md:ml-64",
   showMobileNav = true,
@@ -38,7 +36,6 @@ export function AppShell({
   children: React.ReactNode;
   searchPlaceholder?: string;
   showSearch?: boolean;
-  activeEnv?: "production" | "staging" | "development";
   trailing?: React.ReactNode;
   mainClassName?: string;
   showMobileNav?: boolean;
@@ -69,7 +66,7 @@ export function AppShell({
         trailing={trailing}
       />
       <div className="flex min-h-[calc(100vh-64px)]">
-        <SideNav activeEnv={activeEnv} />
+        <SideNav />
         <main className={mainClassName}>{children}</main>
       </div>
 
@@ -96,6 +93,7 @@ export function AppShell({
           <div className="relative -top-4">
             <button
               type="button"
+              aria-label="Create"
               className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-surface bg-primary-container text-on-primary-container shadow-xl"
             >
               <Icon name="add" />

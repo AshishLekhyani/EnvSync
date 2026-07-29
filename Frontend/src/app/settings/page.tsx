@@ -20,7 +20,6 @@ export default function SettingsPage() {
   return (
     <AppShell
       showSearch={false}
-      activeEnv="development"
       mainClassName="mx-auto w-full max-w-container-max flex-1 p-md md:ml-64 lg:p-xl"
     >
       <div className="mb-lg flex flex-col justify-between gap-md md:flex-row md:items-end">

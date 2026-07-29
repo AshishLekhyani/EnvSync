@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
@@ -314,8 +315,9 @@ export default function ProjectsPage() {
             ) : (
               <div className="grid grid-cols-1 gap-md md:grid-cols-2 xl:grid-cols-3">
                 {projects.map((project) => (
-                  <div
+                  <Link
                     key={project.id}
+                    href={`/projects/${project.id}`}
                     className="github-card flex min-h-[180px] flex-col justify-between rounded-lg p-md"
                   >
                     <div>
@@ -332,7 +334,7 @@ export default function ProjectsPage() {
                     <div className="border-t border-outline-variant pt-sm font-body-sm text-body-sm text-secondary">
                       Created {new Date(project.createdAt).toLocaleDateString()}
                     </div>
-                  </div>
+                  </Link>
                 ))}
 
                 <button

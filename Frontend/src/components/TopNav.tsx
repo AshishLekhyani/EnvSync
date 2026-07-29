@@ -15,11 +15,7 @@ const NAV = [
 
 function navActive(pathname: string, href: string) {
   if (href === "/projects") {
-    return (
-      pathname === "/projects" ||
-      pathname.startsWith("/environment") ||
-      pathname.startsWith("/projects/")
-    );
+    return pathname === "/projects" || pathname.startsWith("/projects/");
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }

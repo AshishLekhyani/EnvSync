@@ -134,6 +134,8 @@ export const api = {
 
   listProjects: (orgId: string) => request<Project[]>(`/orgs/${orgId}/projects`),
 
+  getProject: (projectId: string) => request<Project>(`/projects/${projectId}`),
+
   createProject: (
     orgId: string,
     input: { name: string; slug: string; description?: string }
@@ -145,6 +147,9 @@ export const api = {
 
   listEnvironments: (projectId: string) =>
     request<EnvironmentSummary[]>(`/projects/${projectId}/environments`),
+
+  getEnvironment: (environmentId: string) =>
+    request<EnvironmentSummary>(`/environments/${environmentId}`),
 
   createEnvironment: (
     projectId: string,
