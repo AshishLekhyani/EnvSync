@@ -1,9 +1,11 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { Icon } from "@/components/Icon";
+import { ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 
 export function AuthCard({
   mode,
@@ -11,12 +13,33 @@ export function AuthCard({
   mode: "login" | "signup";
 }) {
   const router = useRouter();
+  const { login, signup } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const isLogin = mode === "login";
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    router.push("/projects");
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      if (isLogin) {
+        await login(email, password);
+      } else {
+        await signup(name, email, password);
+      }
+      router.push("/projects");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again."
+      );
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -40,8 +63,9 @@ export function AuthCard({
 
       <button
         type="button"
-        onClick={() => router.push("/projects")}
-        className="mb-md flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container-high dark:bg-surface-container dark:hover:bg-surface-container-high"
+        disabled
+        title="GitHub OAuth is coming soon"
+        className="mb-md flex w-full cursor-not-allowed items-center justify-center gap-sm rounded-lg border border-outline-variant bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface opacity-60 dark:bg-surface-container"
       >
         <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden>
           <path
@@ -58,6 +82,12 @@ export function AuthCard({
         <div className="h-px flex-1 bg-outline-variant" />
       </div>
 
+      {error && (
+        <div className="mb-md rounded-lg border border-[#CF222E]/30 bg-[#FFEBE9] px-md py-sm font-body-sm text-body-sm text-[#CF222E] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+          {error}
+        </div>
+      )}
+
       <form onSubmit={onSubmit} className="space-y-md">
         {!isLogin && (
           <label className="block">
@@ -67,6 +97,8 @@ export function AuthCard({
             <input
               required
               type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               placeholder="Ashish Kumar"
               className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:border-primary focus:ring-2 focus:ring-primary-container"
             />
@@ -80,6 +112,8 @@ export function AuthCard({
           <input
             required
             type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="you@company.com"
             className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:border-primary focus:ring-2 focus:ring-primary-container"
           />
@@ -93,6 +127,8 @@ export function AuthCard({
             <input
               required
               type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder={isLogin ? "Enter your password" : "At least 8 characters"}
               minLength={8}
               className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm pr-xl font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:border-primary focus:ring-2 focus:ring-primary-container"
@@ -128,9 +164,14 @@ export function AuthCard({
 
         <button
           type="submit"
-          className="w-full rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90 active:scale-[0.99]"
+          disabled={submitting}
+          className="w-full rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90 active:scale-[0.99] disabled:opacity-60"
         >
-          {isLogin ? "Sign in" : "Create account"}
+          {submitting
+            ? "Please wait..."
+            : isLogin
+              ? "Sign in"
+              : "Create account"}
         </button>
       </form>
 

@@ -1,9 +1,10 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AVATAR_SRC, Icon } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
+import { useAuth } from "@/lib/auth-context";
 
 const NAV = [
   { href: "/projects", label: "Projects" },
@@ -33,6 +34,13 @@ export function TopNav({
   trailing?: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, logout } = useAuth();
+
+  const onLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
 
   return (
     <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-xl">
@@ -93,6 +101,15 @@ export function TopNav({
           aria-label="Help"
         >
           <Icon name="help_outline" />
+        </button>
+        <button
+          type="button"
+          onClick={onLogout}
+          className="rounded-lg p-base text-secondary transition-colors hover:bg-surface-container hover:text-primary"
+          aria-label="Log out"
+          title={user ? `Log out (${user.email})` : "Log out"}
+        >
+          <Icon name="logout" />
         </button>
         <img
           src={AVATAR_SRC}

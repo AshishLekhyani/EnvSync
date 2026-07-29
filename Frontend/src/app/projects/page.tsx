@@ -1,96 +1,15 @@
-﻿import Link from "next/link";
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
-
-const projects = [
-  {
-    name: "API Service",
-    href: "/environment",
-    badge: "Active",
-    badgeClass: "bg-primary-fixed text-on-primary-fixed-variant",
-    accent: true,
-    desc: "Main backend microservices handling authentication, billing, and data orchestration across clusters.",
-    secrets: 156,
-    team: 8,
-    sync: "Synced 2m ago",
-    syncClass: "text-on-tertiary-fixed-variant",
-    syncDot: "bg-primary animate-pulse",
-    avatars: [
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuDPUGcUJGpUCoLirvRvnQp88rV3_MMDWTNlh1zCEykyYTt4GiBc49Mquu2V-4WeBkVgBShXhWJXEtu6yIUVaapanZKvzXsuVPfTPsUS9BUazoEDPL_AG1E_PWluWgmCeDusthHF6K8Wdzt6TWIshnVZyy6brhebibia4jEiBPEcbjfGBoOgBnn8h1LL2j5fFyHBPqinurYfVhyKr7izMDUw15jCQpEvqkXgvhXXiAw38uTifnrH4BJbRpBSL-9Zij_P3oL2BkNE6ZM1",
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuD7B-PKXxMh6u7ZsfuY5weLNiqcxYXNn6gkhhKZw80ow-ugn-2qkMpgCUbPkXldxbzhWLiatnEhRbT22iMZl29zhGpiSC2RM1S_V0DrBTLa4PRCY2OysBDZHZrdpQQemUYw56DdaTnvdxsoThrm6vygEV72yOPSh1opUAE1nK-oS6uX7hMAPeYMRp9PpeGhnc4d3oHF7t6HMY3zr_cfsTkJz60k__OiZmm83VCdzqX9lFQsLh4MhDONI4-JAP99dql6QxKiJINhfnL_",
-    ],
-    extra: "+6",
-  },
-  {
-    name: "Frontend Web",
-    href: "/environment",
-    badge: "Internal",
-    badgeClass: "bg-secondary-container text-on-secondary-container",
-    accent: false,
-    desc: "React-based dashboard and landing page assets. Shared environment variables for Vercel deployments.",
-    secrets: 42,
-    team: 12,
-    sync: "Synced 4h ago",
-    syncClass: "text-secondary",
-    syncDot: "bg-outline",
-    avatars: [
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuDocCkVCDBHUHn1Z3dBqCWQs45jNhY0kppIISL-JlmbAcrDO0bEujK5VYS5ta773matleTCtdOH_pTFXuZu1-sOYolNW643v1DRreHQeskdXJAwifyaQ6Di1CQkvtaxPd8FHHsArRncDlIn6y83xDaStSPTVpJXA_fTvg7qs65JOZTjvEJ2-_mRtHPC_pEQN-nL6-JSSndSADoeefvFfEqPUGrePXVgE9p2ESDHNrqQPs8FlR4WeVu3PqW2JRl801PHdMbieMK40u7y",
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAqYhJciBA3E1yO2-VnO2gZsuC6VQ_82ArGRVAtWzLHEATJB_5Ja5I9OYWF2eb0KcYCdcwV4dWvM4IfVGzrz1kf8PTpAigHL4aJEYT62F85B6LQCGWeVwPqyeW65sh4d-D2Y4mY3mhgsYY_IwBU6qfw5HHYpKShVwmtHQ3a1jLeKOFX1QZViQMB4_XNWIgZI6ZUSjA7w0hshXgyejmP-KU0DCnowbgE6KM6NuKd0OZNbasD2shCDY6gJlGRfp782LUMUCS-16Q1TGpD",
-    ],
-    extra: "+10",
-  },
-  {
-    name: "Mobile App",
-    href: "/environment",
-    badge: "Critical",
-    badgeClass: "bg-error-container text-on-error-container",
-    accent: false,
-    desc: "iOS and Android applications. Includes sensitive API keys for push notifications and analytics.",
-    secrets: 88,
-    team: 4,
-    sync: "Out of sync",
-    syncClass: "text-error",
-    syncDot: "bg-error",
-    avatars: [
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuB9Y4fZ9ESlcAiU0Sq4Uh6oscB-0ph_A9wRCJNBLWxu4DI_4Y34OvKqqxkZVRHX5PBq_fHlRutSi95tJPBs3pEOE-5hSzf_ikFjjrEyv7PXexLj1zaVlk_Dh6YbYm14_tsDtXQkkRv2OViW4UcHio1pBIzdomFDDHbqbsOG49sZoUazkHPGh6sXwqPxpbUg-HZFsq9Ii8kFtozUh0rNp1LCPhKWAA0eMp43F5jT_vh_XJ_K7cPv7eHtB5dZGXysivc0ILkabsI0DEcC",
-    ],
-    extra: "+2",
-  },
-  {
-    name: "Data Processing",
-    href: "/environment",
-    badge: "Active",
-    badgeClass: "bg-primary-fixed text-on-primary-fixed-variant",
-    accent: true,
-    desc: "Python-based ETL pipelines and Spark clusters for nightly analytical reports.",
-    secrets: 214,
-    team: 5,
-    sync: "Synced 12m ago",
-    syncClass: "text-on-tertiary-fixed-variant",
-    syncDot: "bg-primary animate-pulse",
-    avatars: [
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuDNH1OR0wNSx1AJGhUh3azPYS2nyXBMPreG5SVkbRj5xYcxkdfjIY9jEUwp-X05QJfNuJc4uD6hBIO_jBegyPgimmAN5LmGlM4jtmMVh6E4m4kOJcXXXZL0b7L12PE0gAzqf13TCCIrN4oyEa-9nDzlW211wUUuFKHjlyvg05EML5Og7zfkdC58bTbkeg2mDYhMuB6gx4TFAEF7VjALelY_W0HnSXlNNR37VMuXs_kK8xlGS-DliXR2YCSS6DcUQucqKY1T00LzTxUa",
-    ],
-    extra: "+4",
-  },
-  {
-    name: "Auth Provider",
-    href: "/environment",
-    badge: "System",
-    badgeClass: "bg-secondary-container text-on-secondary-container",
-    accent: false,
-    desc: "Custom OIDC provider implementation for enterprise SSO and multi-tenant isolation.",
-    secrets: 12,
-    team: 2,
-    sync: "Synced 1d ago",
-    syncClass: "text-secondary",
-    syncDot: "bg-outline",
-    avatars: [
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBwUx91KoxIVmwk_VlZo690zKupSGA6223F-UXoY9nsTPZfJiKsR8ZiCU5TBc2TkFykbg9gBF231qt2DpFMr-4KYg01eqcGhMBGS-AMF-5LJOoYn6uNzOaf0WXvBIPoNNKBxbzmrMiEN6Q_nAT1xa2U2qWXlUkzb-SzdOLUpDVUbVnd9vXED8JWMW6bJ7DQALE0Laffi4QVX3ecmTyhogWK2iUHyfUjIYDXa30SSIQrVoM9u4dudrY_zd7PeVJgfZGAzJzCt5jsz43X",
-    ],
-    extra: "+1",
-  },
-];
+import { useAuth } from "@/lib/auth-context";
+import {
+  api,
+  ApiError,
+  MemberSummary,
+  Project,
+} from "@/lib/api";
 
 const audits = [
   {
@@ -125,7 +44,101 @@ const audits = [
   },
 ];
 
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export default function ProjectsPage() {
+  const { organizations, refreshMe } = useAuth();
+  const org = organizations[0] ?? null;
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [members, setMembers] = useState<MemberSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [showCreateOrg, setShowCreateOrg] = useState(false);
+  const [orgName, setOrgName] = useState("");
+  const [creatingOrg, setCreatingOrg] = useState(false);
+
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [projectDescription, setProjectDescription] = useState("");
+  const [creatingProject, setCreatingProject] = useState(false);
+
+  useEffect(() => {
+    if (!org) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+
+    Promise.all([api.listProjects(org.id), api.listMembers(org.id)])
+      .then(([projectList, memberList]) => {
+        if (cancelled) return;
+        setProjects(projectList);
+        setMembers(memberList);
+        setError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof ApiError ? err.message : "Failed to load projects");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [org]);
+
+  const onCreateOrg = async (e: FormEvent) => {
+    e.preventDefault();
+    setCreatingOrg(true);
+    setError(null);
+
+    try {
+      await api.createOrg({ name: orgName, slug: slugify(orgName) });
+      await refreshMe();
+      setOrgName("");
+      setShowCreateOrg(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create organization");
+    } finally {
+      setCreatingOrg(false);
+    }
+  };
+
+  const onCreateProject = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!org) return;
+    setCreatingProject(true);
+    setError(null);
+
+    try {
+      const project = await api.createProject(org.id, {
+        name: projectName,
+        slug: slugify(projectName),
+        description: projectDescription || undefined,
+      });
+      setProjects((prev) => [...prev, project]);
+      setProjectName("");
+      setProjectDescription("");
+      setShowCreateProject(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create project");
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
   return (
     <AppShell searchPlaceholder="Search projects...">
       <div className="mx-auto max-w-container-max pb-xl">
@@ -133,205 +146,273 @@ export default function ProjectsPage() {
           <div>
             <h1 className="font-h1 text-h1 text-on-surface">EnvSync Projects</h1>
             <p className="mt-base font-body-md text-body-md text-secondary">
-              Manage environment variables and secrets for your organization.
+              {org
+                ? `Manage environment variables and secrets for ${org.name}.`
+                : "Create an organization to start managing environment variables."}
             </p>
           </div>
-          <div className="flex gap-sm">
-            <button
-              type="button"
-              className="flex items-center gap-xs rounded border border-outline-variant bg-surface-container-low px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container-high"
-            >
-              <Icon name="filter_list" style={{ fontSize: 18 }} />
-              Filter
-            </button>
-            <button
-              type="button"
-              className="flex items-center gap-xs rounded border border-primary bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary-container transition-all hover:brightness-110"
-            >
-              <Icon name="add" style={{ fontSize: 18 }} />
-              Create Project
-            </button>
-          </div>
+          {org && (
+            <div className="flex gap-sm">
+              <button
+                type="button"
+                onClick={() => setShowCreateProject((v) => !v)}
+                className="flex items-center gap-xs rounded border border-primary bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary-container transition-all hover:brightness-110"
+              >
+                <Icon name="add" style={{ fontSize: 18 }} />
+                Create Project
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="mb-xl grid grid-cols-1 gap-md md:grid-cols-3">
-          <div className="github-card flex items-center gap-md rounded-lg p-md">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-fixed text-primary">
-              <Icon name="database" />
-            </div>
-            <div>
-              <div className="font-body-sm text-body-sm text-secondary">
-                Total Secrets
-              </div>
-              <div className="font-h2 text-h2 text-on-surface">1,248</div>
-            </div>
+        {error && (
+          <div className="mb-md rounded-lg border border-[#CF222E]/30 bg-[#FFEBE9] px-md py-sm font-body-sm text-body-sm text-[#CF222E] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+            {error}
           </div>
-          <div className="github-card flex items-center gap-md rounded-lg p-md">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-tertiary-fixed text-tertiary">
-              <Icon name="group" />
-            </div>
-            <div>
-              <div className="font-body-sm text-body-sm text-secondary">
-                Collaborators
-              </div>
-              <div className="font-h2 text-h2 text-on-surface">24</div>
-            </div>
-          </div>
-          <div className="github-card flex items-center gap-md rounded-lg p-md">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-container-high text-on-surface">
-              <Icon name="sync" />
-            </div>
-            <div>
-              <div className="font-body-sm text-body-sm text-secondary">
-                Active Syncs
-              </div>
-              <div className="font-h2 text-h2 text-on-surface">89%</div>
-            </div>
-          </div>
-        </div>
+        )}
 
-        <div className="grid grid-cols-1 gap-md md:grid-cols-2 xl:grid-cols-3">
-          {projects.map((project) => (
-            <div
-              key={project.name}
-              className={`github-card group flex min-h-[180px] flex-col justify-between rounded-lg p-md ${
-                project.accent ? "active-project-accent" : ""
-              }`}
+        {!org && !showCreateOrg && (
+          <div className="github-card flex flex-col items-center gap-md rounded-lg p-xl text-center">
+            <Icon name="corporate_fare" className="text-primary" style={{ fontSize: 40 }} />
+            <div>
+              <h2 className="font-h3 text-h3 text-on-surface">No organization yet</h2>
+              <p className="mt-xs font-body-sm text-body-sm text-secondary">
+                Create an organization to start creating projects and secrets.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCreateOrg(true)}
+              className="rounded-lg bg-primary-container px-lg py-sm font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90"
             >
-              <div>
-                <div className="mb-sm flex items-start justify-between">
-                  <h3
-                    className={`font-h3 text-h3 ${
-                      project.accent
-                        ? "text-primary group-hover:underline"
-                        : "text-on-surface transition-colors group-hover:text-primary"
-                    }`}
-                  >
-                    <Link href={project.href}>{project.name}</Link>
-                  </h3>
-                  <span
-                    className={`rounded px-xs py-[2px] text-[10px] font-bold uppercase tracking-wider ${project.badgeClass}`}
-                  >
-                    {project.badge}
+              Create Organization
+            </button>
+          </div>
+        )}
+
+        {showCreateOrg && (
+          <form
+            onSubmit={onCreateOrg}
+            className="github-card mb-xl flex flex-col gap-md rounded-lg p-md"
+          >
+            <h2 className="font-h3 text-h3 text-on-surface">Create Organization</h2>
+            <label className="block">
+              <span className="mb-xs block font-label-md text-label-md text-on-surface">
+                Organization name
+              </span>
+              <input
+                required
+                value={orgName}
+                onChange={(e) => setOrgName(e.target.value)}
+                placeholder="Acme Inc"
+                className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
+              />
+            </label>
+            <div className="flex gap-sm">
+              <button
+                type="submit"
+                disabled={creatingOrg}
+                className="rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
+              >
+                {creatingOrg ? "Creating..." : "Create"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateOrg(false)}
+                className="rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+
+        {org && (
+          <>
+            <div className="mb-xl grid grid-cols-1 gap-md md:grid-cols-3">
+              <div className="github-card flex items-center gap-md rounded-lg p-md">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-fixed text-primary">
+                  <Icon name="folder" />
+                </div>
+                <div>
+                  <div className="font-body-sm text-body-sm text-secondary">Projects</div>
+                  <div className="font-h2 text-h2 text-on-surface">{projects.length}</div>
+                </div>
+              </div>
+              <div className="github-card flex items-center gap-md rounded-lg p-md">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-tertiary-fixed text-tertiary">
+                  <Icon name="group" />
+                </div>
+                <div>
+                  <div className="font-body-sm text-body-sm text-secondary">Members</div>
+                  <div className="font-h2 text-h2 text-on-surface">{members.length}</div>
+                </div>
+              </div>
+              <div className="github-card flex items-center gap-md rounded-lg p-md">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-container-high text-on-surface">
+                  <Icon name="badge" />
+                </div>
+                <div>
+                  <div className="font-body-sm text-body-sm text-secondary">Your role</div>
+                  <div className="font-h2 text-h2 text-on-surface">{org.role}</div>
+                </div>
+              </div>
+            </div>
+
+            {showCreateProject && (
+              <form
+                onSubmit={onCreateProject}
+                className="github-card mb-xl flex flex-col gap-md rounded-lg p-md"
+              >
+                <h2 className="font-h3 text-h3 text-on-surface">Create Project</h2>
+                <label className="block">
+                  <span className="mb-xs block font-label-md text-label-md text-on-surface">
+                    Project name
                   </span>
-                </div>
-                <p className="mb-md line-clamp-2 font-body-sm text-body-sm text-secondary">
-                  {project.desc}
-                </p>
-              </div>
-              <div className="space-y-md">
-                <div className="flex items-center gap-md font-body-sm text-body-sm text-secondary">
-                  <div className="flex items-center gap-xs">
-                    <Icon name="lock" style={{ fontSize: 16 }} />
-                    <span>{project.secrets} Secrets</span>
-                  </div>
-                  <div className="flex items-center gap-xs">
-                    <Icon name="group" style={{ fontSize: 16 }} />
-                    <span>{project.team} Team</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between border-t border-outline-variant pt-sm">
-                  <div
-                    className={`flex items-center gap-xs text-[12px] font-medium ${project.syncClass}`}
+                  <input
+                    required
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    placeholder="Core API"
+                    className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-xs block font-label-md text-label-md text-on-surface">
+                    Description (optional)
+                  </span>
+                  <input
+                    value={projectDescription}
+                    onChange={(e) => setProjectDescription(e.target.value)}
+                    placeholder="What does this project do?"
+                    className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
+                  />
+                </label>
+                <div className="flex gap-sm">
+                  <button
+                    type="submit"
+                    disabled={creatingProject}
+                    className="rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
                   >
-                    <span
-                      className={`h-2 w-2 rounded-full ${project.syncDot}`}
-                    />
-                    {project.sync}
-                  </div>
-                  <div className="flex -space-x-2">
-                    {project.avatars.map((src) => (
-                      <img
-                        key={src.slice(-20)}
-                        src={src}
-                        alt=""
-                        className="h-6 w-6 rounded-full border-2 border-white object-cover dark:border-surface-container-lowest"
-                      />
-                    ))}
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-surface-variant text-[10px] font-bold text-on-surface dark:border-surface-container-lowest">
-                      {project.extra}
+                    {creatingProject ? "Creating..." : "Create"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateProject(false)}
+                    className="rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {loading ? (
+              <div className="flex justify-center py-xl text-secondary">
+                <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 28 }} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-md md:grid-cols-2 xl:grid-cols-3">
+                {projects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="github-card flex min-h-[180px] flex-col justify-between rounded-lg p-md"
+                  >
+                    <div>
+                      <div className="mb-sm flex items-start justify-between">
+                        <h3 className="font-h3 text-h3 text-on-surface">{project.name}</h3>
+                        <span className="rounded bg-surface-container-highest px-xs py-[2px] font-code-sm text-code-sm text-on-surface-variant">
+                          {project.slug}
+                        </span>
+                      </div>
+                      <p className="mb-md line-clamp-2 font-body-sm text-body-sm text-secondary">
+                        {project.description || "No description yet."}
+                      </p>
+                    </div>
+                    <div className="border-t border-outline-variant pt-sm font-body-sm text-body-sm text-secondary">
+                      Created {new Date(project.createdAt).toLocaleDateString()}
                     </div>
                   </div>
-                </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => setShowCreateProject(true)}
+                  className="github-card group flex min-h-[180px] cursor-pointer flex-col items-center justify-center gap-sm rounded-lg border-dashed p-md text-secondary transition-all hover:border-primary hover:text-primary"
+                >
+                  <Icon
+                    name="add_circle"
+                    className="transition-transform group-hover:scale-110"
+                    style={{ fontSize: 48 }}
+                  />
+                  <span className="font-label-md text-label-md">New Project Container</span>
+                </button>
+              </div>
+            )}
+
+            <div className="mt-xl">
+              <h2 className="mb-xs font-h2 text-h2 text-on-surface">Audit Activity</h2>
+              <p className="mb-md font-body-sm text-body-sm text-secondary">
+                Sample data — the audit log API lands in a later phase.
+              </p>
+              <div className="github-card overflow-hidden rounded-lg">
+                <table className="w-full border-collapse text-left">
+                  <thead className="border-b border-outline-variant bg-surface-container-low">
+                    <tr>
+                      {["Action", "Project", "Member", "Time"].map((h) => (
+                        <th
+                          key={h}
+                          className="px-md py-sm font-label-md text-label-md text-on-surface"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant">
+                    {audits.map((row) => (
+                      <tr
+                        key={row.key}
+                        className="cursor-pointer transition-colors hover:bg-surface-bright"
+                      >
+                        <td className="px-md py-sm">
+                          <div className="flex items-center gap-xs">
+                            <Icon
+                              name={row.icon}
+                              className={row.iconClass}
+                              style={{ fontSize: 18 }}
+                            />
+                            <span className="font-code-md text-code-md text-on-surface">
+                              {row.key}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-md py-sm font-body-sm text-body-sm text-on-surface">
+                          {row.project}
+                        </td>
+                        <td className="px-md py-sm">
+                          <div className="flex items-center gap-xs">
+                            <img
+                              src={row.avatar}
+                              alt=""
+                              className="h-5 w-5 rounded-full object-cover"
+                            />
+                            <span className="font-body-sm text-body-sm text-on-surface">
+                              {row.member}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-md py-sm font-body-sm text-body-sm text-secondary">
+                          {row.time}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          ))}
-
-          <button
-            type="button"
-            className="github-card group flex min-h-[180px] cursor-pointer flex-col items-center justify-center gap-sm rounded-lg border-dashed p-md text-secondary transition-all hover:border-primary hover:text-primary"
-          >
-            <Icon
-              name="add_circle"
-              className="transition-transform group-hover:scale-110"
-              style={{ fontSize: 48 }}
-            />
-            <span className="font-label-md text-label-md">
-              New Project Container
-            </span>
-          </button>
-        </div>
-
-        <div className="mt-xl">
-          <h2 className="mb-md font-h2 text-h2 text-on-surface">
-            Audit Activity
-          </h2>
-          <div className="github-card overflow-hidden rounded-lg">
-            <table className="w-full border-collapse text-left">
-              <thead className="border-b border-outline-variant bg-surface-container-low">
-                <tr>
-                  {["Action", "Project", "Member", "Time"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-md py-sm font-label-md text-label-md text-on-surface"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-outline-variant">
-                {audits.map((row) => (
-                  <tr
-                    key={row.key}
-                    className="cursor-pointer transition-colors hover:bg-surface-bright"
-                  >
-                    <td className="px-md py-sm">
-                      <div className="flex items-center gap-xs">
-                        <Icon
-                          name={row.icon}
-                          className={row.iconClass}
-                          style={{ fontSize: 18 }}
-                        />
-                        <span className="font-code-md text-code-md text-on-surface">
-                          {row.key}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-md py-sm font-body-sm text-body-sm text-on-surface">
-                      {row.project}
-                    </td>
-                    <td className="px-md py-sm">
-                      <div className="flex items-center gap-xs">
-                        <img
-                          src={row.avatar}
-                          alt=""
-                          className="h-5 w-5 rounded-full object-cover"
-                        />
-                        <span className="font-body-sm text-body-sm text-on-surface">
-                          {row.member}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-md py-sm font-body-sm text-body-sm text-secondary">
-                      {row.time}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </AppShell>
   );
