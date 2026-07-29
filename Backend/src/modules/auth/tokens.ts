@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
 import { env } from "../../config/env";
+import { sha256Hex } from "../../common/hash";
 
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -25,7 +26,7 @@ export function generateRefreshToken(): string {
 }
 
 export function hashRefreshToken(raw: string): string {
-  return crypto.createHash("sha256").update(raw).digest("hex");
+  return sha256Hex(raw);
 }
 
 export function getRefreshTokenExpiry(): Date {

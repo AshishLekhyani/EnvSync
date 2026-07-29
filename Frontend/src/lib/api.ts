@@ -118,7 +118,7 @@ export interface AuditLogEntry {
   createdAt: string;
 }
 
-export type SecretChangeType = "CREATE" | "UPDATE" | "DELETE" | "RESTORE";
+export type SecretChangeType = "CREATE" | "UPDATE" | "DELETE" | "RESTORE" | "ROTATE";
 
 export interface SecretVersionMetadata {
   id: string;
@@ -126,6 +126,19 @@ export interface SecretVersionMetadata {
   changeType: SecretChangeType;
   author: { id: string; name: string; email: string };
   createdAt: string;
+}
+
+export interface ApiTokenSummary {
+  id: string;
+  name: string;
+  createdBy: { id: string; name: string; email: string };
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface ApiTokenCreated extends ApiTokenSummary {
+  token: string;
 }
 
 export const api = {
@@ -235,5 +248,24 @@ export const api = {
   restoreSecretVersion: (secretId: string, version: number) =>
     request<SecretMetadata>(`/secrets/${secretId}/versions/${version}/restore`, {
       method: "POST",
+    }),
+
+  rotateSecret: (secretId: string, input?: { length?: number }) =>
+    request<SecretMetadata & { value: string }>(`/secrets/${secretId}/rotate`, {
+      method: "POST",
+      body: JSON.stringify(input ?? {}),
+    }),
+
+  createApiToken: (orgId: string, input: { name: string }) =>
+    request<ApiTokenCreated>(`/orgs/${orgId}/tokens`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  listApiTokens: (orgId: string) => request<ApiTokenSummary[]>(`/orgs/${orgId}/tokens`),
+
+  revokeApiToken: (orgId: string, tokenId: string) =>
+    request<ApiTokenSummary>(`/orgs/${orgId}/tokens/${tokenId}`, {
+      method: "DELETE",
     }),
 };

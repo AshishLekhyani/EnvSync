@@ -12,3 +12,8 @@ export const updateSecretSchema = z.object({
   value: z.string().min(1),
 });
 export type UpdateSecretInput = z.infer<typeof updateSecretSchema>;
+
+export const rotateSecretSchema = z.object({
+  length: z.number().int().min(16).max(128).optional(),
+});
+export type RotateSecretInput = z.infer<typeof rotateSecretSchema>;

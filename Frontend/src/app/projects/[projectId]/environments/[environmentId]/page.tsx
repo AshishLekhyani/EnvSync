@@ -52,6 +52,7 @@ export default function EnvironmentSecretsPage() {
   const [versionVisible, setVersionVisible] = useState<Record<string, boolean>>({});
   const [revealingVersionKey, setRevealingVersionKey] = useState<string | null>(null);
   const [restoringVersionKey, setRestoringVersionKey] = useState<string | null>(null);
+  const [rotatingId, setRotatingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +208,28 @@ export default function EnvironmentSecretsPage() {
       setError(err instanceof ApiError ? err.message : "Failed to reveal version");
     } finally {
       setRevealingVersionKey(null);
+    }
+  };
+
+  const onRotate = async (secretId: string) => {
+    if (!window.confirm("Rotate this secret? A new random value will replace the current one.")) {
+      return;
+    }
+
+    setRotatingId(secretId);
+    setError(null);
+    try {
+      const { value, ...updated } = await api.rotateSecret(secretId);
+      setSecrets((prev) => prev.map((s) => (s.id === secretId ? updated : s)));
+      setRevealed((prev) => ({ ...prev, [secretId]: value }));
+      setVisible((prev) => ({ ...prev, [secretId]: true }));
+      if (expandedHistoryId === secretId) {
+        await loadVersions(secretId);
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to rotate secret");
+    } finally {
+      setRotatingId(null);
     }
   };
 
@@ -494,6 +517,19 @@ export default function EnvironmentSecretsPage() {
                               aria-label="Edit value"
                             >
                               <Icon name="edit" style={{ fontSize: 18 }} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={rotatingId === secret.id}
+                              onClick={() => onRotate(secret.id)}
+                              className="text-secondary transition-colors hover:text-primary disabled:opacity-50"
+                              aria-label="Rotate value"
+                            >
+                              <Icon
+                                name="autorenew"
+                                className={rotatingId === secret.id ? "animate-spin" : ""}
+                                style={{ fontSize: 18 }}
+                              />
                             </button>
                             <button
                               type="button"

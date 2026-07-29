@@ -8,6 +8,7 @@ declare global {
         email: string;
       };
       membership?: OrgMembership;
+      apiTokenId?: string;
     }
   }
 }

@@ -7,7 +7,11 @@ import {
 } from "../rbac/rbac.middleware";
 import { validate } from "../../common/validation/validate";
 import * as secretController from "./secret.controller";
-import { createSecretSchema, updateSecretSchema } from "./secret.validators";
+import {
+  createSecretSchema,
+  rotateSecretSchema,
+  updateSecretSchema,
+} from "./secret.validators";
 
 export const environmentSecretsRouter = Router({ mergeParams: true });
 environmentSecretsRouter.use(requireAuth);
@@ -62,4 +66,10 @@ secretRouter.post(
   "/:secretId/versions/:version/restore",
   requireEnvironmentAccess("write", environmentIdFromSecretParam()),
   secretController.restoreSecretVersion
+);
+secretRouter.post(
+  "/:secretId/rotate",
+  requireEnvironmentAccess("write", environmentIdFromSecretParam()),
+  validate({ body: rotateSecretSchema }),
+  secretController.rotateSecret
 );

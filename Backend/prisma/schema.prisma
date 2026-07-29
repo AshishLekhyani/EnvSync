@@ -27,6 +27,7 @@ model User {
   sessions               Session[]
   auditLogs               AuditLog[]      @relation("ActorUser")
   secretVersionsAuthored  SecretVersion[] @relation("SecretVersionAuthor")
+  apiTokensCreated        ApiToken[]      @relation("ApiTokenCreator")
 
   @@unique([authProvider, providerId])
 }
@@ -49,6 +50,7 @@ model Organization {
   projects      Project[]
   encryptionKey OrgEncryptionKey?
   auditLogs     AuditLog[]
+  apiTokens     ApiToken[]
 }
 
 model OrgMembership {
@@ -128,6 +130,7 @@ enum SecretChangeType {
   UPDATE
   DELETE
   RESTORE
+  ROTATE
 }
 
 model SecretVersion {
@@ -192,4 +195,20 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model ApiToken {
+  id          String    @id @default(cuid())
+  orgId       String
+  name        String
+  tokenHash   String    @unique
+  createdById String
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy User         @relation("ApiTokenCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
 }

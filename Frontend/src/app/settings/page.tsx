@@ -1,11 +1,55 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
+import { useAuth } from "@/lib/auth-context";
+import { api, ApiError, ApiTokenCreated, ApiTokenSummary } from "@/lib/api";
 
 export default function SettingsPage() {
+  const { organizations } = useAuth();
+  const org = organizations[0] ?? null;
+
   const [showToast, setShowToast] = useState(false);
+
+  const [tokens, setTokens] = useState<ApiTokenSummary[]>([]);
+  const [tokensLoading, setTokensLoading] = useState(true);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  const [newTokenName, setNewTokenName] = useState("");
+  const [creatingToken, setCreatingToken] = useState(false);
+  const [justCreatedToken, setJustCreatedToken] = useState<ApiTokenCreated | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!org) {
+      setTokensLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setTokensLoading(true);
+
+    api
+      .listApiTokens(org.id)
+      .then((result) => {
+        if (!cancelled) {
+          setTokens(result);
+          setTokenError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setTokenError(err instanceof ApiError ? err.message : "Failed to load tokens");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTokensLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [org]);
 
   const copyText = async (text: string) => {
     try {
@@ -14,6 +58,42 @@ export default function SettingsPage() {
       window.setTimeout(() => setShowToast(false), 3000);
     } catch {
       /* ignore */
+    }
+  };
+
+  const onCreateToken = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!org) return;
+    setCreatingToken(true);
+    setTokenError(null);
+
+    try {
+      const created = await api.createApiToken(org.id, { name: newTokenName });
+      setTokens((prev) => [created, ...prev]);
+      setJustCreatedToken(created);
+      setNewTokenName("");
+    } catch (err) {
+      setTokenError(err instanceof ApiError ? err.message : "Failed to create token");
+    } finally {
+      setCreatingToken(false);
+    }
+  };
+
+  const onRevokeToken = async (tokenId: string) => {
+    if (!org) return;
+    if (!window.confirm("Revoke this token? Anything using it will stop working immediately.")) {
+      return;
+    }
+    setRevokingId(tokenId);
+    setTokenError(null);
+
+    try {
+      const updated = await api.revokeApiToken(org.id, tokenId);
+      setTokens((prev) => prev.map((t) => (t.id === tokenId ? updated : t)));
+    } catch (err) {
+      setTokenError(err instanceof ApiError ? err.message : "Failed to revoke token");
+    } finally {
+      setRevokingId(null);
     }
   };
 
@@ -112,57 +192,130 @@ export default function SettingsPage() {
         <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)] lg:col-span-5">
           <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
             <Icon name="key" className="text-primary" />
-            <h2 className="font-h3 text-h3 text-on-surface">Service Token</h2>
+            <h2 className="font-h3 text-h3 text-on-surface">Service Tokens</h2>
           </div>
-          <div className="flex flex-1 flex-col justify-center gap-md p-md">
-            <p className="font-body-sm text-body-sm text-on-surface-variant">
-              Use this token to authenticate your local CLI session. Keep this
-              secret and never commit it to source control.
-            </p>
-            <div>
-              <div className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-high p-md">
-                <div className="flex items-center gap-sm overflow-hidden">
-                  <Icon
-                    name="lock"
-                    className="text-[#1F883D]"
-                    filled
-                    style={{ fontVariationSettings: "'FILL' 1" }}
-                  />
-                  <span className="truncate pr-md font-code-md text-code-md text-on-surface">
-                    envsync_live_9a2f_88bc2100_xk881m
-                  </span>
+          <div className="flex flex-1 flex-col gap-md p-md">
+            {!org ? (
+              <p className="font-body-sm text-body-sm text-on-surface-variant">
+                Create an organization on the Projects page first.
+              </p>
+            ) : (
+              <>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  Use a service token to authenticate the EnvSync CLI. Keep it
+                  secret and never commit it to source control.
+                </p>
+
+                {tokenError && (
+                  <div className="rounded-lg border border-[#CF222E]/30 bg-[#FFEBE9] px-md py-sm font-body-sm text-body-sm text-[#CF222E] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+                    {tokenError}
+                  </div>
+                )}
+
+                {justCreatedToken ? (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-md">
+                    <p className="mb-xs font-label-md text-label-md font-bold text-on-surface">
+                      {justCreatedToken.name}
+                    </p>
+                    <p className="mb-sm font-body-sm text-body-sm text-on-surface-variant">
+                      Copy this token now — it won&apos;t be shown again.
+                    </p>
+                    <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
+                      <span className="truncate pr-md font-code-md text-code-md text-on-surface">
+                        {justCreatedToken.token}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => copyText(justCreatedToken.token)}
+                        className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
+                      >
+                        <Icon name="content_copy" />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setJustCreatedToken(null)}
+                      className="mt-sm font-label-md text-label-md text-xs text-primary hover:underline"
+                    >
+                      Done
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={onCreateToken} className="flex gap-sm">
+                    <input
+                      required
+                      value={newTokenName}
+                      onChange={(e) => setNewTokenName(e.target.value)}
+                      placeholder="Token name (e.g. CI)"
+                      className="flex-1 rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-sm text-body-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
+                    />
+                    <button
+                      type="submit"
+                      disabled={creatingToken}
+                      className="flex-shrink-0 rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
+                    >
+                      {creatingToken ? "..." : "Generate"}
+                    </button>
+                  </form>
+                )}
+
+                <div className="flex max-h-56 flex-col gap-xs overflow-y-auto">
+                  {tokensLoading ? (
+                    <div className="flex justify-center py-md text-secondary">
+                      <Icon
+                        name="progress_activity"
+                        className="animate-spin"
+                        style={{ fontSize: 20 }}
+                      />
+                    </div>
+                  ) : tokens.length === 0 ? (
+                    <p className="font-body-sm text-body-sm text-on-surface-variant">
+                      No tokens yet.
+                    </p>
+                  ) : (
+                    tokens.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-high px-md py-sm"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-xs">
+                            <span className="truncate font-label-md text-label-md text-on-surface">
+                              {t.name}
+                            </span>
+                            {t.revokedAt && (
+                              <span className="rounded-full bg-error/10 px-sm py-[1px] text-[10px] font-bold uppercase text-error">
+                                Revoked
+                              </span>
+                            )}
+                          </div>
+                          <p className="font-body-sm text-[11px] text-on-surface-variant">
+                            {t.createdBy.name} ·{" "}
+                            {t.lastUsedAt
+                              ? `Used ${new Date(t.lastUsedAt).toLocaleDateString()}`
+                              : "Never used"}
+                          </p>
+                        </div>
+                        {!t.revokedAt && (
+                          <button
+                            type="button"
+                            disabled={revokingId === t.id}
+                            onClick={() => onRevokeToken(t.id)}
+                            className="flex-shrink-0 font-label-md text-label-md text-xs text-error hover:underline disabled:opacity-50"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    copyText("envsync_live_9a2f_88bc2100_xk881m")
-                  }
-                  className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
-                >
-                  <Icon name="content_copy" />
-                </button>
-              </div>
-              <div className="mt-sm flex items-center gap-xs text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-[#1F883D]" />
-                Active Token
-              </div>
-            </div>
-            <div className="mt-auto flex items-center justify-between border-t border-outline-variant pt-md">
-              <div className="flex items-center gap-xs">
-                <span className="rounded-full border border-[#40C463] bg-[#E6FFEC] px-2 py-0.5 text-[10px] font-bold text-[#116329] dark:border-[#40C463]/30 dark:bg-[#1F883D]/20 dark:text-[#40C463]">
-                  AES-256
-                </span>
-                <span className="font-body-sm text-[11px] text-on-surface-variant">
-                  End-to-End Encryption
-                </span>
-              </div>
-              <button
-                type="button"
-                className="font-label-md text-label-md text-xs text-error hover:underline"
-              >
-                Revoke Token
-              </button>
-            </div>
+
+                <p className="mt-auto border-t border-outline-variant pt-md font-body-sm text-[11px] text-on-surface-variant">
+                  Tokens are hashed at rest with AES-256 and can be revoked at any time.
+                </p>
+              </>
+            )}
           </div>
         </div>
 

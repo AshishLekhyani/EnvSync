@@ -30,6 +30,9 @@ export const ACTION_DISPLAY: Record<string, ActionDisplay> = {
     iconClass: "text-tertiary",
   },
   "secret.restore": { icon: "restore", label: "Restored secret", iconClass: "text-primary" },
+  "secret.rotate": { icon: "autorenew", label: "Rotated secret", iconClass: "text-primary" },
+  "apitoken.create": { icon: "key", label: "Created API token", iconClass: "text-primary" },
+  "apitoken.revoke": { icon: "block", label: "Revoked API token", iconClass: "text-error" },
 };
 
 const FALLBACK_DISPLAY: ActionDisplay = {

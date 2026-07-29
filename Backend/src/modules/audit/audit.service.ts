@@ -20,7 +20,10 @@ export type AuditAction =
   | "secret.delete"
   | "secret.reveal"
   | "secret.version_reveal"
-  | "secret.restore";
+  | "secret.restore"
+  | "secret.rotate"
+  | "apitoken.create"
+  | "apitoken.revoke";
 
 interface WriteAuditLogInput {
   orgId: string;

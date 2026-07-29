@@ -258,6 +258,104 @@ async function main() {
   if (res.status !== 403) fail("viewer restore should be 403", await res.text());
   ok("viewer cannot restore a version (403, write access required)");
 
+  res = await fetch(`${BASE}/orgs/${orgId}/tokens`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ name: "CI token" }),
+  });
+  const createdToken = await res.json();
+  if (res.status !== 201 || !createdToken.token?.startsWith("envsync_")) {
+    fail("create API token", createdToken);
+  }
+  ok("create API token (raw token starts with envsync_)");
+  const rawApiToken: string = createdToken.token;
+  const apiTokenId: string = createdToken.id;
+
+  res = await fetch(`${BASE}/orgs/${orgId}/tokens`, {
+    headers: authHeaders(ownerAccessToken),
+  });
+  const tokenList = await res.json();
+  const listedToken = (tokenList as Array<{ id: string }>).find((t) => t.id === apiTokenId);
+  if (res.status !== 200 || !listedToken || "token" in listedToken) {
+    fail("list API tokens (raw token must never be listed)", tokenList);
+  }
+  ok("list API tokens (metadata only, raw token never re-exposed)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, {
+    headers: authHeaders(rawApiToken),
+  });
+  if (res.status !== 200) fail("API token authenticates like a normal bearer token", await res.text());
+  ok("API token authenticates on an existing RBAC-gated route (200)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/tokens`, {
+    method: "POST",
+    headers: authHeaders(viewerAccessToken),
+    body: JSON.stringify({ name: "should fail" }),
+  });
+  if (res.status !== 403) fail("viewer create API token should be 403", await res.text());
+  ok("viewer cannot create an API token (403, ADMIN+ required)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/rotate`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({}),
+  });
+  const rotated = await res.json();
+  if (
+    res.status !== 200 ||
+    !rotated.value ||
+    rotated.value === "postgres://user:pass@localhost/db" ||
+    rotated.currentVersion !== 5
+  ) {
+    fail("rotate secret", rotated);
+  }
+  ok("rotate secret (new random value, currentVersion becomes 5)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/reveal`, { headers: authHeaders(ownerAccessToken) });
+  const revealedAfterRotate = await res.json();
+  if (res.status !== 200 || revealedAfterRotate.value !== rotated.value) {
+    fail("live value after rotate should match the rotate response", revealedAfterRotate);
+  }
+  ok("live secret value after rotate matches the rotate response (round-trip)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/versions`, {
+    headers: authHeaders(ownerAccessToken),
+  });
+  versions = await res.json();
+  if (res.status !== 200 || versions[0].changeType !== "ROTATE") {
+    fail("versions list after rotate should have newest entry ROTATE", versions);
+  }
+  ok("versions list after rotate has newest entry ROTATE");
+
+  res = await fetch(`${BASE}/secrets/${prodSecret.id}/rotate`, {
+    method: "POST",
+    headers: authHeaders(viewerAccessToken),
+    body: JSON.stringify({}),
+  });
+  if (res.status !== 403) fail("viewer rotate prod secret should be 403", await res.text());
+  ok("viewer cannot rotate prod secret (403)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/tokens/${apiTokenId}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  const revokedToken = await res.json();
+  if (res.status !== 200 || !revokedToken.revokedAt) fail("revoke API token", revokedToken);
+  ok("revoke API token (200, revokedAt set)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, {
+    headers: authHeaders(rawApiToken),
+  });
+  if (res.status !== 401) fail("revoked API token should be rejected", await res.text());
+  ok("revoked API token is rejected (401)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/tokens/${apiTokenId}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 409) fail("revoking an already-revoked token should be 409", await res.text());
+  ok("revoking an already-revoked token is rejected (409)");
+
   res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?limit=50`, {
     headers: authHeaders(ownerAccessToken),
   });
@@ -269,7 +367,10 @@ async function main() {
     "secret.update",
     "secret.version_reveal",
     "secret.restore",
+    "secret.rotate",
     "member.add",
+    "apitoken.create",
+    "apitoken.revoke",
   ];
   const missing = expectedActions.filter((a) => !actions.has(a));
   if (missing.length > 0) fail("audit logs missing expected actions", { missing, actions: [...actions] });

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { SecretChangeType } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { toPrismaBytes } from "../../common/bytes";
@@ -216,6 +217,59 @@ export async function updateSecret(
   });
 
   return toMetadata(updated);
+}
+
+export async function rotateSecret(
+  secretId: string,
+  actorId: string,
+  ipAddress?: string,
+  length = 32
+) {
+  const secret = await getSecretWithEnvironment(secretId);
+  const dek = await getOrCreateOrgDek(secret.environment.project.orgId);
+  const newValue = crypto.randomBytes(length).toString("base64url");
+  const { ciphertext, iv, authTag } = encryptWithDek(newValue, dek);
+  const nextVersion = secret.currentVersion + 1;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.secret.update({
+      where: { id: secretId },
+      data: {
+        ciphertext: toPrismaBytes(ciphertext),
+        iv: toPrismaBytes(iv),
+        authTag: toPrismaBytes(authTag),
+        currentVersion: nextVersion,
+        updatedById: actorId,
+      },
+    });
+
+    await tx.secretVersion.create({
+      data: {
+        secretId,
+        version: nextVersion,
+        ciphertext: toPrismaBytes(ciphertext),
+        iv: toPrismaBytes(iv),
+        authTag: toPrismaBytes(authTag),
+        changeType: SecretChangeType.ROTATE,
+        createdById: actorId,
+      },
+    });
+
+    await writeAuditLog(tx, {
+      orgId: secret.environment.project.orgId,
+      actorId,
+      action: "secret.rotate",
+      targetType: "Secret",
+      targetId: secretId,
+      projectId: secret.environment.projectId,
+      metadata: { key: secret.key, version: nextVersion, length },
+      ipAddress,
+    });
+
+    return result;
+  });
+
+  return { ...toMetadata(updated), value: newValue };
 }
 
 export async function deleteSecret(
