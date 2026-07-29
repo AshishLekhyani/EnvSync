@@ -1,6 +1,11 @@
 import { asyncHandler } from "../../common/middleware/asyncHandler";
 import * as secretService from "./secret.service";
-import { CreateSecretInput, RotateSecretInput, UpdateSecretInput } from "./secret.validators";
+import {
+  CreateSecretInput,
+  RotateSecretInput,
+  SetSecretExpiryInput,
+  UpdateSecretInput,
+} from "./secret.validators";
 
 export const createSecret = asyncHandler(async (req, res) => {
   const secret = await secretService.createSecret(
@@ -35,6 +40,17 @@ export const updateSecret = asyncHandler(async (req, res) => {
   const secret = await secretService.updateSecret(
     req.params.secretId,
     req.body as UpdateSecretInput,
+    req.user!.id,
+    req.ip
+  );
+  res.status(200).json(secret);
+});
+
+export const setSecretExpiry = asyncHandler(async (req, res) => {
+  const input = req.body as SetSecretExpiryInput;
+  const secret = await secretService.setSecretExpiry(
+    req.params.secretId,
+    input.expiresAt,
     req.user!.id,
     req.ip
   );

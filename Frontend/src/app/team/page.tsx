@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
 import { api, ApiError, MemberSummary, OrgRole } from "@/lib/api";
+import { exportAuditLogsCsv } from "@/lib/auditExport";
 
 function roleBadgeClass(role: OrgRole) {
   if (role === "OWNER") {
@@ -34,6 +35,7 @@ export default function TeamPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<OrgRole>("DEVELOPER");
   const [inviting, setInviting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!org) {
@@ -65,6 +67,19 @@ export default function TeamPage() {
       cancelled = true;
     };
   }, [org]);
+
+  const onExport = async () => {
+    if (!org) return;
+    setExporting(true);
+    setError(null);
+    try {
+      await exportAuditLogsCsv(org.id, org.slug);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to export audit logs");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const onInvite = async (e: FormEvent) => {
     e.preventDefault();
@@ -105,12 +120,15 @@ export default function TeamPage() {
             <div className="flex gap-sm">
               <button
                 type="button"
-                disabled
-                title="Coming soon"
-                className="flex cursor-not-allowed items-center gap-xs rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-[#24292F] opacity-60 shadow-sm dark:border-outline-variant dark:bg-surface-container-high dark:text-on-surface"
+                disabled={exporting}
+                onClick={onExport}
+                className="flex items-center gap-xs rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-[#24292F] shadow-sm transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60 dark:border-outline-variant dark:bg-surface-container-high dark:text-on-surface"
               >
-                <Icon name="download" />
-                Export Audit Log
+                <Icon
+                  name={exporting ? "progress_activity" : "download"}
+                  className={exporting ? "animate-spin" : ""}
+                />
+                {exporting ? "Exporting..." : "Export Audit Log"}
               </button>
               <button
                 type="button"

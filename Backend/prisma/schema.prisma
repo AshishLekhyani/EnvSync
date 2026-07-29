@@ -28,6 +28,7 @@ model User {
   auditLogs               AuditLog[]      @relation("ActorUser")
   secretVersionsAuthored  SecretVersion[] @relation("SecretVersionAuthor")
   apiTokensCreated        ApiToken[]      @relation("ApiTokenCreator")
+  notifications           Notification[]  @relation("NotificationRecipient")
 
   @@unique([authProvider, providerId])
 }
@@ -51,6 +52,7 @@ model Organization {
   encryptionKey OrgEncryptionKey?
   auditLogs     AuditLog[]
   apiTokens     ApiToken[]
+  notifications Notification[]
 }
 
 model OrgMembership {
@@ -113,6 +115,7 @@ model Secret {
   iv             Bytes
   authTag        Bytes
   currentVersion Int      @default(1)
+  expiresAt      DateTime?
 
   createdById    String
   updatedById    String
@@ -211,4 +214,23 @@ model ApiToken {
   createdBy User         @relation("ApiTokenCreator", fields: [createdById], references: [id], onDelete: Cascade)
 
   @@index([orgId])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  orgId       String
+  recipientId String
+  type        String
+  message     String
+  targetType  String?
+  targetId    String?
+  metadata    Json?
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  recipient User         @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, read, createdAt])
+  @@index([orgId, type, targetId])
 }

@@ -12,6 +12,7 @@ interface SecretRow {
   id: string;
   key: string;
   currentVersion: number;
+  expiresAt: Date | null;
   createdById: string;
   updatedById: string;
   createdAt: Date;
@@ -23,6 +24,7 @@ function toMetadata(secret: SecretRow) {
     id: secret.id,
     key: secret.key,
     currentVersion: secret.currentVersion,
+    expiresAt: secret.expiresAt,
     createdById: secret.createdById,
     updatedById: secret.updatedById,
     createdAt: secret.createdAt,
@@ -86,6 +88,7 @@ export async function createSecret(
         iv: toPrismaBytes(iv),
         authTag: toPrismaBytes(authTag),
         currentVersion: 1,
+        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
         createdById: actorId,
         updatedById: actorId,
       },
@@ -210,6 +213,37 @@ export async function updateSecret(
       targetId: secretId,
       projectId: secret.environment.projectId,
       metadata: { key: secret.key, version: nextVersion },
+      ipAddress,
+    });
+
+    return result;
+  });
+
+  return toMetadata(updated);
+}
+
+export async function setSecretExpiry(
+  secretId: string,
+  expiresAt: string | null,
+  actorId: string,
+  ipAddress?: string
+) {
+  const secret = await getSecretWithEnvironment(secretId);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.secret.update({
+      where: { id: secretId },
+      data: { expiresAt: expiresAt ? new Date(expiresAt) : null },
+    });
+
+    await writeAuditLog(tx, {
+      orgId: secret.environment.project.orgId,
+      actorId,
+      action: "secret.expiry_update",
+      targetType: "Secret",
+      targetId: secretId,
+      projectId: secret.environment.projectId,
+      metadata: { key: secret.key, expiresAt },
       ipAddress,
     });
 

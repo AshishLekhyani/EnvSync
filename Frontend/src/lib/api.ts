@@ -93,6 +93,7 @@ export interface SecretMetadata {
   id: string;
   key: string;
   currentVersion: number;
+  expiresAt: string | null;
   createdById: string;
   updatedById: string;
   createdAt: string;
@@ -139,6 +140,16 @@ export interface ApiTokenSummary {
 
 export interface ApiTokenCreated extends ApiTokenSummary {
   token: string;
+}
+
+export interface NotificationSummary {
+  id: string;
+  type: string;
+  message: string;
+  targetType: string | null;
+  targetId: string | null;
+  read: boolean;
+  createdAt: string;
 }
 
 export interface SessionSummary {
@@ -208,10 +219,19 @@ export const api = {
   listSecrets: (environmentId: string) =>
     request<SecretMetadata[]>(`/environments/${environmentId}/secrets`),
 
-  createSecret: (environmentId: string, input: { key: string; value: string }) =>
+  createSecret: (
+    environmentId: string,
+    input: { key: string; value: string; expiresAt?: string | null }
+  ) =>
     request<SecretMetadata>(`/environments/${environmentId}/secrets`, {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+
+  setSecretExpiry: (secretId: string, expiresAt: string | null) =>
+    request<SecretMetadata>(`/secrets/${secretId}/expiry`, {
+      method: "PATCH",
+      body: JSON.stringify({ expiresAt }),
     }),
 
   revealSecret: (secretId: string) =>
@@ -282,4 +302,14 @@ export const api = {
 
   revokeSession: (sessionId: string) =>
     request<void>(`/auth/sessions/${sessionId}`, { method: "DELETE" }),
+
+  listNotifications: () => request<NotificationSummary[]>("/notifications"),
+
+  markNotificationRead: (notificationId: string) =>
+    request<NotificationSummary>(`/notifications/${notificationId}/read`, {
+      method: "PATCH",
+    }),
+
+  markAllNotificationsRead: () =>
+    request<void>("/notifications/read-all", { method: "POST" }),
 };

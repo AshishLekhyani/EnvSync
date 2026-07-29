@@ -23,7 +23,8 @@ export type AuditAction =
   | "secret.restore"
   | "secret.rotate"
   | "apitoken.create"
-  | "apitoken.revoke";
+  | "apitoken.revoke"
+  | "secret.expiry_update";
 
 interface WriteAuditLogInput {
   orgId: string;

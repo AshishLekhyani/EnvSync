@@ -18,6 +18,33 @@ import { getActionDisplay } from "@/lib/auditActions";
 
 const MASKED = "••••••••••••••••••••••••";
 
+function expiryBadge(expiresAt: string | null) {
+  if (!expiresAt) {
+    return { label: "—", className: "text-secondary" };
+  }
+  const diffDays = Math.ceil(
+    (new Date(expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)
+  );
+  if (diffDays < 0) {
+    return {
+      label: "Expired",
+      className:
+        "rounded-full bg-[#FFEBE9] px-sm py-[1px] text-[10px] font-bold uppercase text-[#CF222E] dark:bg-red-500/10 dark:text-red-400",
+    };
+  }
+  if (diffDays <= 7) {
+    return {
+      label: `Expires in ${diffDays}d`,
+      className:
+        "rounded-full bg-amber-50 px-sm py-[1px] text-[10px] font-bold uppercase text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+    };
+  }
+  return {
+    label: new Date(expiresAt).toLocaleDateString(),
+    className: "font-body-sm text-body-sm text-secondary",
+  };
+}
+
 export default function EnvironmentSecretsPage() {
   const { projectId, environmentId } = useParams<{
     projectId: string;
@@ -39,6 +66,7 @@ export default function EnvironmentSecretsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [newExpiresAt, setNewExpiresAt] = useState("");
   const [creating, setCreating] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -53,6 +81,10 @@ export default function EnvironmentSecretsPage() {
   const [revealingVersionKey, setRevealingVersionKey] = useState<string | null>(null);
   const [restoringVersionKey, setRestoringVersionKey] = useState<string | null>(null);
   const [rotatingId, setRotatingId] = useState<string | null>(null);
+
+  const [editingExpiryId, setEditingExpiryId] = useState<string | null>(null);
+  const [expiryDateInput, setExpiryDateInput] = useState("");
+  const [savingExpiry, setSavingExpiry] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,10 +153,12 @@ export default function EnvironmentSecretsPage() {
       const secret = await api.createSecret(environmentId, {
         key: newKey,
         value: newValue,
+        expiresAt: newExpiresAt ? new Date(newExpiresAt).toISOString() : null,
       });
       setSecrets((prev) => [...prev, secret]);
       setNewKey("");
       setNewValue("");
+      setNewExpiresAt("");
       setShowAdd(false);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create secret");
@@ -230,6 +264,24 @@ export default function EnvironmentSecretsPage() {
       setError(err instanceof ApiError ? err.message : "Failed to rotate secret");
     } finally {
       setRotatingId(null);
+    }
+  };
+
+  const onSaveExpiry = async (secretId: string) => {
+    setSavingExpiry(true);
+    setError(null);
+    try {
+      const updated = await api.setSecretExpiry(
+        secretId,
+        expiryDateInput ? new Date(expiryDateInput).toISOString() : null
+      );
+      setSecrets((prev) => prev.map((s) => (s.id === secretId ? updated : s)));
+      setEditingExpiryId(null);
+      setExpiryDateInput("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update expiry");
+    } finally {
+      setSavingExpiry(false);
     }
   };
 
@@ -372,6 +424,17 @@ export default function EnvironmentSecretsPage() {
                       className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-code-md text-code-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
                     />
                   </label>
+                  <label className="block">
+                    <span className="mb-xs block font-label-md text-label-md text-on-surface">
+                      Expires On
+                    </span>
+                    <input
+                      type="date"
+                      value={newExpiresAt}
+                      onChange={(e) => setNewExpiresAt(e.target.value)}
+                      className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
+                    />
+                  </label>
                 </div>
                 <div className="flex gap-sm">
                   <button
@@ -414,6 +477,9 @@ export default function EnvironmentSecretsPage() {
                       </th>
                       <th className="px-md py-sm font-label-md text-label-md text-secondary">
                         Added By
+                      </th>
+                      <th className="px-md py-sm font-label-md text-label-md text-secondary">
+                        Expires
                       </th>
                       <th className="px-md py-sm text-right font-label-md text-label-md text-secondary">
                         Actions
@@ -495,6 +561,54 @@ export default function EnvironmentSecretsPage() {
                         <td className="px-md py-sm font-body-sm text-body-sm text-on-surface">
                           {memberName(secret.updatedById)}
                         </td>
+                        <td className="px-md py-sm">
+                          {editingExpiryId === secret.id ? (
+                            <div className="flex items-center gap-sm">
+                              <input
+                                autoFocus
+                                type="date"
+                                value={expiryDateInput}
+                                onChange={(e) => setExpiryDateInput(e.target.value)}
+                                className="rounded border border-outline-variant bg-surface-container-low px-sm py-1 font-body-sm text-body-sm text-on-surface outline-none focus:border-primary"
+                              />
+                              <button
+                                type="button"
+                                disabled={savingExpiry}
+                                onClick={() => onSaveExpiry(secret.id)}
+                                className="text-primary disabled:opacity-40"
+                                aria-label="Save expiry"
+                              >
+                                <Icon name="check" style={{ fontSize: 18 }} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingExpiryId(null)}
+                                className="text-secondary"
+                                aria-label="Cancel"
+                              >
+                                <Icon name="close" style={{ fontSize: 18 }} />
+                              </button>
+                            </div>
+                          ) : (
+                            (() => {
+                              const badge = expiryBadge(secret.expiresAt);
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingExpiryId(secret.id);
+                                    setExpiryDateInput(
+                                      secret.expiresAt ? secret.expiresAt.slice(0, 10) : ""
+                                    );
+                                  }}
+                                  className={badge.className}
+                                >
+                                  {badge.label}
+                                </button>
+                              );
+                            })()
+                          )}
+                        </td>
                         <td className="px-md py-sm text-right">
                           <div className="flex justify-end gap-sm">
                             <button
@@ -544,7 +658,7 @@ export default function EnvironmentSecretsPage() {
                       </tr>
                       {expandedHistoryId === secret.id && (
                         <tr>
-                          <td colSpan={5} className="bg-surface-container-low px-md py-md">
+                          <td colSpan={6} className="bg-surface-container-low px-md py-md">
                             {versionsLoading === secret.id ? (
                               <div className="flex justify-center py-md text-secondary">
                                 <Icon
@@ -655,7 +769,7 @@ export default function EnvironmentSecretsPage() {
                     {secrets.length === 0 && (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="px-md py-xl text-center font-body-md text-body-md text-secondary"
                         >
                           No secrets yet. Add your first variable above.

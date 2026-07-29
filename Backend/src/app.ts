@@ -19,6 +19,7 @@ import {
 } from "./modules/secrets/secret.routes";
 import { orgAuditLogsRouter } from "./modules/audit/audit.routes";
 import { orgApiTokensRouter } from "./modules/apiTokens/apiToken.routes";
+import { notificationsRouter } from "./modules/notifications/notification.routes";
 
 export function createApp() {
   const app = express();
@@ -46,6 +47,7 @@ export function createApp() {
   app.use("/api/secrets", secretRouter);
   app.use("/api/orgs/:orgId/audit-logs", orgAuditLogsRouter);
   app.use("/api/orgs/:orgId/tokens", orgApiTokensRouter);
+  app.use("/api/notifications", notificationsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

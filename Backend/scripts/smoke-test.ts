@@ -1,3 +1,5 @@
+import { runExpiryScan } from "../src/modules/notifications/expiryScanner";
+
 const BASE = "http://localhost:4000/api";
 
 function extractCookie(setCookieHeader: string | null, name: string): string | null {
@@ -497,6 +499,87 @@ async function main() {
   });
   if (res.status !== 401) fail("refresh after logout should be 401", await res.text());
   ok("refresh after logout rejected (401)");
+
+  const pastExpiry = new Date(Date.now() - 86400000).toISOString();
+  res = await fetch(`${BASE}/environments/${devEnv.id}/secrets`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ key: "EXPIRED_KEY", value: "v1", expiresAt: pastExpiry }),
+  });
+  const expiredSecret = await res.json();
+  if (res.status !== 201 || expiredSecret.expiresAt !== pastExpiry) {
+    fail("create secret with past expiresAt", expiredSecret);
+  }
+  ok("create secret with past expiresAt returns it correctly");
+
+  const futureExpiry = new Date(Date.now() + 3 * 86400000).toISOString();
+  res = await fetch(`${BASE}/secrets/${secret.id}/expiry`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ expiresAt: futureExpiry }),
+  });
+  let expirySet = await res.json();
+  if (res.status !== 200 || expirySet.expiresAt !== futureExpiry) fail("set secret expiry", expirySet);
+  ok("set secret expiry (3 days out)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/expiry`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ expiresAt: null }),
+  });
+  expirySet = await res.json();
+  if (res.status !== 200 || expirySet.expiresAt !== null) fail("clear secret expiry", expirySet);
+  ok("clear secret expiry (set to null)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/expiry`, {
+    method: "PATCH",
+    headers: authHeaders(viewerAccessToken),
+    body: JSON.stringify({ expiresAt: futureExpiry }),
+  });
+  if (res.status !== 403) fail("viewer set expiry on dev secret should be 403 (no write access on DEVELOPMENT)", await res.text());
+  ok("viewer cannot set expiry on dev secret (403, write access required)");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/expiry`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ expiresAt: futureExpiry }),
+  });
+  expirySet = await res.json();
+  if (res.status !== 200) fail("re-set secret expiry before scanner test", expirySet);
+
+  const scanResult1 = await runExpiryScan();
+  if (scanResult1.notificationsCreated < 1) fail("expiry scan should create at least one notification", scanResult1);
+  ok("expiry scan creates notifications for expiring/expired secrets");
+
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(ownerAccessToken) });
+  const ownerNotifs = await res.json();
+  if (res.status !== 200 || !ownerNotifs.some((n: { targetId: string }) => n.targetId === secret.id)) {
+    fail("owner should see a notification for the expiring secret", ownerNotifs);
+  }
+  ok("owner (ADMIN+) receives notification for expiring secret");
+
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(viewerAccessToken) });
+  const viewerNotifs = await res.json();
+  if (res.status !== 200 || viewerNotifs.some((n: { targetId: string }) => n.targetId === secret.id)) {
+    fail("viewer should NOT receive a notification (not ADMIN+)", viewerNotifs);
+  }
+  ok("viewer does not receive expiry notification (recipient scoping to ADMIN+ confirmed)");
+
+  const scanResult2 = await runExpiryScan();
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(ownerAccessToken) });
+  const ownerNotifsAfterRescan = await res.json();
+  const matchingCount = ownerNotifsAfterRescan.filter((n: { targetId: string }) => n.targetId === secret.id).length;
+  if (matchingCount !== 1) fail("scanning twice should not duplicate the notification", { matchingCount, scanResult2 });
+  ok("running the scanner twice does not create a duplicate notification (dedup confirmed)");
+
+  const targetNotif = ownerNotifsAfterRescan.find((n: { targetId: string }) => n.targetId === secret.id);
+  res = await fetch(`${BASE}/notifications/${targetNotif.id}/read`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+  });
+  const markedRead = await res.json();
+  if (res.status !== 200 || markedRead.read !== true) fail("mark notification read", markedRead);
+  ok("mark notification read flips the read flag");
 
   const hammerEmail = `hammer-${rand}@example.com`;
   res = await fetch(`${BASE}/auth/signup`, {

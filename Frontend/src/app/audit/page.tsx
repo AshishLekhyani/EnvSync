@@ -6,6 +6,7 @@ import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
 import { api, ApiError, AuditLogEntry } from "@/lib/api";
 import { getActionDisplay } from "@/lib/auditActions";
+import { exportAuditLogsCsv } from "@/lib/auditExport";
 
 export default function AuditPage() {
   const { organizations } = useAuth();
@@ -14,6 +15,7 @@ export default function AuditPage() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!org) {
@@ -46,6 +48,19 @@ export default function AuditPage() {
     };
   }, [org]);
 
+  const onExport = async () => {
+    if (!org) return;
+    setExporting(true);
+    setError(null);
+    try {
+      await exportAuditLogsCsv(org.id, org.slug);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to export audit logs");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <AppShell searchPlaceholder="Search audit logs...">
       <div className="mx-auto max-w-container-max pb-xl">
@@ -59,12 +74,15 @@ export default function AuditPage() {
           </div>
           <button
             type="button"
-            disabled
-            title="Coming soon"
-            className="flex cursor-not-allowed items-center gap-xs rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface opacity-60 shadow-sm dark:border-outline-variant dark:bg-surface-container-high"
+            disabled={!org || exporting}
+            onClick={onExport}
+            className="flex items-center gap-xs rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface shadow-sm transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60 dark:border-outline-variant dark:bg-surface-container-high"
           >
-            <Icon name="download" />
-            Export Logs
+            <Icon
+              name={exporting ? "progress_activity" : "download"}
+              className={exporting ? "animate-spin" : ""}
+            />
+            {exporting ? "Exporting..." : "Export Logs"}
           </button>
         </div>
 

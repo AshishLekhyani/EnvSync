@@ -10,6 +10,7 @@ import * as secretController from "./secret.controller";
 import {
   createSecretSchema,
   rotateSecretSchema,
+  setSecretExpirySchema,
   updateSecretSchema,
 } from "./secret.validators";
 
@@ -51,6 +52,12 @@ secretRouter.delete(
   "/:secretId",
   requireEnvironmentAccess("write", environmentIdFromSecretParam()),
   secretController.deleteSecret
+);
+secretRouter.patch(
+  "/:secretId/expiry",
+  requireEnvironmentAccess("write", environmentIdFromSecretParam()),
+  validate({ body: setSecretExpirySchema }),
+  secretController.setSecretExpiry
 );
 secretRouter.get(
   "/:secretId/versions",
