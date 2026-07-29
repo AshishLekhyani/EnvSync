@@ -6,10 +6,10 @@ import * as authService from "./auth.service";
 import { LoginInput, SignupInput } from "./auth.validators";
 import { REFRESH_TOKEN_MAX_AGE_MS } from "./tokens";
 
-const REFRESH_COOKIE = "refreshToken";
-const REFRESH_COOKIE_PATH = "/api/auth";
+export const REFRESH_COOKIE = "refreshToken";
+export const REFRESH_COOKIE_PATH = "/api/auth";
 
-function setRefreshCookie(res: Response, token: string) {
+export function setRefreshCookie(res: Response, token: string) {
   res.cookie(REFRESH_COOKIE, token, {
     httpOnly: true,
     secure: env.NODE_ENV === "production",
@@ -19,7 +19,7 @@ function setRefreshCookie(res: Response, token: string) {
   });
 }
 
-function sessionMeta(req: Request) {
+export function sessionMeta(req: Request) {
   return {
     userAgent: req.headers["user-agent"],
     ipAddress: req.ip,

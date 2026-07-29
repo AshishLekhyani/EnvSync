@@ -9,7 +9,7 @@ import {
 } from "./tokens";
 import { LoginInput, SignupInput } from "./auth.validators";
 
-interface SessionMeta {
+export interface SessionMeta {
   userAgent?: string;
   ipAddress?: string;
 }
@@ -18,7 +18,7 @@ function toPublicUser(user: { id: string; email: string; name: string }) {
   return { id: user.id, email: user.email, name: user.name };
 }
 
-async function issueSession(userId: string, email: string, meta: SessionMeta) {
+export async function issueSession(userId: string, email: string, meta: SessionMeta) {
   const accessToken = signAccessToken({ sub: userId, email });
   const refreshToken = generateRefreshToken();
 

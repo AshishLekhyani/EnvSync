@@ -1,11 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
-import { ApiError } from "@/lib/api";
+import { API_URL, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  oauth_not_configured: "GitHub sign-in isn't configured on this server yet.",
+  oauth_denied: "GitHub sign-in was cancelled.",
+  state_mismatch: "GitHub sign-in failed. Please try again.",
+  email_in_use: "An account with this email already exists. Log in with your password.",
+  oauth_failed: "GitHub sign-in failed. Please try again.",
+};
 
 export function AuthCard({
   mode,
@@ -13,6 +21,9 @@ export function AuthCard({
   mode: "login" | "signup";
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invite = searchParams.get("invite");
+  const oauthError = searchParams.get("error");
   const { login, signup } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState("");
@@ -21,6 +32,15 @@ export function AuthCard({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const isLogin = mode === "login";
+
+  useEffect(() => {
+    if (oauthError) {
+      setError(OAUTH_ERROR_MESSAGES[oauthError] ?? "Something went wrong. Please try again.");
+    }
+  }, [oauthError]);
+
+  const postAuthPath = invite ? `/invite/${invite}` : "/projects";
+  const githubHref = `${API_URL}/auth/github${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -33,7 +53,7 @@ export function AuthCard({
       } else {
         await signup(name, email, password);
       }
-      router.push("/projects");
+      router.push(postAuthPath);
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Something went wrong. Please try again."
@@ -61,11 +81,9 @@ export function AuthCard({
         </p>
       </div>
 
-      <button
-        type="button"
-        disabled
-        title="GitHub OAuth is coming soon"
-        className="mb-md flex w-full cursor-not-allowed items-center justify-center gap-sm rounded-lg border border-outline-variant bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface opacity-60 dark:bg-surface-container"
+      <a
+        href={githubHref}
+        className="mb-md flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container dark:bg-surface-container"
       >
         <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden>
           <path
@@ -74,7 +92,7 @@ export function AuthCard({
           />
         </svg>
         Continue with GitHub
-      </button>
+      </a>
 
       <div className="mb-md flex items-center gap-md">
         <div className="h-px flex-1 bg-outline-variant" />
@@ -180,7 +198,7 @@ export function AuthCard({
           <>
             Don&apos;t have an account?{" "}
             <Link
-              href="/signup"
+              href={invite ? `/signup?invite=${invite}` : "/signup"}
               className="font-medium text-primary hover:underline"
             >
               Sign up
@@ -190,7 +208,7 @@ export function AuthCard({
           <>
             Already have an account?{" "}
             <Link
-              href="/login"
+              href={invite ? `/login?invite=${invite}` : "/login"}
               className="font-medium text-primary hover:underline"
             >
               Log in

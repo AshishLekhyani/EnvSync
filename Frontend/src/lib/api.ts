@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
 let accessToken: string | null = null;
 
@@ -161,6 +161,38 @@ export interface SessionSummary {
   current: boolean;
 }
 
+export type EnvironmentAccessLevel = "NONE" | "READ" | "WRITE";
+
+export interface PermissionCell {
+  access: EnvironmentAccessLevel;
+  isOverride: boolean;
+}
+
+export type PermissionMatrix = Record<OrgRole, Record<EnvironmentType, PermissionCell>>;
+
+export interface InviteSummary {
+  id: string;
+  email: string;
+  role: OrgRole;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+}
+
+export interface InviteCreated extends InviteSummary {
+  token: string;
+}
+
+export interface PublicInvite {
+  orgName: string;
+  orgSlug: string;
+  role: OrgRole;
+  email: string;
+  expiresAt: string;
+  accepted: boolean;
+  expired: boolean;
+}
+
 export const api = {
   signup: (input: { name: string; email: string; password: string }) =>
     request<{ user: PublicUser }>("/auth/signup", {
@@ -312,4 +344,29 @@ export const api = {
 
   markAllNotificationsRead: () =>
     request<void>("/notifications/read-all", { method: "POST" }),
+
+  getPermissionMatrix: (orgId: string) =>
+    request<PermissionMatrix>(`/orgs/${orgId}/permissions`),
+
+  setPermissionOverride: (
+    orgId: string,
+    input: { role: OrgRole; environmentType: EnvironmentType; access: EnvironmentAccessLevel | null }
+  ) =>
+    request<PermissionMatrix>(`/orgs/${orgId}/permissions`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+
+  createInvite: (orgId: string, input: { email: string; role: OrgRole }) =>
+    request<InviteCreated>(`/orgs/${orgId}/invites`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  listInvites: (orgId: string) => request<InviteSummary[]>(`/orgs/${orgId}/invites`),
+
+  getInviteByToken: (token: string) => request<PublicInvite>(`/invites/${token}`),
+
+  acceptInvite: (token: string) =>
+    request<MemberSummary>(`/invites/${token}/accept`, { method: "POST" }),
 };

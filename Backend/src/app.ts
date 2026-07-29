@@ -20,6 +20,8 @@ import {
 import { orgAuditLogsRouter } from "./modules/audit/audit.routes";
 import { orgApiTokensRouter } from "./modules/apiTokens/apiToken.routes";
 import { notificationsRouter } from "./modules/notifications/notification.routes";
+import { orgPermissionsRouter } from "./modules/rbac/permission.routes";
+import { orgInvitesRouter, publicInvitesRouter } from "./modules/invites/invite.routes";
 
 export function createApp() {
   const app = express();
@@ -48,6 +50,9 @@ export function createApp() {
   app.use("/api/orgs/:orgId/audit-logs", orgAuditLogsRouter);
   app.use("/api/orgs/:orgId/tokens", orgApiTokensRouter);
   app.use("/api/notifications", notificationsRouter);
+  app.use("/api/orgs/:orgId/permissions", orgPermissionsRouter);
+  app.use("/api/orgs/:orgId/invites", orgInvitesRouter);
+  app.use("/api/invites", publicInvitesRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

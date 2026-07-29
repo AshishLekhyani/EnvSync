@@ -1,4 +1,5 @@
 ﻿import Link from "next/link";
+import { Suspense } from "react";
 import { AuthCard } from "@/components/AuthCard";
 import { Icon } from "@/components/Icon";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -36,7 +37,9 @@ export default function LoginPage() {
             EnvSync
           </Link>
         </div>
-        <AuthCard mode="login" />
+        <Suspense fallback={null}>
+          <AuthCard mode="login" />
+        </Suspense>
       </div>
     </div>
   );

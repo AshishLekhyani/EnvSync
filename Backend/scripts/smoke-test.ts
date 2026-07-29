@@ -1,4 +1,7 @@
 import { runExpiryScan } from "../src/modules/notifications/expiryScanner";
+import { findOrCreateGithubUser } from "../src/modules/auth/github.service";
+import { ConflictError } from "../src/common/errors/AppError";
+import { prisma } from "../src/db/prisma";
 
 const BASE = "http://localhost:4000/api";
 
@@ -54,6 +57,26 @@ async function main() {
   const me = await res.json();
   if (res.status !== 200 || me.email !== ownerEmail) fail("get me", me);
   ok("get me");
+
+  const fakeGithubProfile = { githubId: `gh-${rand}`, email: `github-${rand}@example.com`, name: "GH User" };
+  const ghUser1 = await findOrCreateGithubUser(fakeGithubProfile);
+  if (ghUser1.authProvider !== "GITHUB" || ghUser1.email !== fakeGithubProfile.email) {
+    fail("create GITHUB user", ghUser1);
+  }
+  ok("findOrCreateGithubUser creates a new GITHUB user on first call");
+
+  const ghUser2 = await findOrCreateGithubUser(fakeGithubProfile);
+  if (ghUser2.id !== ghUser1.id) fail("find-not-recreate on repeat login", ghUser2);
+  ok("findOrCreateGithubUser is idempotent for the same GitHub identity");
+
+  let collided = false;
+  try {
+    await findOrCreateGithubUser({ githubId: `gh-collide-${rand}`, email: ownerEmail, name: "Collider" });
+  } catch (err) {
+    collided = err instanceof ConflictError;
+  }
+  if (!collided) fail("email collision with an existing PASSWORD account should throw ConflictError");
+  ok("findOrCreateGithubUser rejects email collision with an existing PASSWORD account (no raw P2002 leak)");
 
   res = await fetch(`${BASE}/auth/sessions`, {
     headers: { ...authHeaders(ownerAccessToken), Cookie: `refreshToken=${ownerRefreshCookie}` },
@@ -346,6 +369,190 @@ async function main() {
   if (res.status !== 403) fail("viewer rotate prod secret should be 403", await res.text());
   ok("viewer cannot rotate prod secret (403)");
 
+  res = await fetch(`${BASE}/orgs/${orgId}/permissions`, { headers: authHeaders(ownerAccessToken) });
+  let matrix = await res.json();
+  if (res.status !== 200 || matrix.VIEWER.PRODUCTION.access !== "NONE" || matrix.VIEWER.PRODUCTION.isOverride) {
+    fail("fresh org permission matrix should default VIEWER/PRODUCTION to NONE, no override", matrix);
+  }
+  ok("permission matrix defaults VIEWER/PRODUCTION to NONE with no override");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/permissions`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ role: "VIEWER", environmentType: "PRODUCTION", access: "READ" }),
+  });
+  matrix = await res.json();
+  if (res.status !== 200 || matrix.VIEWER.PRODUCTION.access !== "READ" || !matrix.VIEWER.PRODUCTION.isOverride) {
+    fail("set VIEWER/PRODUCTION override to READ", matrix);
+  }
+  ok("permission override set: VIEWER/PRODUCTION -> READ");
+
+  res = await fetch(`${BASE}/secrets/${prodSecret.id}/reveal`, { headers: authHeaders(viewerAccessToken) });
+  if (res.status !== 200) fail("viewer reveal prod secret should now be 200 after READ override", await res.text());
+  ok("viewer can now reveal prod secret after READ override (effective access respected end-to-end)");
+
+  res = await fetch(`${BASE}/secrets/${prodSecret.id}`, {
+    method: "PATCH",
+    headers: authHeaders(viewerAccessToken),
+    body: JSON.stringify({ value: "still-hacked" }),
+  });
+  if (res.status !== 403) fail("viewer write prod secret should still be 403 (override is read-only)", await res.text());
+  ok("viewer still cannot write prod secret (override grants read, not write)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/permissions`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ role: "VIEWER", environmentType: "PRODUCTION", access: null }),
+  });
+  matrix = await res.json();
+  if (res.status !== 200 || matrix.VIEWER.PRODUCTION.access !== "NONE" || matrix.VIEWER.PRODUCTION.isOverride) {
+    fail("reset VIEWER/PRODUCTION override to default", matrix);
+  }
+  ok("permission override reset back to default (NONE)");
+
+  res = await fetch(`${BASE}/secrets/${prodSecret.id}/reveal`, { headers: authHeaders(viewerAccessToken) });
+  if (res.status !== 403) fail("viewer reveal prod secret should be 403 again after reset", await res.text());
+  ok("viewer reveal prod secret rejected again after reset (403)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/permissions`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ role: "OWNER", environmentType: "PRODUCTION", access: "NONE" }),
+  });
+  if (res.status !== 403) fail("overriding OWNER access should be rejected", await res.text());
+  ok("overriding OWNER's access is rejected (403, guardrail)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/permissions`, {
+    method: "PATCH",
+    headers: authHeaders(viewerAccessToken),
+    body: JSON.stringify({ role: "VIEWER", environmentType: "PRODUCTION", access: "READ" }),
+  });
+  if (res.status !== 403) fail("viewer should not be able to change the permission matrix", await res.text());
+  ok("viewer cannot change the permission matrix (403, ADMIN+ required)");
+
+  const inviteeEmail = `invitee-${rand}@example.com`;
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: inviteeEmail, role: "DEVELOPER" }),
+  });
+  const createdInvite = await res.json();
+  if (res.status !== 201 || !createdInvite.token?.startsWith("invite_")) {
+    fail("create invite", createdInvite);
+  }
+  ok("create invite (token prefixed, 201)");
+
+  res = await fetch(`${BASE}/invites/${createdInvite.token}`);
+  const publicInvite = await res.json();
+  if (
+    res.status !== 200 ||
+    publicInvite.email !== inviteeEmail ||
+    publicInvite.role !== "DEVELOPER" ||
+    publicInvite.accepted !== false
+  ) {
+    fail("get invite by token (unauthenticated)", publicInvite);
+  }
+  ok("get invite by token returns correct email/role, unaccepted");
+
+  const mismatchEmail = `mismatch-${rand}@example.com`;
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Mismatch User", email: mismatchEmail, password }),
+  });
+  if (res.status !== 201) fail("signup mismatch user", await res.text());
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: mismatchEmail, password }),
+  });
+  const mismatchLogin = await res.json();
+  if (res.status !== 200) fail("login mismatch user", mismatchLogin);
+  const mismatchAccessToken: string = mismatchLogin.accessToken;
+
+  res = await fetch(`${BASE}/invites/${createdInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(mismatchAccessToken),
+  });
+  if (res.status !== 403) fail("accepting an invite with a mismatched email should be 403", await res.text());
+  ok("accepting an invite as a different email is rejected (403)");
+
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Invitee User", email: inviteeEmail, password }),
+  });
+  if (res.status !== 201) fail("signup invitee", await res.text());
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: inviteeEmail, password }),
+  });
+  const inviteeLogin = await res.json();
+  if (res.status !== 200) fail("login invitee", inviteeLogin);
+  const inviteeAccessToken: string = inviteeLogin.accessToken;
+
+  res = await fetch(`${BASE}/invites/${createdInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(inviteeAccessToken),
+  });
+  const acceptedMembership = await res.json();
+  if (res.status !== 200 || acceptedMembership.role !== "DEVELOPER") {
+    fail("accept invite with matching email", acceptedMembership);
+  }
+  ok("accept invite with matching email succeeds, role matches invite");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(ownerAccessToken) });
+  const membersAfterAccept = await res.json();
+  if (!membersAfterAccept.some((m: { user: { email: string } }) => m.user.email === inviteeEmail)) {
+    fail("invitee should appear in org members after accepting", membersAfterAccept);
+  }
+  ok("invitee appears in org members list after accepting");
+
+  res = await fetch(`${BASE}/invites/${createdInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(inviteeAccessToken),
+  });
+  if (res.status !== 409) fail("re-accepting the same invite should be 409", await res.text());
+  ok("re-accepting an already-accepted invite is rejected (409)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: `expiring-${rand}@example.com`, role: "VIEWER" }),
+  });
+  const expiringInvite = await res.json();
+  if (res.status !== 201) fail("create second invite for expiry test", expiringInvite);
+
+  await prisma.orgInvite.update({
+    where: { id: expiringInvite.id },
+    data: { expiresAt: new Date(Date.now() - 1000) },
+  });
+
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Expiring User", email: `expiring-${rand}@example.com`, password }),
+  });
+  if (res.status !== 201) fail("signup expiring-invite user", await res.text());
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: `expiring-${rand}@example.com`, password }),
+  });
+  const expiringLogin = await res.json();
+  if (res.status !== 200) fail("login expiring-invite user", expiringLogin);
+
+  res = await fetch(`${BASE}/invites/${expiringInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(expiringLogin.accessToken),
+  });
+  if (res.status !== 409) fail("accepting an expired invite should be 409", await res.text());
+  ok("accepting an expired invite is rejected (409)");
+
   res = await fetch(`${BASE}/orgs/${orgId}/tokens/${apiTokenId}`, {
     method: "DELETE",
     headers: authHeaders(ownerAccessToken),
@@ -382,6 +589,10 @@ async function main() {
     "member.add",
     "apitoken.create",
     "apitoken.revoke",
+    "permission.override_set",
+    "permission.override_reset",
+    "invite.create",
+    "invite.accept",
   ];
   const missing = expectedActions.filter((a) => !actions.has(a));
   if (missing.length > 0) fail("audit logs missing expected actions", { missing, actions: [...actions] });

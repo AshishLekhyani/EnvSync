@@ -11,7 +11,7 @@ export function hasAtLeastRole(actual: OrgRole, required: OrgRole): boolean {
   return ROLE_WEIGHT[actual] >= ROLE_WEIGHT[required];
 }
 
-type EnvironmentAccess = "none" | "read" | "write";
+export type EnvironmentAccess = "none" | "read" | "write";
 
 const ENVIRONMENT_ACCESS: Record<OrgRole, Record<EnvironmentType, EnvironmentAccess>> = {
   OWNER: {

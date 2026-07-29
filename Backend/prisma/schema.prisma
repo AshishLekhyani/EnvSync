@@ -29,6 +29,8 @@ model User {
   secretVersionsAuthored  SecretVersion[] @relation("SecretVersionAuthor")
   apiTokensCreated        ApiToken[]      @relation("ApiTokenCreator")
   notifications           Notification[]  @relation("NotificationRecipient")
+  invitesSent             OrgInvite[]     @relation("InviteInviter")
+  invitesAccepted         OrgInvite[]     @relation("InviteAcceptor")
 
   @@unique([authProvider, providerId])
 }
@@ -47,12 +49,14 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships   OrgMembership[]
-  projects      Project[]
-  encryptionKey OrgEncryptionKey?
-  auditLogs     AuditLog[]
-  apiTokens     ApiToken[]
-  notifications Notification[]
+  memberships         OrgMembership[]
+  projects            Project[]
+  encryptionKey       OrgEncryptionKey?
+  auditLogs           AuditLog[]
+  apiTokens           ApiToken[]
+  notifications       Notification[]
+  invites             OrgInvite[]
+  permissionOverrides OrgEnvironmentPermission[]
 }
 
 model OrgMembership {
@@ -233,4 +237,45 @@ model Notification {
 
   @@index([recipientId, read, createdAt])
   @@index([orgId, type, targetId])
+}
+
+enum EnvironmentAccessLevel {
+  NONE
+  READ
+  WRITE
+}
+
+model OrgEnvironmentPermission {
+  id              String                 @id @default(cuid())
+  orgId           String
+  role            OrgRole
+  environmentType EnvironmentType
+  access          EnvironmentAccessLevel
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, role, environmentType])
+  @@index([orgId])
+}
+
+model OrgInvite {
+  id           String    @id @default(cuid())
+  orgId        String
+  email        String
+  role         OrgRole
+  tokenHash    String    @unique
+  invitedById  String
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  acceptedById String?
+
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy  User         @relation("InviteInviter", fields: [invitedById], references: [id], onDelete: Cascade)
+  acceptedBy User?        @relation("InviteAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([email])
 }

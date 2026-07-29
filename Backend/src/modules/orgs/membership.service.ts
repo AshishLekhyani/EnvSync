@@ -5,12 +5,12 @@ import { hasAtLeastRole } from "../rbac/roles";
 import { writeAuditLog } from "../audit/audit.service";
 import { AddMemberInput, UpdateMemberRoleInput } from "./membership.validators";
 
-interface Actor {
+export interface Actor {
   id: string;
   role: OrgRole;
 }
 
-function assertCanAssignRole(actorRole: OrgRole, targetRole: OrgRole) {
+export function assertCanAssignRole(actorRole: OrgRole, targetRole: OrgRole) {
   if (targetRole === "OWNER" && actorRole !== "OWNER") {
     throw new ForbiddenError("Only an owner can grant the owner role");
   }

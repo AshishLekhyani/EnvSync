@@ -7,7 +7,8 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from "../../common/errors/AppError";
-import { canReadEnvironment, canWriteEnvironment, hasAtLeastRole } from "./roles";
+import { hasAtLeastRole } from "./roles";
+import { getEffectiveAccess } from "./permissions.service";
 
 type OrgIdResolver = (req: Request) => Promise<string | null>;
 
@@ -108,10 +109,12 @@ export function requireEnvironmentAccess(
       throw new ForbiddenError();
     }
 
-    const allowed =
-      access === "write"
-        ? canWriteEnvironment(membership.role, environment.type)
-        : canReadEnvironment(membership.role, environment.type);
+    const effective = await getEffectiveAccess(
+      environment.project.orgId,
+      membership.role,
+      environment.type
+    );
+    const allowed = access === "write" ? effective === "write" : effective !== "none";
 
     if (!allowed) {
       throw new ForbiddenError();

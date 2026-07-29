@@ -4,8 +4,26 @@ import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
-import { api, ApiError, MemberSummary, OrgRole } from "@/lib/api";
+import {
+  api,
+  ApiError,
+  EnvironmentAccessLevel,
+  EnvironmentType,
+  InviteCreated,
+  MemberSummary,
+  OrgRole,
+  PermissionMatrix,
+} from "@/lib/api";
 import { exportAuditLogsCsv } from "@/lib/auditExport";
+
+const ENV_COLUMNS: { type: EnvironmentType; label: string }[] = [
+  { type: "DEVELOPMENT", label: "Dev" },
+  { type: "TESTING", label: "Testing" },
+  { type: "STAGING", label: "Staging" },
+  { type: "PRODUCTION", label: "Prod" },
+];
+
+const ROLE_ROWS: OrgRole[] = ["OWNER", "ADMIN", "DEVELOPER", "VIEWER"];
 
 function roleBadgeClass(role: OrgRole) {
   if (role === "OWNER") {
@@ -26,16 +44,24 @@ function initials(name: string) {
 export default function TeamPage() {
   const { organizations } = useAuth();
   const org = organizations[0] ?? null;
+  const isAdmin = org?.role === "OWNER" || org?.role === "ADMIN";
 
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [showInvite, setShowInvite] = useState(false);
+  const [directAddMode, setDirectAddMode] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<OrgRole>("DEVELOPER");
   const [inviting, setInviting] = useState(false);
+  const [justCreatedInvite, setJustCreatedInvite] = useState<InviteCreated | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+
+  const [permissionMatrix, setPermissionMatrix] = useState<PermissionMatrix | null>(null);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!org) {
@@ -68,6 +94,66 @@ export default function TeamPage() {
     };
   }, [org]);
 
+  useEffect(() => {
+    if (!org) {
+      setPermissionsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPermissionsLoading(true);
+
+    api
+      .getPermissionMatrix(org.id)
+      .then((matrix) => {
+        if (!cancelled) {
+          setPermissionMatrix(matrix);
+          setPermissionError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPermissionError(
+            err instanceof ApiError ? err.message : "Failed to load permission matrix"
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPermissionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [org]);
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setShowToast(true);
+      window.setTimeout(() => setShowToast(false), 3000);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const onChangePermission = async (
+    role: OrgRole,
+    environmentType: EnvironmentType,
+    access: EnvironmentAccessLevel | null
+  ) => {
+    if (!org) return;
+    setPermissionError(null);
+    try {
+      const matrix = await api.setPermissionOverride(org.id, { role, environmentType, access });
+      setPermissionMatrix(matrix);
+    } catch (err) {
+      setPermissionError(
+        err instanceof ApiError ? err.message : "Failed to update permission"
+      );
+    }
+  };
+
   const onExport = async () => {
     if (!org) return;
     setExporting(true);
@@ -88,6 +174,26 @@ export default function TeamPage() {
     setError(null);
 
     try {
+      const invite = await api.createInvite(org.id, {
+        email: inviteEmail,
+        role: inviteRole,
+      });
+      setJustCreatedInvite(invite);
+      setInviteEmail("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create invite");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const onDirectAdd = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!org) return;
+    setInviting(true);
+    setError(null);
+
+    try {
       const membership = await api.addMember(org.id, {
         email: inviteEmail,
         role: inviteRole,
@@ -95,6 +201,7 @@ export default function TeamPage() {
       setMembers((prev) => [...prev, membership]);
       setInviteEmail("");
       setShowInvite(false);
+      setDirectAddMode(false);
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -104,6 +211,13 @@ export default function TeamPage() {
     } finally {
       setInviting(false);
     }
+  };
+
+  const closeInviteForm = () => {
+    setShowInvite(false);
+    setDirectAddMode(false);
+    setJustCreatedInvite(null);
+    setInviteEmail("");
   };
 
   return (
@@ -132,7 +246,7 @@ export default function TeamPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setShowInvite((v) => !v)}
+                onClick={() => (showInvite ? closeInviteForm() : setShowInvite(true))}
                 className="flex items-center gap-xs rounded-lg border border-[#e2761d] bg-primary-container px-md py-sm font-label-md text-label-md text-white shadow-sm transition-opacity hover:opacity-90"
               >
                 <Icon name="person_add" />
@@ -156,15 +270,51 @@ export default function TeamPage() {
 
         {org && (
           <>
-            {showInvite && (
+            {showInvite && justCreatedInvite && (
+              <div className="github-card mb-lg flex flex-col gap-md rounded-lg p-md">
+                <h2 className="font-h3 text-h3 text-on-surface">Invite Created</h2>
+                <p className="font-body-sm text-body-sm text-secondary">
+                  Share this link with <strong>{justCreatedInvite.email}</strong> — anyone
+                  with it can join as <strong>{justCreatedInvite.role}</strong>. It won&apos;t
+                  be shown again.
+                </p>
+                <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
+                  <span className="truncate pr-md font-code-md text-code-md text-on-surface">
+                    {typeof window !== "undefined" ? window.location.origin : ""}/invite/
+                    {justCreatedInvite.token}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyText(`${window.location.origin}/invite/${justCreatedInvite.token}`)
+                    }
+                    className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
+                  >
+                    <Icon name="content_copy" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeInviteForm}
+                  className="self-start font-label-md text-label-md text-xs text-primary hover:underline"
+                >
+                  Done
+                </button>
+              </div>
+            )}
+
+            {showInvite && !justCreatedInvite && (
               <form
-                onSubmit={onInvite}
+                onSubmit={directAddMode ? onDirectAdd : onInvite}
                 className="github-card mb-lg flex flex-col gap-md rounded-lg p-md"
               >
-                <h2 className="font-h3 text-h3 text-on-surface">Invite Member</h2>
+                <h2 className="font-h3 text-h3 text-on-surface">
+                  {directAddMode ? "Add Existing Member" : "Invite Member"}
+                </h2>
                 <p className="font-body-sm text-body-sm text-secondary">
-                  They need an existing EnvSync account — invite-by-email for new
-                  users is coming in a later phase.
+                  {directAddMode
+                    ? "They need an existing EnvSync account."
+                    : "Anyone with the generated link can join with the selected role."}
                 </p>
                 <div className="flex flex-col gap-md sm:flex-row">
                   <label className="block flex-1">
@@ -195,20 +345,33 @@ export default function TeamPage() {
                     </select>
                   </label>
                 </div>
-                <div className="flex gap-sm">
+                <div className="flex items-center gap-sm">
                   <button
                     type="submit"
                     disabled={inviting}
                     className="rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
                   >
-                    {inviting ? "Adding..." : "Add Member"}
+                    {inviting
+                      ? "Please wait..."
+                      : directAddMode
+                        ? "Add Member"
+                        : "Create Invite Link"}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowInvite(false)}
+                    onClick={closeInviteForm}
                     className="rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface"
                   >
                     Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDirectAddMode((v) => !v)}
+                    className="font-body-sm text-body-sm text-primary hover:underline"
+                  >
+                    {directAddMode
+                      ? "Invite by link instead"
+                      : "Already have an account? Add them directly instead"}
                   </button>
                 </div>
               </form>
@@ -289,71 +452,114 @@ export default function TeamPage() {
                       Permission Matrix
                     </h3>
                   </div>
+                  {permissionError && (
+                    <div className="mx-md mt-md rounded-lg border border-[#CF222E]/30 bg-[#FFEBE9] px-md py-sm font-body-sm text-body-sm text-[#CF222E] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+                      {permissionError}
+                    </div>
+                  )}
                   <div className="custom-scrollbar overflow-x-auto">
-                    <table className="w-full border-collapse text-left">
-                      <thead>
-                        <tr className="bg-surface-container-low/50">
-                          {["Role", "Dev", "Staging", "Prod"].map((h) => (
-                            <th
-                              key={h}
-                              className="border-b border-[#D0D7DE] dark:border-outline-variant px-md py-sm text-[10px] font-bold uppercase text-on-surface-variant"
-                            >
-                              {h}
-                            </th>
+                    {permissionsLoading || !permissionMatrix ? (
+                      <div className="flex justify-center py-xl text-secondary">
+                        <Icon
+                          name="progress_activity"
+                          className="animate-spin"
+                          style={{ fontSize: 24 }}
+                        />
+                      </div>
+                    ) : (
+                      <table className="w-full border-collapse text-left">
+                        <thead>
+                          <tr className="bg-surface-container-low/50">
+                            {["Role", ...ENV_COLUMNS.map((c) => c.label)].map((h) => (
+                              <th
+                                key={h}
+                                className="border-b border-[#D0D7DE] dark:border-outline-variant px-md py-sm text-[10px] font-bold uppercase text-on-surface-variant"
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
+                          {ROLE_ROWS.map((role) => (
+                            <tr key={role}>
+                              <td className="px-md py-md font-body-sm text-body-sm font-bold capitalize text-on-surface">
+                                {role.charAt(0) + role.slice(1).toLowerCase()}
+                              </td>
+                              {ENV_COLUMNS.map((col) => {
+                                if (role === "OWNER") {
+                                  return (
+                                    <td
+                                      key={col.type}
+                                      className="matrix-cell px-md py-md text-center"
+                                    >
+                                      <Icon name="verified_user" className="text-primary" filled />
+                                    </td>
+                                  );
+                                }
+
+                                const cell = permissionMatrix[role][col.type];
+
+                                if (!isAdmin) {
+                                  return (
+                                    <td
+                                      key={col.type}
+                                      className="matrix-cell px-md py-md text-center"
+                                    >
+                                      {cell.access === "WRITE" && (
+                                        <Icon name="check_circle" className="text-primary" filled />
+                                      )}
+                                      {cell.access === "READ" && (
+                                        <Icon name="visibility" className="text-on-surface-variant" />
+                                      )}
+                                      {cell.access === "NONE" && (
+                                        <Icon name="block" className="text-error" />
+                                      )}
+                                    </td>
+                                  );
+                                }
+
+                                return (
+                                  <td
+                                    key={col.type}
+                                    className="matrix-cell px-md py-md text-center"
+                                  >
+                                    <div className="flex items-center justify-center gap-xs">
+                                      <select
+                                        value={cell.access}
+                                        onChange={(e) =>
+                                          onChangePermission(
+                                            role,
+                                            col.type,
+                                            e.target.value as EnvironmentAccessLevel
+                                          )
+                                        }
+                                        className="rounded border border-outline-variant bg-surface-container-low px-xs py-[2px] font-body-sm text-[11px] text-on-surface outline-none focus:border-primary"
+                                      >
+                                        <option value="NONE">None</option>
+                                        <option value="READ">Read</option>
+                                        <option value="WRITE">Write</option>
+                                      </select>
+                                      {cell.isOverride && (
+                                        <button
+                                          type="button"
+                                          onClick={() => onChangePermission(role, col.type, null)}
+                                          className="text-secondary hover:text-primary"
+                                          aria-label="Reset to default"
+                                          title="Reset to default"
+                                        >
+                                          <Icon name="restart_alt" style={{ fontSize: 14 }} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
-                        <tr>
-                          <td className="px-md py-md font-body-sm text-body-sm font-bold text-on-surface">
-                            Owner
-                          </td>
-                          {[0, 1, 2].map((i) => (
-                            <td key={i} className="matrix-cell px-md py-md text-center">
-                              <Icon name="verified_user" className="text-primary" filled />
-                            </td>
-                          ))}
-                        </tr>
-                        <tr>
-                          <td className="px-md py-md font-body-sm text-body-sm font-bold text-on-surface">
-                            Admin
-                          </td>
-                          {[0, 1, 2].map((i) => (
-                            <td key={i} className="matrix-cell px-md py-md text-center">
-                              <Icon name="check_circle" className="text-primary" filled />
-                            </td>
-                          ))}
-                        </tr>
-                        <tr>
-                          <td className="px-md py-md font-body-sm text-body-sm font-bold text-on-surface">
-                            Developer
-                          </td>
-                          <td className="matrix-cell px-md py-md text-center">
-                            <Icon name="check_circle" className="text-primary" filled />
-                          </td>
-                          <td className="matrix-cell px-md py-md text-center">
-                            <Icon name="check_circle" className="text-primary" filled />
-                          </td>
-                          <td className="matrix-cell px-md py-md text-center">
-                            <Icon name="visibility" className="text-on-surface-variant" />
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-md py-md font-body-sm text-body-sm font-bold text-on-surface">
-                            Viewer
-                          </td>
-                          <td className="matrix-cell px-md py-md text-center">
-                            <Icon name="visibility" className="text-on-surface-variant" />
-                          </td>
-                          <td className="matrix-cell px-md py-md text-center">
-                            <Icon name="visibility" className="text-on-surface-variant" />
-                          </td>
-                          <td className="matrix-cell px-md py-md text-center">
-                            <Icon name="block" className="text-error" />
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                   <div className="border-t border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low p-md">
                     <div className="flex flex-col gap-sm">
@@ -410,6 +616,18 @@ export default function TeamPage() {
             </div>
           </>
         )}
+      </div>
+
+      <div
+        className={`copy-toast fixed bottom-lg right-lg z-[100] flex items-center gap-md rounded-xl bg-inverse-surface px-lg py-md text-inverse-on-surface shadow-xl ${
+          showToast ? "show" : ""
+        }`}
+      >
+        <Icon name="check_circle" className="text-primary-fixed-dim" />
+        <div>
+          <p className="font-body-md text-body-md font-bold">Copied to Clipboard</p>
+          <p className="font-body-sm text-body-sm opacity-80">Ready to share.</p>
+        </div>
       </div>
     </AppShell>
   );

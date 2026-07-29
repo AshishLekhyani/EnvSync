@@ -24,7 +24,11 @@ export type AuditAction =
   | "secret.rotate"
   | "apitoken.create"
   | "apitoken.revoke"
-  | "secret.expiry_update";
+  | "secret.expiry_update"
+  | "permission.override_set"
+  | "permission.override_reset"
+  | "invite.create"
+  | "invite.accept";
 
 interface WriteAuditLogInput {
   orgId: string;

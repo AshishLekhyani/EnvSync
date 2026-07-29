@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { validate } from "../../common/validation/validate";
 import * as authController from "./auth.controller";
+import * as githubController from "./github.controller";
 import { requireAuth } from "./auth.middleware";
 import { loginRateLimiter, signupRateLimiter } from "./auth.rateLimit";
 import { loginSchema, signupSchema } from "./auth.validators";
@@ -24,3 +25,5 @@ authRouter.post("/logout", authController.logout);
 authRouter.get("/me", requireAuth, authController.me);
 authRouter.get("/sessions", requireAuth, authController.listSessions);
 authRouter.delete("/sessions/:sessionId", requireAuth, authController.revokeSession);
+authRouter.get("/github", githubController.start);
+authRouter.get("/github/callback", githubController.callback);
