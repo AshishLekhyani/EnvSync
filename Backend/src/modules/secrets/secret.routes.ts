@@ -8,6 +8,7 @@ import {
 import { validate } from "../../common/validation/validate";
 import * as secretController from "./secret.controller";
 import {
+  bulkUpsertSecretsSchema,
   createSecretSchema,
   rotateSecretSchema,
   setSecretExpirySchema,
@@ -27,6 +28,12 @@ environmentSecretsRouter.get(
   "/",
   requireEnvironmentAccess("read", environmentIdFromParam()),
   secretController.listSecrets
+);
+environmentSecretsRouter.post(
+  "/bulk",
+  requireEnvironmentAccess("write", environmentIdFromParam()),
+  validate({ body: bulkUpsertSecretsSchema }),
+  secretController.bulkUpsertSecrets
 );
 
 export const secretRouter = Router();

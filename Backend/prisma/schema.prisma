@@ -10,6 +10,7 @@ datasource db {
 enum AuthProvider {
   PASSWORD
   GITHUB
+  GOOGLE
 }
 
 model User {

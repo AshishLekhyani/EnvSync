@@ -1,5 +1,6 @@
 import { runExpiryScan } from "../src/modules/notifications/expiryScanner";
 import { findOrCreateGithubUser } from "../src/modules/auth/github.service";
+import { findOrCreateGoogleUser } from "../src/modules/auth/google.service";
 import { ConflictError } from "../src/common/errors/AppError";
 import { prisma } from "../src/db/prisma";
 
@@ -77,6 +78,26 @@ async function main() {
   }
   if (!collided) fail("email collision with an existing PASSWORD account should throw ConflictError");
   ok("findOrCreateGithubUser rejects email collision with an existing PASSWORD account (no raw P2002 leak)");
+
+  const fakeGoogleProfile = { googleId: `gg-${rand}`, email: `google-${rand}@example.com`, name: "Google User" };
+  const gUser1 = await findOrCreateGoogleUser(fakeGoogleProfile);
+  if (gUser1.authProvider !== "GOOGLE" || gUser1.email !== fakeGoogleProfile.email) {
+    fail("create GOOGLE user", gUser1);
+  }
+  ok("findOrCreateGoogleUser creates a new GOOGLE user on first call");
+
+  const gUser2 = await findOrCreateGoogleUser(fakeGoogleProfile);
+  if (gUser2.id !== gUser1.id) fail("find-not-recreate on repeat Google login", gUser2);
+  ok("findOrCreateGoogleUser is idempotent for the same Google identity");
+
+  let googleCollided = false;
+  try {
+    await findOrCreateGoogleUser({ googleId: `gg-collide-${rand}`, email: ownerEmail, name: "Collider" });
+  } catch (err) {
+    googleCollided = err instanceof ConflictError;
+  }
+  if (!googleCollided) fail("Google email collision with an existing PASSWORD account should throw ConflictError");
+  ok("findOrCreateGoogleUser rejects email collision with an existing PASSWORD account (no raw P2002 leak)");
 
   res = await fetch(`${BASE}/auth/sessions`, {
     headers: { ...authHeaders(ownerAccessToken), Cookie: `refreshToken=${ownerRefreshCookie}` },
@@ -368,6 +389,49 @@ async function main() {
   });
   if (res.status !== 403) fail("viewer rotate prod secret should be 403", await res.text());
   ok("viewer cannot rotate prod secret (403)");
+
+  res = await fetch(`${BASE}/environments/${devEnv.id}/secrets/bulk`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({
+      secrets: [
+        { key: "BULK_NEW_KEY", value: "bulk-new-value" },
+        { key: secret.key, value: "bulk-updated-value" },
+      ],
+    }),
+  });
+  const bulkResult = await res.json();
+  if (
+    res.status !== 200 ||
+    !bulkResult.some((r: { key: string; action: string }) => r.key === "BULK_NEW_KEY" && r.action === "created") ||
+    !bulkResult.some((r: { key: string; action: string }) => r.key === secret.key && r.action === "updated")
+  ) {
+    fail("bulk upsert secrets (one create, one update)", bulkResult);
+  }
+  ok("bulk upsert secrets: new key created, existing key updated");
+
+  res = await fetch(`${BASE}/secrets/${secret.id}/reveal`, { headers: authHeaders(ownerAccessToken) });
+  const bulkUpdatedSecret = await res.json();
+  if (res.status !== 200 || bulkUpdatedSecret.value !== "bulk-updated-value") {
+    fail("bulk-updated secret value should round-trip on reveal", bulkUpdatedSecret);
+  }
+  ok("bulk-updated secret value round-trips on reveal");
+
+  res = await fetch(`${BASE}/environments/${devEnv.id}/secrets/bulk`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ secrets: Array.from({ length: 101 }, (_, i) => ({ key: `TOO_MANY_${i}`, value: "x" })) }),
+  });
+  if (res.status !== 400) fail("bulk upsert should reject payloads over 100 entries", await res.text());
+  ok("bulk upsert rejects payloads over 100 entries (400)");
+
+  res = await fetch(`${BASE}/environments/${prodEnv.id}/secrets/bulk`, {
+    method: "POST",
+    headers: authHeaders(viewerAccessToken),
+    body: JSON.stringify({ secrets: [{ key: "VIEWER_BULK", value: "nope" }] }),
+  });
+  if (res.status !== 403) fail("viewer bulk upsert on prod should be 403", await res.text());
+  ok("viewer cannot bulk upsert secrets on prod environment (403)");
 
   res = await fetch(`${BASE}/orgs/${orgId}/permissions`, { headers: authHeaders(ownerAccessToken) });
   let matrix = await res.json();

@@ -438,6 +438,10 @@ export default function SettingsPage() {
                     desc: "Inject variables directly into your process without using files.",
                   },
                   {
+                    cmd: "envsync push",
+                    desc: "Push your local .env file's keys back up to EnvSync.",
+                  },
+                  {
                     cmd: "envsync status",
                     desc: "Check the drift between your local environment and EnvSync servers.",
                   },

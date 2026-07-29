@@ -2,6 +2,7 @@
 import { runLogin } from "./commands/login";
 import { runLogout } from "./commands/logout";
 import { runPull } from "./commands/pull";
+import { runPush } from "./commands/push";
 import { runRun } from "./commands/run";
 import { runStatus } from "./commands/status";
 import { runProjects } from "./commands/projects";
@@ -17,6 +18,7 @@ Commands:
   projects                                                  List projects in your organizations
   environments --project <id>                               List environments for a project
   pull --project <id> --environment <id> [--out <path>]     Pull secrets into a .env file
+  push --project <id> --environment <id> [--out <path>]     Push a local .env file's keys to the server
   run --project <id> --environment <id> -- <cmd> [args...]  Run a command with secrets injected
   status --project <id> --environment <id> [--out <path>]   Compare local .env against remote`);
 }
@@ -33,6 +35,9 @@ async function main() {
       break;
     case "pull":
       await runPull(rest);
+      break;
+    case "push":
+      await runPush(rest);
       break;
     case "run":
       await runRun(rest);

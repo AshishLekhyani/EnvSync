@@ -6,7 +6,7 @@ import { ConflictError, NotFoundError } from "../../common/errors/AppError";
 import { getOrCreateOrgDek } from "../encryption/orgKey.service";
 import { decryptWithDek, encryptWithDek } from "../encryption/envelope";
 import { writeAuditLog } from "../audit/audit.service";
-import { CreateSecretInput, UpdateSecretInput } from "./secret.validators";
+import { BulkUpsertSecretsInput, CreateSecretInput, UpdateSecretInput } from "./secret.validators";
 
 interface SecretRow {
   id: string;
@@ -121,6 +121,31 @@ export async function createSecret(
   });
 
   return toMetadata(secret);
+}
+
+export async function bulkUpsertSecrets(
+  environmentId: string,
+  input: BulkUpsertSecretsInput,
+  actorId: string,
+  ipAddress?: string
+) {
+  const results: { key: string; action: "created" | "updated" }[] = [];
+
+  for (const entry of input.secrets) {
+    const existing = await prisma.secret.findUnique({
+      where: { environmentId_key: { environmentId, key: entry.key } },
+    });
+
+    if (existing) {
+      await updateSecret(existing.id, { value: entry.value }, actorId, ipAddress);
+      results.push({ key: entry.key, action: "updated" });
+    } else {
+      await createSecret(environmentId, { key: entry.key, value: entry.value }, actorId, ipAddress);
+      results.push({ key: entry.key, action: "created" });
+    }
+  }
+
+  return results;
 }
 
 export async function listSecrets(environmentId: string) {

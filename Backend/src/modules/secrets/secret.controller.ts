@@ -1,6 +1,7 @@
 import { asyncHandler } from "../../common/middleware/asyncHandler";
 import * as secretService from "./secret.service";
 import {
+  BulkUpsertSecretsInput,
   CreateSecretInput,
   RotateSecretInput,
   SetSecretExpiryInput,
@@ -15,6 +16,16 @@ export const createSecret = asyncHandler(async (req, res) => {
     req.ip
   );
   res.status(201).json(secret);
+});
+
+export const bulkUpsertSecrets = asyncHandler(async (req, res) => {
+  const results = await secretService.bulkUpsertSecrets(
+    req.params.environmentId,
+    req.body as BulkUpsertSecretsInput,
+    req.user!.id,
+    req.ip
+  );
+  res.status(200).json(results);
 });
 
 export const listSecrets = asyncHandler(async (req, res) => {

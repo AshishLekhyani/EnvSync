@@ -185,6 +185,7 @@ export default function LandingPage() {
                 title: "Native Integrations",
                 body: "One-click sync with GitHub Actions, Vercel, AWS Secrets Manager, and Docker containers.",
                 cta: "Explore integrations",
+                href: "/integrations",
               },
             ].map((card) => (
               <div
@@ -213,10 +214,20 @@ export default function LandingPage() {
                   </p>
                 </div>
                 <div className="mt-auto border-t border-outline-variant pt-md">
-                  <span className="flex cursor-pointer items-center gap-xs font-label-md text-label-md text-primary">
-                    {card.cta}{" "}
-                    <Icon name="arrow_forward" style={{ fontSize: 16 }} />
-                  </span>
+                  {"href" in card && card.href ? (
+                    <Link
+                      href={card.href}
+                      className="flex items-center gap-xs font-label-md text-label-md text-primary hover:underline"
+                    >
+                      {card.cta}{" "}
+                      <Icon name="arrow_forward" style={{ fontSize: 16 }} />
+                    </Link>
+                  ) : (
+                    <span className="flex cursor-pointer items-center gap-xs font-label-md text-label-md text-primary">
+                      {card.cta}{" "}
+                      <Icon name="arrow_forward" style={{ fontSize: 16 }} />
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
@@ -379,11 +390,19 @@ export default function LandingPage() {
                 {col.title}
               </h4>
               <ul className="space-y-sm font-body-sm text-body-sm text-secondary">
-                {col.items.map((item) => (
-                  <li key={item} className="cursor-pointer hover:text-primary">
-                    {item}
-                  </li>
-                ))}
+                {col.items.map((item) =>
+                  item === "Integrations" ? (
+                    <li key={item}>
+                      <Link href="/integrations" className="hover:text-primary">
+                        {item}
+                      </Link>
+                    </li>
+                  ) : (
+                    <li key={item} className="cursor-pointer hover:text-primary">
+                      {item}
+                    </li>
+                  )
+                )}
               </ul>
             </div>
           ))}
