@@ -1,5 +1,5 @@
 import { prisma } from "../../db/prisma";
-import { ConflictError, UnauthorizedError } from "../../common/errors/AppError";
+import { ConflictError, NotFoundError, UnauthorizedError } from "../../common/errors/AppError";
 import { hashPassword, verifyPassword } from "./password";
 import {
   generateRefreshToken,
@@ -101,6 +101,41 @@ export async function logout(rawRefreshToken: string) {
 
   await prisma.session.updateMany({
     where: { refreshTokenHash: tokenHash, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+}
+
+export async function listSessions(userId: string, rawRefreshToken?: string) {
+  const currentHash = rawRefreshToken ? hashRefreshToken(rawRefreshToken) : null;
+
+  const sessions = await prisma.session.findMany({
+    where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return sessions.map((s) => ({
+    id: s.id,
+    userAgent: s.userAgent,
+    ipAddress: s.ipAddress,
+    createdAt: s.createdAt,
+    expiresAt: s.expiresAt,
+    current: currentHash !== null && s.refreshTokenHash === currentHash,
+  }));
+}
+
+export async function revokeSession(userId: string, sessionId: string) {
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+
+  if (!session || session.userId !== userId) {
+    throw new NotFoundError("Session not found");
+  }
+
+  if (session.revokedAt) {
+    throw new ConflictError("Session already revoked");
+  }
+
+  await prisma.session.update({
+    where: { id: sessionId },
     data: { revokedAt: new Date() },
   });
 }

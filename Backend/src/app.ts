@@ -5,6 +5,7 @@ import { env } from "./config/env";
 import { requestLogger } from "./common/middleware/requestLogger";
 import { errorHandler } from "./common/middleware/errorHandler";
 import { notFoundHandler } from "./common/middleware/notFoundHandler";
+import { apiRateLimiter } from "./common/middleware/rateLimit";
 import { authRouter } from "./modules/auth/auth.routes";
 import { orgRouter } from "./modules/orgs/org.routes";
 import { orgProjectsRouter, projectRouter } from "./modules/projects/project.routes";
@@ -22,6 +23,8 @@ import { orgApiTokensRouter } from "./modules/apiTokens/apiToken.routes";
 export function createApp() {
   const app = express();
 
+  app.set("trust proxy", env.NODE_ENV === "production" ? 1 : false);
+
   app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
   app.use(express.json());
   app.use(cookieParser());
@@ -30,6 +33,8 @@ export function createApp() {
   app.get("/api/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
   });
+
+  app.use("/api", apiRateLimiter);
 
   app.use("/api/auth", authRouter);
   app.use("/api/orgs", orgRouter);

@@ -53,6 +53,15 @@ async function main() {
   if (res.status !== 200 || me.email !== ownerEmail) fail("get me", me);
   ok("get me");
 
+  res = await fetch(`${BASE}/auth/sessions`, {
+    headers: { ...authHeaders(ownerAccessToken), Cookie: `refreshToken=${ownerRefreshCookie}` },
+  });
+  const sessionsAfterLogin = await res.json();
+  if (res.status !== 200 || sessionsAfterLogin.length !== 1 || !sessionsAfterLogin[0].current) {
+    fail("list sessions right after login (expect exactly 1, marked current)", sessionsAfterLogin);
+  }
+  ok("list sessions shows exactly 1 active session, marked current, right after login");
+
   const orgSlug = `acme-${rand}`;
   res = await fetch(`${BASE}/orgs`, {
     method: "POST",
@@ -395,6 +404,76 @@ async function main() {
   }
   ok("audit logs projectId filter returns only matching rows");
 
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: ownerEmail, password }),
+  });
+  const secondDeviceLogin = await res.json();
+  if (res.status !== 200) fail("owner second-device login", secondDeviceLogin);
+  ok("owner second-device login");
+  const secondRefreshCookie = extractCookie(res.headers.get("set-cookie"), "refreshToken");
+  if (!secondRefreshCookie) fail("capture second-device refresh cookie");
+
+  res = await fetch(`${BASE}/auth/sessions`, {
+    headers: { ...authHeaders(ownerAccessToken), Cookie: `refreshToken=${ownerRefreshCookie}` },
+  });
+  const twoSessions = await res.json();
+  if (
+    res.status !== 200 ||
+    twoSessions.length !== 2 ||
+    twoSessions.filter((s: { current: boolean }) => s.current).length !== 1
+  ) {
+    fail("list sessions shows 2 active, exactly 1 current", twoSessions);
+  }
+  ok("list sessions shows 2 active sessions, exactly 1 marked current matching the request cookie");
+
+  const nonCurrentSession = twoSessions.find((s: { current: boolean }) => !s.current);
+
+  res = await fetch(`${BASE}/auth/sessions/${nonCurrentSession.id}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("revoke non-current session", await res.text());
+  ok("revoke non-current session (204)");
+
+  res = await fetch(`${BASE}/auth/sessions`, {
+    headers: { ...authHeaders(ownerAccessToken), Cookie: `refreshToken=${ownerRefreshCookie}` },
+  });
+  const afterRevoke = await res.json();
+  if (res.status !== 200 || afterRevoke.length !== 1 || !afterRevoke[0].current) {
+    fail("after revoke, only current session remains listed", afterRevoke);
+  }
+  ok("revoked session disappears from active list; current session unaffected");
+
+  res = await fetch(`${BASE}/auth/refresh`, {
+    method: "POST",
+    headers: { Cookie: `refreshToken=${secondRefreshCookie}` },
+  });
+  if (res.status !== 401) fail("refresh using a revoked session's cookie should be rejected", await res.text());
+  ok("refresh token bound to a revoked session is rejected (401)");
+
+  res = await fetch(`${BASE}/auth/sessions/${nonCurrentSession.id}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 409) fail("revoking an already-revoked session should be 409", await res.text());
+  ok("revoking an already-revoked session is rejected (409)");
+
+  res = await fetch(`${BASE}/auth/sessions/nonexistent-id`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 404) fail("revoking a nonexistent session id should be 404", await res.text());
+  ok("revoking a nonexistent session id is rejected (404)");
+
+  res = await fetch(`${BASE}/auth/sessions/${nonCurrentSession.id}`, {
+    method: "DELETE",
+    headers: authHeaders(viewerAccessToken),
+  });
+  if (res.status !== 404) fail("a different user revoking someone else's session should be 404", await res.text());
+  ok("a different user cannot revoke someone else's session (404, ownership enforced, no existence leak)");
+
   res = await fetch(`${BASE}/auth/refresh`, {
     method: "POST",
     headers: { Cookie: `refreshToken=${ownerRefreshCookie}` },
@@ -418,6 +497,64 @@ async function main() {
   });
   if (res.status !== 401) fail("refresh after logout should be 401", await res.text());
   ok("refresh after logout rejected (401)");
+
+  const hammerEmail = `hammer-${rand}@example.com`;
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Hammer", email: hammerEmail, password }),
+  });
+  if (res.status !== 201) fail("signup hammer test account", await res.text());
+
+  let loginRateLimited = false;
+  for (let i = 0; i < 20; i++) {
+    res = await fetch(`${BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: hammerEmail, password: "wrong-password" }),
+    });
+    if (res.status === 429) {
+      const body = await res.json();
+      if (body?.error?.code !== "TOO_MANY_REQUESTS") fail("429 body shape", body);
+      loginRateLimited = true;
+      break;
+    }
+    if (res.status !== 401) fail(`unexpected status during login hammer (attempt ${i})`, await res.text());
+  }
+  if (!loginRateLimited) fail("expected login rate limiter to trigger 429 within 20 failed attempts");
+  ok("repeated failed logins against one account trigger 429 (brute-force protection)");
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: ownerEmail, password }),
+  });
+  if (res.status !== 200) {
+    fail("a different account on the same IP should not be blocked by another account's exhausted limit", await res.text());
+  }
+  ok("a different account sharing the same IP is unaffected (email+IP keying confirmed, no NAT lockout)");
+
+  let signupRateLimited = false;
+  for (let i = 0; i < 20; i++) {
+    res = await fetch(`${BASE}/auth/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Hammer Signup",
+        email: `hammer-signup-${rand}-${i}@example.com`,
+        password,
+      }),
+    });
+    if (res.status === 429) {
+      const body = await res.json();
+      if (body?.error?.code !== "TOO_MANY_REQUESTS") fail("429 body shape (signup)", body);
+      signupRateLimited = true;
+      break;
+    }
+    if (res.status !== 201) fail(`unexpected status during signup hammer (attempt ${i})`, await res.text());
+  }
+  if (!signupRateLimited) fail("expected signup rate limiter to trigger 429 within 20 signups from one IP");
+  ok("repeated signups from one IP trigger 429 (signup abuse protection)");
 
   console.log(`\nAll smoke tests passed. orgId=${orgId} projectId=${projectId}`);
 }

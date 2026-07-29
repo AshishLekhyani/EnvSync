@@ -141,6 +141,15 @@ export interface ApiTokenCreated extends ApiTokenSummary {
   token: string;
 }
 
+export interface SessionSummary {
+  id: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  expiresAt: string;
+  current: boolean;
+}
+
 export const api = {
   signup: (input: { name: string; email: string; password: string }) =>
     request<{ user: PublicUser }>("/auth/signup", {
@@ -268,4 +277,9 @@ export const api = {
     request<ApiTokenSummary>(`/orgs/${orgId}/tokens/${tokenId}`, {
       method: "DELETE",
     }),
+
+  listSessions: () => request<SessionSummary[]>("/auth/sessions"),
+
+  revokeSession: (sessionId: string) =>
+    request<void>(`/auth/sessions/${sessionId}`, { method: "DELETE" }),
 };

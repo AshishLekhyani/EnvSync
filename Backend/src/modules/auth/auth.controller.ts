@@ -70,3 +70,14 @@ export const me = asyncHandler(async (req, res) => {
   const data = await authService.getMe(req.user!.id);
   res.status(200).json(data);
 });
+
+export const listSessions = asyncHandler(async (req, res) => {
+  const raw = req.cookies?.[REFRESH_COOKIE];
+  const sessions = await authService.listSessions(req.user!.id, raw);
+  res.status(200).json(sessions);
+});
+
+export const revokeSession = asyncHandler(async (req, res) => {
+  await authService.revokeSession(req.user!.id, req.params.sessionId);
+  res.status(204).send();
+});
