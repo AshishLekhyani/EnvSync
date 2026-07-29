@@ -1,6 +1,7 @@
 ﻿import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
+import { AppQueryProvider } from "@/lib/query-client";
 import "./globals.css";
 
 const inter = Inter({
@@ -53,7 +54,9 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-[#F6F8FA] dark:bg-background font-body-md text-body-md text-on-surface antialiased">
-        <AuthProvider>{children}</AuthProvider>
+        <AppQueryProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </AppQueryProvider>
       </body>
     </html>
   );

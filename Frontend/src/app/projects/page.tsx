@@ -1,15 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
+import { CreateOrgForm } from "@/components/CreateOrgForm";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
+import { queryKeys } from "@/lib/query-keys";
 import {
   api,
   ApiError,
   AuditLogEntry,
-  MemberSummary,
   Project,
 } from "@/lib/api";
 import { getActionDisplay } from "@/lib/auditActions";
@@ -22,56 +25,39 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-export default function ProjectsPage() {
-  const { organizations, refreshMe } = useAuth();
-  const org = organizations[0] ?? null;
+function ProjectsPageContent() {
+  const { activeOrg: org, refreshMe, switchOrg } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [members, setMembers] = useState<MemberSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.orgProjects(org?.id ?? ""),
+    queryFn: () => api.listProjects(org!.id),
+    enabled: !!org,
+  });
+  const membersQuery = useQuery({
+    queryKey: queryKeys.orgMembers(org?.id ?? ""),
+    queryFn: () => api.listMembers(org!.id),
+    enabled: !!org,
+  });
+
+  const projects = projectsQuery.data ?? [];
+  const members = membersQuery.data ?? [];
+  const loading = projectsQuery.isPending || membersQuery.isPending;
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(true);
   const [auditForbidden, setAuditForbidden] = useState(false);
 
   const [showCreateOrg, setShowCreateOrg] = useState(false);
-  const [orgName, setOrgName] = useState("");
-  const [creatingOrg, setCreatingOrg] = useState(false);
 
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
   const [creatingProject, setCreatingProject] = useState(false);
-
-  useEffect(() => {
-    if (!org) {
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-
-    Promise.all([api.listProjects(org.id), api.listMembers(org.id)])
-      .then(([projectList, memberList]) => {
-        if (cancelled) return;
-        setProjects(projectList);
-        setMembers(memberList);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : "Failed to load projects");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [org]);
 
   useEffect(() => {
     if (!org) {
@@ -104,22 +90,26 @@ export default function ProjectsPage() {
     };
   }, [org]);
 
-  const onCreateOrg = async (e: FormEvent) => {
-    e.preventDefault();
-    setCreatingOrg(true);
-    setError(null);
-
-    try {
-      await api.createOrg({ name: orgName, slug: slugify(orgName) });
-      await refreshMe();
-      setOrgName("");
-      setShowCreateOrg(false);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create organization");
-    } finally {
-      setCreatingOrg(false);
-    }
+  const onOrgCreated = async (newOrg: { id: string; name: string; slug: string }) => {
+    await refreshMe();
+    switchOrg(newOrg.id);
+    setShowCreateOrg(false);
   };
+
+  const createFlag = searchParams.get("create");
+
+  useEffect(() => {
+    if (createFlag === "1" && org) {
+      setShowCreateProject(true);
+    }
+  }, [createFlag, org]);
+
+  const filteredProjects = search.trim()
+    ? projects.filter((p) => {
+        const q = search.trim().toLowerCase();
+        return p.name.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q);
+      })
+    : projects;
 
   const onCreateProject = async (e: FormEvent) => {
     e.preventDefault();
@@ -133,7 +123,10 @@ export default function ProjectsPage() {
         slug: slugify(projectName),
         description: projectDescription || undefined,
       });
-      setProjects((prev) => [...prev, project]);
+      queryClient.setQueryData<Project[]>(
+        queryKeys.orgProjects(org.id),
+        (prev) => [...(prev ?? []), project]
+      );
       setProjectName("");
       setProjectDescription("");
       setShowCreateProject(false);
@@ -145,8 +138,13 @@ export default function ProjectsPage() {
   };
 
   return (
-    <AppShell searchPlaceholder="Search projects...">
+    <AppShell searchPlaceholder="Search projects..." onSearch={setSearch}>
       <div className="mx-auto max-w-container-max pb-xl">
+        {org && search.trim() && (
+          <p className="mb-md font-body-sm text-body-sm text-secondary">
+            Showing results for &ldquo;{search}&rdquo;
+          </p>
+        )}
         <div className="mb-xl flex flex-col justify-between gap-md md:flex-row md:items-center">
           <div>
             <h1 className="font-h1 text-h1 text-on-surface">EnvSync Projects</h1>
@@ -196,40 +194,13 @@ export default function ProjectsPage() {
         )}
 
         {showCreateOrg && (
-          <form
-            onSubmit={onCreateOrg}
-            className="github-card mb-xl flex flex-col gap-md rounded-lg p-md"
-          >
-            <h2 className="font-h3 text-h3 text-on-surface">Create Organization</h2>
-            <label className="block">
-              <span className="mb-xs block font-label-md text-label-md text-on-surface">
-                Organization name
-              </span>
-              <input
-                required
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-                placeholder="Acme Inc"
-                className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
-              />
-            </label>
-            <div className="flex gap-sm">
-              <button
-                type="submit"
-                disabled={creatingOrg}
-                className="rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
-              >
-                {creatingOrg ? "Creating..." : "Create"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateOrg(false)}
-                className="rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+          <div className="github-card mb-xl rounded-lg p-md">
+            <h2 className="mb-md font-h3 text-h3 text-on-surface">Create Organization</h2>
+            <CreateOrgForm
+              onCreated={onOrgCreated}
+              onCancel={() => setShowCreateOrg(false)}
+            />
+          </div>
         )}
 
         {org && (
@@ -318,7 +289,12 @@ export default function ProjectsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-md md:grid-cols-2 xl:grid-cols-3">
-                {projects.map((project) => (
+                {filteredProjects.length === 0 && search.trim() && (
+                  <p className="col-span-full py-xl text-center font-body-sm text-body-sm text-secondary">
+                    No projects match your search.
+                  </p>
+                )}
+                {filteredProjects.map((project) => (
                   <Link
                     key={project.id}
                     href={`/projects/${project.id}`}
@@ -334,6 +310,11 @@ export default function ProjectsPage() {
                       <p className="mb-md line-clamp-2 font-body-sm text-body-sm text-secondary">
                         {project.description || "No description yet."}
                       </p>
+                      <div className="flex items-center gap-xs font-body-sm text-body-sm text-secondary">
+                        <Icon name="dns" style={{ fontSize: 16 }} />
+                        {project.environmentCount}{" "}
+                        environment{project.environmentCount === 1 ? "" : "s"}
+                      </div>
                     </div>
                     <div className="border-t border-outline-variant pt-sm font-body-sm text-body-sm text-secondary">
                       Created {new Date(project.createdAt).toLocaleDateString()}
@@ -428,5 +409,13 @@ export default function ProjectsPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function ProjectsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ProjectsPageContent />
+    </Suspense>
   );
 }

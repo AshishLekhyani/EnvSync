@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
+import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
 import { api, ApiError, EnvironmentSummary, Project } from "@/lib/api";
 
@@ -40,8 +41,7 @@ function CodeSnippet({
 }
 
 export default function IntegrationsPage() {
-  const { organizations } = useAuth();
-  const org = organizations[0] ?? null;
+  const { activeOrg: org } = useAuth();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
@@ -175,40 +175,32 @@ aws secretsmanager put-secret-value \\
       ) : (
         <>
           <div className="mb-lg flex flex-col gap-md rounded-xl border border-outline-variant bg-surface-container-lowest p-md sm:flex-row sm:items-end">
-            <label className="block flex-1">
-              <span className="mb-xs block font-label-md text-label-md text-on-surface">
-                Project
-              </span>
-              <select
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
-              >
-                {projects.length === 0 && <option value="">No projects yet</option>}
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block flex-1">
-              <span className="mb-xs block font-label-md text-label-md text-on-surface">
-                Environment
-              </span>
-              <select
-                value={selectedEnvironmentId}
-                onChange={(e) => setSelectedEnvironmentId(e.target.value)}
-                className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
-              >
-                {environments.length === 0 && <option value="">No environments yet</option>}
-                {environments.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Select
+              label="Project"
+              wrapperClassName="flex-1"
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+            >
+              {projects.length === 0 && <option value="">No projects yet</option>}
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+            <Select
+              label="Environment"
+              wrapperClassName="flex-1"
+              value={selectedEnvironmentId}
+              onChange={(e) => setSelectedEnvironmentId(e.target.value)}
+            >
+              {environments.length === 0 && <option value="">No environments yet</option>}
+              {environments.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </Select>
           </div>
 
           <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">

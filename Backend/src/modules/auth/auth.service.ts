@@ -1,5 +1,10 @@
 import { prisma } from "../../db/prisma";
-import { ConflictError, NotFoundError, UnauthorizedError } from "../../common/errors/AppError";
+import {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+  UnauthorizedError,
+} from "../../common/errors/AppError";
 import { hashPassword, verifyPassword } from "./password";
 import {
   generateRefreshToken,
@@ -7,15 +12,25 @@ import {
   hashRefreshToken,
   signAccessToken,
 } from "./tokens";
-import { LoginInput, SignupInput } from "./auth.validators";
+import { ChangePasswordInput, LoginInput, SignupInput, UpdateProfileInput } from "./auth.validators";
 
 export interface SessionMeta {
   userAgent?: string;
   ipAddress?: string;
 }
 
-function toPublicUser(user: { id: string; email: string; name: string }) {
-  return { id: user.id, email: user.email, name: user.name };
+function toPublicUser(user: {
+  id: string;
+  email: string;
+  name: string;
+  authProvider: string;
+}) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    authProvider: user.authProvider,
+  };
 }
 
 export async function issueSession(userId: string, email: string, meta: SessionMeta) {
@@ -138,6 +153,58 @@ export async function revokeSession(userId: string, sessionId: string) {
     where: { id: sessionId },
     data: { revokedAt: new Date() },
   });
+}
+
+export async function updateProfile(userId: string, input: UpdateProfileInput) {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { name: input.name },
+  });
+
+  return toPublicUser(user);
+}
+
+export async function changePassword(
+  userId: string,
+  input: ChangePasswordInput,
+  currentSessionId?: string
+) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  if (!user) {
+    throw new UnauthorizedError();
+  }
+
+  if (!user.passwordHash) {
+    throw new BadRequestError("This account signs in via an external provider and has no password to change");
+  }
+
+  const valid = await verifyPassword(user.passwordHash, input.currentPassword);
+
+  if (!valid) {
+    throw new UnauthorizedError("Current password is incorrect");
+  }
+
+  const newHash = await hashPassword(input.newPassword);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: newHash },
+  });
+
+  await prisma.session.updateMany({
+    where: {
+      userId,
+      revokedAt: null,
+      ...(currentSessionId ? { id: { not: currentSessionId } } : {}),
+    },
+    data: { revokedAt: new Date() },
+  });
+}
+
+export async function findSessionByRefreshToken(rawRefreshToken: string) {
+  const tokenHash = hashRefreshToken(rawRefreshToken);
+  return prisma.session.findFirst({ where: { refreshTokenHash: tokenHash } });
 }
 
 export async function getMe(userId: string) {

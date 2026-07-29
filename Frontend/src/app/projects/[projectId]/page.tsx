@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
+import { Select } from "@/components/Select";
+import { queryKeys } from "@/lib/query-keys";
 import {
   api,
   ApiError,
   EnvironmentSummary,
   EnvironmentType,
-  Project,
 } from "@/lib/api";
 
 const ENV_ICON: Record<EnvironmentType, string> = {
@@ -36,40 +38,25 @@ const ALL_ENV_TYPES: EnvironmentType[] = [
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const queryClient = useQueryClient();
 
-  const [project, setProject] = useState<Project | null>(null);
-  const [environments, setEnvironments] = useState<EnvironmentSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const projectQuery = useQuery({
+    queryKey: queryKeys.project(projectId),
+    queryFn: () => api.getProject(projectId),
+  });
+  const environmentsQuery = useQuery({
+    queryKey: queryKeys.projectEnvironments(projectId),
+    queryFn: () => api.listEnvironments(projectId),
+  });
+
+  const project = projectQuery.data ?? null;
+  const environments = environmentsQuery.data ?? [];
+  const loading = projectQuery.isPending || environmentsQuery.isPending;
   const [error, setError] = useState<string | null>(null);
 
   const [showNewEnv, setShowNewEnv] = useState(false);
   const [newEnvType, setNewEnvType] = useState<EnvironmentType | "">("");
   const [creatingEnv, setCreatingEnv] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-
-    Promise.all([api.getProject(projectId), api.listEnvironments(projectId)])
-      .then(([proj, envs]) => {
-        if (cancelled) return;
-        setProject(proj);
-        setEnvironments(envs);
-        setError(null);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Failed to load project");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
 
   const availableTypes = ALL_ENV_TYPES.filter(
     (t) => !environments.some((env) => env.type === t)
@@ -83,7 +70,10 @@ export default function ProjectDetailPage() {
 
     try {
       const env = await api.createEnvironment(projectId, { type: newEnvType });
-      setEnvironments((prev) => [...prev, env]);
+      queryClient.setQueryData<EnvironmentSummary[]>(
+        queryKeys.projectEnvironments(projectId),
+        (prev) => [...(prev ?? []), env]
+      );
       setShowNewEnv(false);
       setNewEnvType("");
     } catch (err) {
@@ -112,7 +102,9 @@ export default function ProjectDetailPage() {
           </div>
         ) : !project ? (
           <div className="github-card rounded-lg p-xl text-center font-body-md text-body-md text-secondary">
-            {error ?? "Project not found."}
+            {projectQuery.error instanceof ApiError
+              ? projectQuery.error.message
+              : "Project not found."}
           </div>
         ) : (
           <>
@@ -147,16 +139,13 @@ export default function ProjectDetailPage() {
                 className="github-card mb-xl flex flex-col gap-md rounded-lg p-md"
               >
                 <h2 className="font-h3 text-h3 text-on-surface">New Environment</h2>
-                <label className="block max-w-xs">
-                  <span className="mb-xs block font-label-md text-label-md text-on-surface">
-                    Type
-                  </span>
-                  <select
-                    required
-                    value={newEnvType}
-                    onChange={(e) => setNewEnvType(e.target.value as EnvironmentType)}
-                    className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
-                  >
+                <Select
+                  label="Type"
+                  wrapperClassName="max-w-xs"
+                  required
+                  value={newEnvType}
+                  onChange={(e) => setNewEnvType(e.target.value as EnvironmentType)}
+                >
                     <option value="" disabled>
                       Choose type
                     </option>
@@ -165,8 +154,7 @@ export default function ProjectDetailPage() {
                         {ENV_LABEL[t]}
                       </option>
                     ))}
-                  </select>
-                </label>
+                </Select>
                 <div className="flex gap-sm">
                   <button
                     type="submit"

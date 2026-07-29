@@ -9,8 +9,7 @@ import { getActionDisplay } from "@/lib/auditActions";
 import { exportAuditLogsCsv } from "@/lib/auditExport";
 
 export default function AuditPage() {
-  const { organizations } = useAuth();
-  const org = organizations[0] ?? null;
+  const { activeOrg: org } = useAuth();
 
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);

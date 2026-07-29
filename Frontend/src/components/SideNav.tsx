@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "./Icon";
+import { Select } from "./Select";
 import { useAuth } from "@/lib/auth-context";
+import { queryKeys } from "@/lib/query-keys";
 import {
   api,
   ApiError,
   EnvironmentSummary,
   EnvironmentType,
-  Project,
 } from "@/lib/api";
 
 const ENV_ICON: Record<EnvironmentType, string> = {
@@ -35,62 +37,39 @@ const ALL_ENV_TYPES: EnvironmentType[] = [
 ];
 
 export function SideNav() {
-  const { organizations } = useAuth();
-  const org = organizations[0] ?? null;
+  const { activeOrg: org } = useAuth();
   const params = useParams<{ projectId?: string; environmentId?: string }>();
+  const queryClient = useQueryClient();
 
-  const [project, setProject] = useState<Project | null>(null);
-  const [environments, setEnvironments] = useState<EnvironmentSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const orgProjectsQuery = useQuery({
+    queryKey: queryKeys.orgProjects(org?.id ?? ""),
+    queryFn: () => api.listProjects(org!.id),
+    enabled: !!org && !params.projectId,
+  });
+
+  const projectQuery = useQuery({
+    queryKey: queryKeys.project(params.projectId ?? ""),
+    queryFn: () => api.getProject(params.projectId!),
+    enabled: !!params.projectId,
+  });
+
+  const project = params.projectId
+    ? projectQuery.data ?? null
+    : orgProjectsQuery.data?.[0] ?? null;
+
+  const loading = params.projectId ? projectQuery.isPending : orgProjectsQuery.isPending;
+
+  const environmentsQuery = useQuery({
+    queryKey: queryKeys.projectEnvironments(project?.id ?? ""),
+    queryFn: () => api.listEnvironments(project!.id),
+    enabled: !!project,
+  });
+  const environments = environmentsQuery.data ?? [];
 
   const [showNewEnv, setShowNewEnv] = useState(false);
   const [newEnvType, setNewEnvType] = useState<EnvironmentType | "">("");
   const [creatingEnv, setCreatingEnv] = useState(false);
   const [envError, setEnvError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!org) {
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-
-    (async () => {
-      try {
-        let activeProject: Project | null = null;
-
-        if (params.projectId) {
-          activeProject = await api.getProject(params.projectId);
-        } else {
-          const projects = await api.listProjects(org.id);
-          activeProject = projects[0] ?? null;
-        }
-
-        if (cancelled) return;
-        setProject(activeProject);
-
-        if (activeProject) {
-          const envs = await api.listEnvironments(activeProject.id);
-          if (!cancelled) setEnvironments(envs);
-        } else {
-          setEnvironments([]);
-        }
-      } catch {
-        if (!cancelled) {
-          setProject(null);
-          setEnvironments([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [org, params.projectId]);
 
   const availableTypes = ALL_ENV_TYPES.filter(
     (t) => !environments.some((env) => env.type === t)
@@ -104,7 +83,10 @@ export function SideNav() {
 
     try {
       const env = await api.createEnvironment(project.id, { type: newEnvType });
-      setEnvironments((prev) => [...prev, env]);
+      queryClient.setQueryData<EnvironmentSummary[]>(
+        queryKeys.projectEnvironments(project.id),
+        (prev) => [...(prev ?? []), env]
+      );
       setShowNewEnv(false);
       setNewEnvType("");
     } catch (err) {
@@ -166,12 +148,12 @@ export function SideNav() {
             onSubmit={onCreateEnv}
             className="mx-md mt-md flex flex-col gap-xs rounded-lg border border-outline-variant bg-surface-container p-sm"
           >
-            <select
+            <Select
+              label="Environment type"
               required
-              aria-label="Environment type"
               value={newEnvType}
               onChange={(e) => setNewEnvType(e.target.value as EnvironmentType)}
-              className="rounded border border-outline-variant bg-surface-container-low px-xs py-1 font-body-sm text-body-sm text-on-surface"
+              className="px-xs py-1 text-[13px]"
             >
               <option value="" disabled>
                 Choose type
@@ -181,7 +163,7 @@ export function SideNav() {
                   {ENV_LABEL[t]}
                 </option>
               ))}
-            </select>
+            </Select>
             {envError && (
               <p className="font-body-sm text-[11px] text-[#CF222E] dark:text-red-400">
                 {envError}
@@ -218,20 +200,22 @@ export function SideNav() {
         ))}
 
       <div className="mt-auto flex flex-col gap-xs border-t border-outline-variant pt-md">
-        <a
-          href="#"
-          className="flex items-center gap-md rounded-lg px-md py-sm text-on-surface-variant transition-colors hover:bg-surface-container-high"
+        <span
+          aria-disabled
+          className="flex cursor-not-allowed items-center gap-md rounded-lg px-md py-sm text-on-surface-variant opacity-50"
+          title="Coming soon"
         >
           <Icon name="description" />
           <span className="font-label-md text-label-md">Docs</span>
-        </a>
-        <a
-          href="#"
-          className="flex items-center gap-md rounded-lg px-md py-sm text-on-surface-variant transition-colors hover:bg-surface-container-high"
+        </span>
+        <span
+          aria-disabled
+          className="flex cursor-not-allowed items-center gap-md rounded-lg px-md py-sm text-on-surface-variant opacity-50"
+          title="Coming soon"
         >
           <Icon name="contact_support" />
           <span className="font-label-md text-label-md">Support</span>
-        </a>
+        </span>
       </div>
     </aside>
   );

@@ -1,11 +1,14 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AVATAR_SRC, Icon } from "./Icon";
+import { Avatar } from "./Avatar";
+import { Icon } from "./Icon";
+import { OrgSwitcher } from "./OrgSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
+import { useOutsideClick } from "@/lib/useOutsideClick";
 import { api, NotificationSummary } from "@/lib/api";
 
 const NAV = [
@@ -26,20 +29,32 @@ function navActive(pathname: string, href: string) {
 export function TopNav({
   searchPlaceholder = "Search projects...",
   showSearch = true,
+  onSearch,
   trailing,
 }: {
   searchPlaceholder?: string;
   showSearch?: boolean;
+  onSearch?: (query: string) => void;
   trailing?: React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
 
+  const [searchValue, setSearchValue] = useState("");
   const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  useOutsideClick(notifRef, () => setNotifOpen(false));
+
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+  useOutsideClick(profileRef, () => setProfileOpen(false));
+
+  useEffect(() => {
+    setSearchValue("");
+  }, [pathname]);
 
   useEffect(() => {
     api.listNotifications().then(setNotifications).catch(() => {});
@@ -54,16 +69,6 @@ export function TopNav({
       .catch(() => {})
       .finally(() => setNotifLoading(false));
   }, [notifOpen]);
-
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setNotifOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -84,13 +89,15 @@ export function TopNav({
 
   return (
     <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-xl">
-      <div className="flex items-center gap-xl">
+      <div className="flex items-center gap-md">
         <Link
           href="/projects"
           className="font-h2 text-h2 font-black text-primary"
         >
           EnvSync
         </Link>
+        <span className="hidden h-6 w-px bg-outline-variant md:block" />
+        <OrgSwitcher />
         <nav className="hidden h-full items-center gap-lg pt-2 md:flex">
           {NAV.map((item) => {
             const active = navActive(pathname, item.href);
@@ -121,6 +128,11 @@ export function TopNav({
             />
             <input
               type="text"
+              value={searchValue}
+              onChange={(e) => {
+                setSearchValue(e.target.value);
+                onSearch?.(e.target.value);
+              }}
               placeholder={searchPlaceholder}
               className="w-64 rounded-lg border border-outline-variant bg-surface-container-low py-xs pl-xl pr-md font-body-sm text-body-sm text-on-surface outline-none transition-all placeholder:text-secondary focus:border-primary focus:ring-2 focus:ring-primary-container"
             />
@@ -197,25 +209,59 @@ export function TopNav({
         </div>
         <button
           type="button"
-          className="rounded-lg p-base text-secondary transition-colors hover:bg-surface-container hover:text-primary"
+          disabled
+          title="Coming soon"
+          className="cursor-not-allowed rounded-lg p-base text-secondary opacity-50"
           aria-label="Help"
         >
           <Icon name="help_outline" />
         </button>
-        <button
-          type="button"
-          onClick={onLogout}
-          className="rounded-lg p-base text-secondary transition-colors hover:bg-surface-container hover:text-primary"
-          aria-label="Log out"
-          title={user ? `Log out (${user.email})` : "Log out"}
-        >
-          <Icon name="logout" />
-        </button>
-        <img
-          src={AVATAR_SRC}
-          alt="User avatar"
-          className="h-8 w-8 rounded-full border border-outline-variant object-cover"
-        />
+        {user && (
+          <div className="relative" ref={profileRef}>
+            <button
+              type="button"
+              onClick={() => setProfileOpen((v) => !v)}
+              aria-label="Account menu"
+              className="rounded-full transition-opacity hover:opacity-80"
+            >
+              <Avatar name={user.name} seed={user.email} />
+            </button>
+
+            {profileOpen && (
+              <div className="absolute right-0 top-full z-50 mt-sm w-64 rounded-xl border border-outline-variant bg-surface shadow-lg">
+                <div className="flex items-center gap-md border-b border-outline-variant p-md">
+                  <Avatar name={user.name} seed={user.email} className="h-10 w-10" />
+                  <div className="min-w-0">
+                    <div className="truncate font-body-md text-body-md font-bold text-on-surface">
+                      {user.name}
+                    </div>
+                    <div className="truncate font-body-sm text-body-sm text-secondary">
+                      {user.email}
+                    </div>
+                  </div>
+                </div>
+                <div className="p-xs">
+                  <Link
+                    href="/settings"
+                    onClick={() => setProfileOpen(false)}
+                    className="flex items-center gap-md rounded-lg px-md py-sm font-body-sm text-body-sm text-on-surface transition-colors hover:bg-surface-container-low"
+                  >
+                    <Icon name="settings" style={{ fontSize: 18 }} />
+                    Settings
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="flex w-full items-center gap-md rounded-lg px-md py-sm text-left font-body-sm text-body-sm text-on-surface transition-colors hover:bg-surface-container-low"
+                  >
+                    <Icon name="logout" style={{ fontSize: 18 }} />
+                    Log out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

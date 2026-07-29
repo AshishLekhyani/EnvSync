@@ -35,6 +35,7 @@ export function AppShell({
   children,
   searchPlaceholder,
   showSearch = true,
+  onSearch,
   trailing,
   mainClassName = "flex-1 p-xl md:ml-64",
   showMobileNav = true,
@@ -42,6 +43,7 @@ export function AppShell({
   children: React.ReactNode;
   searchPlaceholder?: string;
   showSearch?: boolean;
+  onSearch?: (query: string) => void;
   trailing?: React.ReactNode;
   mainClassName?: string;
   showMobileNav?: boolean;
@@ -69,6 +71,7 @@ export function AppShell({
       <TopNav
         searchPlaceholder={searchPlaceholder}
         showSearch={showSearch}
+        onSearch={onSearch}
         trailing={trailing}
       />
       <div className="flex min-h-[calc(100vh-64px)]">
@@ -78,51 +81,40 @@ export function AppShell({
 
       {showMobileNav && (
         <footer className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-outline-variant bg-surface px-md shadow-lg md:hidden">
-          <Link
-            href={MOBILE[0].href}
-            className={`flex flex-col items-center gap-base ${
-              MOBILE[0].match(pathname) ? "text-primary" : "text-secondary"
-            }`}
-          >
-            <Icon name={MOBILE[0].icon} filled={MOBILE[0].match(pathname)} />
-            <span className="text-[10px] font-bold uppercase">{MOBILE[0].label}</span>
-          </Link>
-          <Link
-            href={MOBILE[1].href}
-            className={`flex flex-col items-center gap-base ${
-              MOBILE[1].match(pathname) ? "text-primary" : "text-secondary"
-            }`}
-          >
-            <Icon name={MOBILE[1].icon} filled={MOBILE[1].match(pathname)} />
-            <span className="text-[10px] font-bold uppercase">{MOBILE[1].label}</span>
-          </Link>
+          {MOBILE.slice(0, 2).map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex flex-col items-center gap-base ${
+                item.match(pathname) ? "text-primary" : "text-secondary"
+              }`}
+            >
+              <Icon name={item.icon} filled={item.match(pathname)} />
+              <span className="text-[10px] font-bold uppercase">{item.label}</span>
+            </Link>
+          ))}
           <div className="relative -top-4">
             <button
               type="button"
               aria-label="Create"
+              onClick={() => router.push("/projects?create=1")}
               className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-surface bg-primary-container text-on-primary-container shadow-xl"
             >
               <Icon name="add" />
             </button>
           </div>
-          <Link
-            href={MOBILE[2].href}
-            className={`flex flex-col items-center gap-base ${
-              MOBILE[2].match(pathname) ? "text-primary" : "text-secondary"
-            }`}
-          >
-            <Icon name={MOBILE[2].icon} filled={MOBILE[2].match(pathname)} />
-            <span className="text-[10px] font-bold uppercase">{MOBILE[2].label}</span>
-          </Link>
-          <Link
-            href={MOBILE[3].href}
-            className={`flex flex-col items-center gap-base ${
-              MOBILE[3].match(pathname) ? "text-primary" : "text-secondary"
-            }`}
-          >
-            <Icon name={MOBILE[3].icon} filled={MOBILE[3].match(pathname)} />
-            <span className="text-[10px] font-bold uppercase">{MOBILE[3].label}</span>
-          </Link>
+          {MOBILE.slice(2).map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex flex-col items-center gap-base ${
+                item.match(pathname) ? "text-primary" : "text-secondary"
+              }`}
+            >
+              <Icon name={item.icon} filled={item.match(pathname)} />
+              <span className="text-[10px] font-bold uppercase">{item.label}</span>
+            </Link>
+          ))}
         </footer>
       )}
     </div>

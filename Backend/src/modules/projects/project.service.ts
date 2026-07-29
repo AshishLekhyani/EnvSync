@@ -3,6 +3,13 @@ import { ConflictError, NotFoundError } from "../../common/errors/AppError";
 import { writeAuditLog } from "../audit/audit.service";
 import { CreateProjectInput, UpdateProjectInput } from "./project.validators";
 
+const withEnvironmentCount = { _count: { select: { environments: true } } } as const;
+
+function toProjectResponse<T extends { _count: { environments: number } }>(project: T) {
+  const { _count, ...rest } = project;
+  return { ...rest, environmentCount: _count.environments };
+}
+
 export async function createProject(
   orgId: string,
   input: CreateProjectInput,
@@ -27,6 +34,7 @@ export async function createProject(
         slug: input.slug,
         description: input.description,
       },
+      include: withEnvironmentCount,
     });
 
     await writeAuditLog(tx, {
@@ -39,25 +47,31 @@ export async function createProject(
       ipAddress,
     });
 
-    return project;
+    return toProjectResponse(project);
   });
 }
 
 export async function listProjects(orgId: string) {
-  return prisma.project.findMany({
+  const projects = await prisma.project.findMany({
     where: { orgId },
     orderBy: { createdAt: "asc" },
+    include: withEnvironmentCount,
   });
+
+  return projects.map(toProjectResponse);
 }
 
 export async function getProject(projectId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: withEnvironmentCount,
+  });
 
   if (!project) {
     throw new NotFoundError("Project not found");
   }
 
-  return project;
+  return toProjectResponse(project);
 }
 
 export async function updateProject(
@@ -76,6 +90,7 @@ export async function updateProject(
     const updated = await tx.project.update({
       where: { id: projectId },
       data: { name: input.name, description: input.description },
+      include: withEnvironmentCount,
     });
 
     await writeAuditLog(tx, {
@@ -88,7 +103,7 @@ export async function updateProject(
       ipAddress,
     });
 
-    return updated;
+    return toProjectResponse(updated);
   });
 }
 

@@ -1,7 +1,8 @@
 import { runExpiryScan } from "../src/modules/notifications/expiryScanner";
 import { findOrCreateGithubUser } from "../src/modules/auth/github.service";
 import { findOrCreateGoogleUser } from "../src/modules/auth/google.service";
-import { ConflictError } from "../src/common/errors/AppError";
+import { changePassword as changePasswordDirect } from "../src/modules/auth/auth.service";
+import { BadRequestError, ConflictError } from "../src/common/errors/AppError";
 import { prisma } from "../src/db/prisma";
 
 const BASE = "http://localhost:4000/api";
@@ -1092,6 +1093,98 @@ async function main() {
   const allNotifs = await res.json();
   if (allNotifs.some((n: { read: boolean }) => !n.read)) fail("all notifications should be read after mark-all-read", allNotifs);
   ok("mark all notifications read (204, all subsequently read:true)");
+
+  let oauthPasswordChangeRejected = false;
+  try {
+    await changePasswordDirect(ghUser1.id, {
+      currentPassword: "whatever",
+      newPassword: "newsupersecret123",
+    });
+  } catch (err) {
+    oauthPasswordChangeRejected = err instanceof BadRequestError;
+  }
+  if (!oauthPasswordChangeRejected) {
+    fail("changePassword on an OAuth-only account should reject with BadRequestError");
+  }
+  ok("changePassword rejects OAuth-only accounts (no password to change) (400)");
+
+  const profileTestEmail = `profile-${rand}@example.com`;
+  const profileTestPassword = "supersecret123";
+
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "Profile Tester",
+      email: profileTestEmail,
+      password: profileTestPassword,
+    }),
+  });
+  if (res.status !== 201) fail("signup profile-test account", await res.text());
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: profileTestEmail, password: profileTestPassword }),
+  });
+  const profileLogin = await res.json();
+  if (res.status !== 200) fail("login profile-test account", profileLogin);
+  ok("signup + login dedicated profile-test account");
+  const profileAccessToken: string = profileLogin.accessToken;
+  const profileRefreshCookie = extractCookie(res.headers.get("set-cookie"), "refreshToken");
+  if (!profileRefreshCookie) fail("capture profile-test refresh cookie");
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "PATCH",
+    headers: authHeaders(profileAccessToken),
+    body: JSON.stringify({ name: "Renamed Tester" }),
+  });
+  const renamed = await res.json();
+  if (res.status !== 200 || renamed.name !== "Renamed Tester") fail("update profile name", renamed);
+  ok("PATCH /auth/me updates the user's display name");
+
+  res = await fetch(`${BASE}/auth/change-password`, {
+    method: "POST",
+    headers: authHeaders(profileAccessToken),
+    body: JSON.stringify({ currentPassword: "totally-wrong", newPassword: "newsupersecret456" }),
+  });
+  if (res.status !== 401) fail("change password with wrong current password should be 401", await res.text());
+  ok("change-password rejects an incorrect current password (401)");
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: profileTestEmail, password: profileTestPassword }),
+  });
+  const profileSecondLogin = await res.json();
+  if (res.status !== 200) fail("profile-test second-device login", profileSecondLogin);
+  ok("profile-test second-device login (for password-change session-revocation check)");
+
+  res = await fetch(`${BASE}/auth/sessions`, {
+    headers: { ...authHeaders(profileAccessToken), Cookie: `refreshToken=${profileRefreshCookie}` },
+  });
+  const beforePasswordChange = await res.json();
+  if (res.status !== 200 || beforePasswordChange.length !== 2) {
+    fail("expected 2 active sessions before password change", beforePasswordChange);
+  }
+  ok("2 active sessions exist before password change");
+
+  res = await fetch(`${BASE}/auth/change-password`, {
+    method: "POST",
+    headers: { ...authHeaders(profileAccessToken), Cookie: `refreshToken=${profileRefreshCookie}` },
+    body: JSON.stringify({ currentPassword: profileTestPassword, newPassword: "newsupersecret456" }),
+  });
+  if (res.status !== 204) fail("change password with correct current password should be 204", await res.text());
+  ok("change-password succeeds with the correct current password (204)");
+
+  res = await fetch(`${BASE}/auth/sessions`, {
+    headers: { ...authHeaders(profileAccessToken), Cookie: `refreshToken=${profileRefreshCookie}` },
+  });
+  const afterPasswordChange = await res.json();
+  if (res.status !== 200 || afterPasswordChange.length !== 1 || !afterPasswordChange[0].current) {
+    fail("after password change, only the requesting session should remain active", afterPasswordChange);
+  }
+  ok("changing password revokes every other active session but keeps the current one");
 
   const hammerEmail = `hammer-${rand}@example.com`;
   res = await fetch(`${BASE}/auth/signup`, {

@@ -50,14 +50,14 @@ export default function EnvironmentSecretsPage() {
     projectId: string;
     environmentId: string;
   }>();
-  const { organizations } = useAuth();
-  const org = organizations[0] ?? null;
+  const { activeOrg: org } = useAuth();
 
   const [environment, setEnvironment] = useState<EnvironmentSummary | null>(null);
   const [secrets, setSecrets] = useState<SecretMetadata[]>([]);
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [visible, setVisible] = useState<Record<string, boolean>>({});
@@ -314,9 +314,14 @@ export default function EnvironmentSecretsPage() {
     }
   };
 
+  const filteredSecrets = search.trim()
+    ? secrets.filter((s) => s.key.toLowerCase().includes(search.trim().toLowerCase()))
+    : secrets;
+
   return (
     <AppShell
       searchPlaceholder="Search for secrets..."
+      onSearch={setSearch}
       trailing={
         environment && (
           <button
@@ -491,7 +496,7 @@ export default function EnvironmentSecretsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant">
-                    {secrets.map((secret) => (
+                    {filteredSecrets.map((secret) => (
                       <Fragment key={secret.id}>
                       <tr className="variable-row group transition-colors">
                         <td className="px-md py-sm">
@@ -777,6 +782,16 @@ export default function EnvironmentSecretsPage() {
                           className="px-md py-xl text-center font-body-md text-body-md text-secondary"
                         >
                           No secrets yet. Add your first variable above.
+                        </td>
+                      </tr>
+                    )}
+                    {secrets.length > 0 && filteredSecrets.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="px-md py-xl text-center font-body-md text-body-md text-secondary"
+                        >
+                          No secrets match your search.
                         </td>
                       </tr>
                     )}

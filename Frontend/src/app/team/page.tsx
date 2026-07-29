@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
+import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
 import {
   api,
@@ -15,6 +17,7 @@ import {
   PermissionMatrix,
 } from "@/lib/api";
 import { exportAuditLogsCsv } from "@/lib/auditExport";
+import { roleBadgeClass } from "@/lib/roleBadge";
 
 const ENV_COLUMNS: { type: EnvironmentType; label: string }[] = [
   { type: "DEVELOPMENT", label: "Dev" },
@@ -25,27 +28,11 @@ const ENV_COLUMNS: { type: EnvironmentType; label: string }[] = [
 
 const ROLE_ROWS: OrgRole[] = ["OWNER", "ADMIN", "DEVELOPER", "VIEWER"];
 
-function roleBadgeClass(role: OrgRole) {
-  if (role === "OWNER") {
-    return "border border-primary/20 bg-primary/10 text-primary";
-  }
-  return "border border-outline-variant bg-surface-container-highest text-on-surface-variant";
-}
-
-function initials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 export default function TeamPage() {
-  const { organizations } = useAuth();
-  const org = organizations[0] ?? null;
+  const { activeOrg: org } = useAuth();
   const isAdmin = org?.role === "OWNER" || org?.role === "ADMIN";
 
+  const [search, setSearch] = useState("");
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -220,8 +207,18 @@ export default function TeamPage() {
     setInviteEmail("");
   };
 
+  const filteredMembers = search.trim()
+    ? members.filter((m) => {
+        const q = search.trim().toLowerCase();
+        return (
+          m.user.name.toLowerCase().includes(q) ||
+          m.user.email.toLowerCase().includes(q)
+        );
+      })
+    : members;
+
   return (
-    <AppShell searchPlaceholder="Search team...">
+    <AppShell searchPlaceholder="Search team..." onSearch={setSearch}>
       <div className="mx-auto max-w-container-max pb-xl">
         <div className="mb-lg flex flex-col justify-between gap-md md:flex-row md:items-center">
           <div>
@@ -330,20 +327,16 @@ export default function TeamPage() {
                       className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
                     />
                   </label>
-                  <label className="block">
-                    <span className="mb-xs block font-label-md text-label-md text-on-surface">
-                      Role
-                    </span>
-                    <select
-                      value={inviteRole}
-                      onChange={(e) => setInviteRole(e.target.value as OrgRole)}
-                      className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container sm:w-40"
-                    >
-                      <option value="ADMIN">Admin</option>
-                      <option value="DEVELOPER">Developer</option>
-                      <option value="VIEWER">Viewer</option>
-                    </select>
-                  </label>
+                  <Select
+                    label="Role"
+                    wrapperClassName="sm:w-40"
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value as OrgRole)}
+                  >
+                    <option value="ADMIN">Admin</option>
+                    <option value="DEVELOPER">Developer</option>
+                    <option value="VIEWER">Viewer</option>
+                  </Select>
                 </div>
                 <div className="flex items-center gap-sm">
                   <button
@@ -399,15 +392,18 @@ export default function TeamPage() {
                     </div>
                   ) : (
                     <div className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
-                      {members.map((m) => (
+                      {filteredMembers.length === 0 && (
+                        <p className="px-md py-lg text-center font-body-sm text-body-sm text-secondary">
+                          No members match your search.
+                        </p>
+                      )}
+                      {filteredMembers.map((m) => (
                         <div
                           key={m.membershipId}
                           className="flex items-center justify-between px-md py-md transition-colors hover:bg-[#F6F8FA] dark:hover:bg-surface-container-low"
                         >
                           <div className="flex items-center gap-md">
-                            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface-container-high font-label-md text-label-md text-on-surface-variant">
-                              {initials(m.user.name)}
-                            </div>
+                            <Avatar name={m.user.name} seed={m.user.email} className="h-10 w-10" />
                             <div>
                               <div className="flex items-center gap-sm">
                                 <span className="font-body-md text-body-md font-bold text-on-surface">

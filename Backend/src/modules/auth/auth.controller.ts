@@ -3,7 +3,7 @@ import { asyncHandler } from "../../common/middleware/asyncHandler";
 import { UnauthorizedError } from "../../common/errors/AppError";
 import { env } from "../../config/env";
 import * as authService from "./auth.service";
-import { LoginInput, SignupInput } from "./auth.validators";
+import { ChangePasswordInput, LoginInput, SignupInput, UpdateProfileInput } from "./auth.validators";
 import { REFRESH_TOKEN_MAX_AGE_MS } from "./tokens";
 
 export const REFRESH_COOKIE = "refreshToken";
@@ -79,5 +79,21 @@ export const listSessions = asyncHandler(async (req, res) => {
 
 export const revokeSession = asyncHandler(async (req, res) => {
   await authService.revokeSession(req.user!.id, req.params.sessionId);
+  res.status(204).send();
+});
+
+export const updateProfile = asyncHandler(async (req, res) => {
+  const user = await authService.updateProfile(req.user!.id, req.body as UpdateProfileInput);
+  res.status(200).json(user);
+});
+
+export const changePassword = asyncHandler(async (req, res) => {
+  const raw = req.cookies?.[REFRESH_COOKIE];
+  const currentSession = raw ? await authService.findSessionByRefreshToken(raw) : null;
+  await authService.changePassword(
+    req.user!.id,
+    req.body as ChangePasswordInput,
+    currentSession?.id
+  );
   res.status(204).send();
 });

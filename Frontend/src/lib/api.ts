@@ -48,10 +48,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export type OrgRole = "OWNER" | "ADMIN" | "DEVELOPER" | "VIEWER";
 export type EnvironmentType = "DEVELOPMENT" | "TESTING" | "STAGING" | "PRODUCTION";
 
+export type AuthProvider = "PASSWORD" | "GITHUB" | "GOOGLE";
+
 export interface PublicUser {
   id: string;
   email: string;
   name: string;
+  authProvider: AuthProvider;
 }
 
 export interface OrgSummary {
@@ -76,6 +79,7 @@ export interface Project {
   name: string;
   slug: string;
   description: string | null;
+  environmentCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -212,6 +216,18 @@ export const api = {
 
   me: () => request<MeResponse>("/auth/me"),
 
+  updateProfile: (input: { name: string }) =>
+    request<PublicUser>("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+
+  changePassword: (input: { currentPassword: string; newPassword: string }) =>
+    request<void>("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
   listOrgs: () => request<OrgSummary[]>("/orgs"),
 
   createOrg: (input: { name: string; slug: string }) =>
@@ -219,6 +235,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
+  updateOrg: (orgId: string, input: { name: string }) =>
+    request<{ id: string; name: string; slug: string }>(`/orgs/${orgId}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+
+  deleteOrg: (orgId: string) => request<void>(`/orgs/${orgId}`, { method: "DELETE" }),
 
   listProjects: (orgId: string) => request<Project[]>(`/orgs/${orgId}/projects`),
 
@@ -233,11 +257,23 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  updateProject: (projectId: string, input: { name: string; description?: string }) =>
+    request<Project>(`/projects/${projectId}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+
+  deleteProject: (projectId: string) =>
+    request<void>(`/projects/${projectId}`, { method: "DELETE" }),
+
   listEnvironments: (projectId: string) =>
     request<EnvironmentSummary[]>(`/projects/${projectId}/environments`),
 
   getEnvironment: (environmentId: string) =>
     request<EnvironmentSummary>(`/environments/${environmentId}`),
+
+  deleteEnvironment: (environmentId: string) =>
+    request<void>(`/environments/${environmentId}`, { method: "DELETE" }),
 
   createEnvironment: (
     projectId: string,
