@@ -18,6 +18,7 @@ interface InviteRow {
   id: string;
   email: string;
   role: OrgRole;
+  projectId: string | null;
   createdAt: Date;
   expiresAt: Date;
   acceptedAt: Date | null;
@@ -28,6 +29,7 @@ function toSummary(invite: InviteRow) {
     id: invite.id,
     email: invite.email,
     role: invite.role,
+    projectId: invite.projectId,
     createdAt: invite.createdAt,
     expiresAt: invite.expiresAt,
     acceptedAt: invite.acceptedAt,
@@ -42,12 +44,19 @@ export async function createInvite(
 ) {
   assertCanAssignRole(actor.role, input.role);
 
+  if (input.projectId) {
+    const project = await prisma.project.findUnique({ where: { id: input.projectId } });
+    if (!project || project.orgId !== orgId) {
+      throw new NotFoundError("Project not found");
+    }
+  }
+
   const existingUser = await prisma.user.findUnique({ where: { email: input.email } });
   if (existingUser) {
     const existingMembership = await prisma.orgMembership.findUnique({
       where: { userId_orgId: { userId: existingUser.id, orgId } },
     });
-    if (existingMembership) {
+    if (existingMembership && !input.projectId) {
       throw new ConflictError("This person is already a member of this organization");
     }
   }
@@ -66,6 +75,7 @@ export async function createInvite(
         orgId,
         email: input.email,
         role: input.role,
+        projectId: input.projectId,
         tokenHash,
         invitedById: actor.id,
         expiresAt,
@@ -78,7 +88,8 @@ export async function createInvite(
       action: "invite.create",
       targetType: "OrgInvite",
       targetId: invite.id,
-      metadata: { email: input.email, role: input.role },
+      projectId: invite.projectId ?? undefined,
+      metadata: { email: input.email, role: input.role, projectId: input.projectId ?? null },
       ipAddress,
     });
 
@@ -102,7 +113,10 @@ export async function getInviteByToken(rawToken: string) {
 
   const invite = await prisma.orgInvite.findUnique({
     where: { tokenHash },
-    include: { org: { select: { name: true, slug: true } } },
+    include: {
+      org: { select: { name: true, slug: true } },
+      project: { select: { id: true, name: true } },
+    },
   });
 
   if (!invite) {
@@ -114,6 +128,7 @@ export async function getInviteByToken(rawToken: string) {
     orgSlug: invite.org.slug,
     role: invite.role,
     email: invite.email,
+    project: invite.project ? { id: invite.project.id, name: invite.project.name } : null,
     expiresAt: invite.expiresAt,
     accepted: invite.acceptedAt !== null,
     expired: invite.expiresAt < new Date(),
@@ -147,15 +162,36 @@ export async function acceptInvite(
   const existingMembership = await prisma.orgMembership.findUnique({
     where: { userId_orgId: { userId: user.id, orgId: invite.orgId } },
   });
-  if (existingMembership) {
+
+  if (existingMembership && !invite.projectId) {
     throw new ConflictError("You are already a member of this organization");
   }
 
   const membership = await prisma.$transaction(async (tx) => {
-    const created = await tx.orgMembership.create({
-      data: { userId: user.id, orgId: invite.orgId, role: invite.role },
-      include: { user: { select: { id: true, name: true, email: true } } },
-    });
+    const membershipRow = existingMembership
+      ? await tx.orgMembership.findUniqueOrThrow({
+          where: { id: existingMembership.id },
+          include: { user: { select: { id: true, name: true, email: true } } },
+        })
+      : await tx.orgMembership.create({
+          data: { userId: user.id, orgId: invite.orgId, role: invite.role },
+          include: { user: { select: { id: true, name: true, email: true } } },
+        });
+
+    if (invite.projectId) {
+      const existingGrant = await tx.projectMembership.findUnique({
+        where: { userId_projectId: { userId: user.id, projectId: invite.projectId } },
+      });
+      if (!existingGrant) {
+        await tx.projectMembership.create({
+          data: {
+            userId: user.id,
+            projectId: invite.projectId,
+            grantedById: invite.invitedById,
+          },
+        });
+      }
+    }
 
     await tx.orgInvite.update({
       where: { id: invite.id },
@@ -167,12 +203,13 @@ export async function acceptInvite(
       actorId: user.id,
       action: "invite.accept",
       targetType: "OrgMembership",
-      targetId: created.id,
-      metadata: { email: invite.email, role: invite.role },
+      targetId: membershipRow.id,
+      projectId: invite.projectId ?? undefined,
+      metadata: { email: invite.email, role: invite.role, projectId: invite.projectId },
       ipAddress,
     });
 
-    return created;
+    return membershipRow;
   });
 
   return {

@@ -37,6 +37,10 @@ export async function createProject(
       include: withEnvironmentCount,
     });
 
+    await tx.projectMembership.create({
+      data: { userId: actorId, projectId: project.id, grantedById: actorId },
+    });
+
     await writeAuditLog(tx, {
       orgId,
       actorId,
@@ -51,9 +55,12 @@ export async function createProject(
   });
 }
 
-export async function listProjects(orgId: string) {
+export async function listProjects(orgId: string, accessibleProjectIds: "all" | string[]) {
   const projects = await prisma.project.findMany({
-    where: { orgId },
+    where:
+      accessibleProjectIds === "all"
+        ? { orgId }
+        : { orgId, id: { in: accessibleProjectIds } },
     orderBy: { createdAt: "asc" },
     include: withEnvironmentCount,
   });

@@ -1,5 +1,6 @@
 import { asyncHandler } from "../../common/middleware/asyncHandler";
 import * as projectService from "./project.service";
+import { getAccessibleProjectIds } from "../rbac/projectAccess.service";
 import { CreateProjectInput, UpdateProjectInput } from "./project.validators";
 
 export const createProject = asyncHandler(async (req, res) => {
@@ -13,7 +14,13 @@ export const createProject = asyncHandler(async (req, res) => {
 });
 
 export const listProjects = asyncHandler(async (req, res) => {
-  const projects = await projectService.listProjects(req.params.orgId);
+  const accessibleProjectIds = await getAccessibleProjectIds(
+    req.params.orgId,
+    req.user!.id,
+    req.membership!.role,
+    req.membership!
+  );
+  const projects = await projectService.listProjects(req.params.orgId, accessibleProjectIds);
   res.status(200).json(projects);
 });
 

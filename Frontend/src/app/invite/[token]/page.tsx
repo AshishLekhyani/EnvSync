@@ -95,7 +95,14 @@ export default function InvitePage() {
             </h1>
             <p className="mb-lg text-center font-body-md text-body-md text-secondary">
               You&apos;ve been invited to join <strong>{invite.orgName}</strong> as a{" "}
-              <strong>{invite.role}</strong>.
+              <strong>{invite.role}</strong>
+              {invite.project ? (
+                <>
+                  {" "}with access to <strong>{invite.project.name}</strong>.
+                </>
+              ) : (
+                "."
+              )}
             </p>
 
             {error && (

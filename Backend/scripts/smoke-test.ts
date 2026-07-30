@@ -275,6 +275,13 @@ async function main() {
   if (res.status !== 201) fail("add viewer member", membership);
   ok("add viewer member");
 
+  res = await fetch(`${BASE}/orgs/${orgId}/members/${membership.id}/projects/${projectId}`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("grant viewer project access", await res.text());
+  ok("grant viewer project access (204) -- project-level access is separate from org role/env-tier");
+
   res = await fetch(`${BASE}/secrets/${prodSecret.id}`, {
     method: "PATCH",
     headers: authHeaders(viewerAccessToken),
@@ -944,6 +951,231 @@ async function main() {
     fail("list invites", invitesList);
   }
   ok("list invites (200, includes previously created invite)");
+
+  // --- Project-level access control ---
+
+  const restrictedEmail = `restricted-${rand}@example.com`;
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Restricted Dev", email: restrictedEmail, password }),
+  });
+  if (res.status !== 201) fail("signup restricted developer", await res.text());
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: restrictedEmail, password }),
+  });
+  const restrictedLogin = await res.json();
+  if (res.status !== 200) fail("login restricted developer", restrictedLogin);
+  const restrictedAccessToken: string = restrictedLogin.accessToken;
+  ok("signup + login restricted developer account");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: restrictedEmail, role: "DEVELOPER" }),
+  });
+  const restrictedMembership = await res.json();
+  if (res.status !== 201) {
+    fail("add restricted developer as org member (no project)", restrictedMembership);
+  }
+  ok("add restricted developer as org-only member (no project access granted)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, {
+    headers: authHeaders(restrictedAccessToken),
+  });
+  const restrictedProjectsBeforeGrant = await res.json();
+  if (res.status !== 200 || restrictedProjectsBeforeGrant.length !== 0) {
+    fail("org-only developer should see zero projects before any grant", restrictedProjectsBeforeGrant);
+  }
+  ok("org-only developer sees zero projects (project-level access defaults to none)");
+
+  res = await fetch(`${BASE}/projects/${projectId}`, {
+    headers: authHeaders(restrictedAccessToken),
+  });
+  if (res.status !== 404) {
+    fail("org-only developer accessing an ungranted project should be 404", await res.text());
+  }
+  ok("org-only developer cannot open an ungranted project directly (404, no existence leak)");
+
+  res = await fetch(
+    `${BASE}/orgs/${orgId}/members/${restrictedMembership.id}/projects/${projectId}`,
+    { method: "POST", headers: authHeaders(ownerAccessToken) }
+  );
+  if (res.status !== 204) fail("grant restricted developer access to project", await res.text());
+  ok("owner grants restricted developer access to one project");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, {
+    headers: authHeaders(restrictedAccessToken),
+  });
+  const restrictedProjectsAfterGrant = await res.json();
+  if (
+    res.status !== 200 ||
+    restrictedProjectsAfterGrant.length !== 1 ||
+    restrictedProjectsAfterGrant[0].id !== projectId
+  ) {
+    fail("developer should see exactly the granted project after grant", restrictedProjectsAfterGrant);
+  }
+  ok("after grant, developer sees exactly the one project they were granted");
+
+  res = await fetch(`${BASE}/projects/${projectId}`, {
+    headers: authHeaders(restrictedAccessToken),
+  });
+  if (res.status !== 200) fail("granted developer should now be able to open the project", await res.text());
+  ok("granted developer can now open the project directly (200)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(ownerAccessToken) });
+  const fullMembersList = await res.json();
+  if (res.status !== 200) fail("owner list members", fullMembersList);
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(restrictedAccessToken) });
+  const restrictedMembersList = await res.json();
+  if (
+    res.status !== 200 ||
+    restrictedMembersList.length >= fullMembersList.length ||
+    !restrictedMembersList.some((m: { role: string }) => m.role === "OWNER")
+  ) {
+    fail("project-scoped developer's member list should be a strict subset that still includes the owner", {
+      full: fullMembersList.length,
+      restricted: restrictedMembersList.length,
+    });
+  }
+  ok("project-scoped developer sees a filtered member list (fewer than the owner, but always including Owner)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs`, { headers: authHeaders(restrictedAccessToken) });
+  const restrictedAuditLogs = await res.json();
+  if (
+    res.status !== 200 ||
+    restrictedAuditLogs.some((l: { projectId: string | null }) => l.projectId !== projectId)
+  ) {
+    fail("project-scoped developer's audit logs should only contain entries for their accessible project", restrictedAuditLogs);
+  }
+  ok("project-scoped developer's audit logs are filtered to their accessible project only (no org-level entries)");
+
+  res = await fetch(
+    `${BASE}/orgs/${orgId}/members/${restrictedMembership.id}/projects/${projectId}`,
+    { method: "DELETE", headers: authHeaders(ownerAccessToken) }
+  );
+  if (res.status !== 204) fail("revoke restricted developer's project access", await res.text());
+  ok("owner revokes restricted developer's project access");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, {
+    headers: authHeaders(restrictedAccessToken),
+  });
+  const restrictedProjectsAfterRevoke = await res.json();
+  if (res.status !== 200 || restrictedProjectsAfterRevoke.length !== 0) {
+    fail("developer should see zero projects again after revoke", restrictedProjectsAfterRevoke);
+  }
+  ok("after revoke, developer sees zero projects again");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members/${restrictedMembership.id}/view-all`, {
+    method: "PATCH",
+    headers: authHeaders(restrictedAccessToken),
+    body: JSON.stringify({ canViewAllProjects: true }),
+  });
+  if (res.status !== 403) fail("non-owner setting canViewAllProjects should be 403", await res.text());
+  ok("only the owner can grant the view-all-projects override (403 for a non-owner, even targeting self)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members/${restrictedMembership.id}/view-all`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ canViewAllProjects: true }),
+  });
+  if (res.status !== 200) fail("owner setting canViewAllProjects should succeed", await res.text());
+  ok("owner grants the view-all-projects override");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, {
+    headers: authHeaders(restrictedAccessToken),
+  });
+  const restrictedProjectsWithViewAll = await res.json();
+  if (res.status !== 200 || restrictedProjectsWithViewAll.length < 1) {
+    fail("developer with the view-all override should see every project", restrictedProjectsWithViewAll);
+  }
+  ok("developer with the view-all override sees every project regardless of explicit grants");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members/${restrictedMembership.id}/view-all`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ canViewAllProjects: false }),
+  });
+  if (res.status !== 200) fail("owner clearing canViewAllProjects should succeed", await res.text());
+  ok("owner clears the view-all-projects override");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, {
+    headers: authHeaders(restrictedAccessToken),
+  });
+  const restrictedProjectsAfterClear = await res.json();
+  if (res.status !== 200 || restrictedProjectsAfterClear.length !== 0) {
+    fail("developer should see zero projects again after the view-all override is cleared", restrictedProjectsAfterClear);
+  }
+  ok("after clearing view-all, the developer is restricted again");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members/${restrictedMembership.id}`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ role: "ADMIN" }),
+  });
+  if (res.status !== 200) fail("promote restricted user to ADMIN for the grant-permission test", await res.text());
+  ok("promote restricted user to ADMIN (still has zero project grants and no view-all override)");
+
+  res = await fetch(
+    `${BASE}/orgs/${orgId}/members/${restrictedMembership.id}/projects/${projectId}`,
+    { method: "POST", headers: authHeaders(restrictedAccessToken) }
+  );
+  if (res.status !== 403) {
+    fail("an admin without access to a project themselves should not be able to grant it to anyone (403)", await res.text());
+  }
+  ok("an admin without access to a project themselves cannot grant that project's access, even to themselves (403)");
+
+  const projectInviteEmail = `project-invitee-${rand}@example.com`;
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: projectInviteEmail, role: "VIEWER", projectId }),
+  });
+  const projectInvite = await res.json();
+  if (res.status !== 201 || projectInvite.projectId !== projectId) {
+    fail("create project-scoped invite", projectInvite);
+  }
+  ok("create a project-scoped invite (grants org membership + one project's access together)");
+
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Project Invitee", email: projectInviteEmail, password }),
+  });
+  if (res.status !== 201) fail("signup project invitee", await res.text());
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: projectInviteEmail, password }),
+  });
+  const projectInviteeLogin = await res.json();
+  if (res.status !== 200) fail("login project invitee", projectInviteeLogin);
+  const projectInviteeAccessToken: string = projectInviteeLogin.accessToken;
+
+  res = await fetch(`${BASE}/invites/${projectInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(projectInviteeAccessToken),
+  });
+  if (res.status !== 200) fail("accept project-scoped invite", await res.text());
+  ok("project invitee signs up and accepts the project-scoped invite");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, {
+    headers: authHeaders(projectInviteeAccessToken),
+  });
+  const projectInviteeProjects = await res.json();
+  if (
+    res.status !== 200 ||
+    projectInviteeProjects.length !== 1 ||
+    projectInviteeProjects[0].id !== projectId
+  ) {
+    fail("project invitee should see exactly the one project their invite granted", projectInviteeProjects);
+  }
+  ok("accepting a project-scoped invite grants org membership AND access to exactly that one project");
 
   res = await fetch(`${BASE}/environments/${devEnv.id}/secrets`, {
     method: "POST",

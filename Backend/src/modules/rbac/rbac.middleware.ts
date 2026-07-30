@@ -9,6 +9,7 @@ import {
 } from "../../common/errors/AppError";
 import { hasAtLeastRole } from "./roles";
 import { getEffectiveAccess } from "./permissions.service";
+import { hasProjectAccess } from "./projectAccess.service";
 
 type OrgIdResolver = (req: Request) => Promise<string | null>;
 
@@ -82,6 +83,52 @@ export function orgIdFromSecretParam(paramName = "secretId"): OrgIdResolver {
   };
 }
 
+type ProjectIdResolver = (req: Request) => Promise<string | null>;
+
+/** Must run after requireOrgRole in the chain — relies on req.membership already being set. */
+export function requireProjectAccess(resolveProjectId: ProjectIdResolver) {
+  return asyncHandler(async (req, _res, next) => {
+    if (!req.user || !req.membership) {
+      throw new UnauthorizedError();
+    }
+
+    const projectId = await resolveProjectId(req);
+    if (!projectId) {
+      throw new NotFoundError();
+    }
+
+    const allowed = await hasProjectAccess(
+      req.membership.orgId,
+      req.user.id,
+      projectId,
+      req.membership.role,
+      req.membership
+    );
+
+    if (!allowed) {
+      throw new NotFoundError();
+    }
+
+    next();
+  });
+}
+
+export function projectIdFromParam(paramName = "projectId"): ProjectIdResolver {
+  return async (req) => req.params[paramName] ?? null;
+}
+
+export function projectIdFromEnvironmentParam(
+  paramName = "environmentId"
+): ProjectIdResolver {
+  return async (req) => {
+    const environment = await prisma.environment.findUnique({
+      where: { id: req.params[paramName] },
+      select: { projectId: true },
+    });
+    return environment?.projectId ?? null;
+  };
+}
+
 type EnvironmentIdResolver = (req: Request) => Promise<string | null>;
 
 export function requireEnvironmentAccess(
@@ -100,7 +147,7 @@ export function requireEnvironmentAccess(
 
     const environment = await prisma.environment.findUnique({
       where: { id: environmentId },
-      select: { type: true, project: { select: { orgId: true } } },
+      select: { type: true, projectId: true, project: { select: { orgId: true } } },
     });
 
     if (!environment) {
@@ -118,6 +165,18 @@ export function requireEnvironmentAccess(
     });
 
     if (!membership) {
+      throw new NotFoundError();
+    }
+
+    const canSeeProject = await hasProjectAccess(
+      environment.project.orgId,
+      req.user.id,
+      environment.projectId,
+      membership.role,
+      membership
+    );
+
+    if (!canSeeProject) {
       throw new NotFoundError();
     }
 

@@ -7,6 +7,7 @@ import { Icon } from "../Icon";
 import { useAuth } from "@/lib/auth-context";
 import { queryKeys } from "@/lib/query-keys";
 import { api } from "@/lib/api";
+import { SidebarFooterLinks } from "./SidebarFooterLinks";
 
 export function AuditSidebar() {
   const { activeOrg: org } = useAuth();
@@ -49,6 +50,7 @@ export function AuditSidebar() {
             ))}
           </>
         )}
+        <SidebarFooterLinks />
       </aside>
 
       <nav className="flex gap-xs overflow-x-auto border-b border-outline-variant bg-surface px-md py-sm md:hidden">

@@ -1,17 +1,134 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
+import { queryKeys } from "@/lib/query-keys";
 import { api, ApiError, MemberSummary } from "@/lib/api";
 import { roleBadgeClass } from "@/lib/roleBadge";
+
+function ProjectAccessRow({
+  orgId,
+  member,
+  onUpdate,
+}: {
+  orgId: string;
+  member: MemberSummary;
+  onUpdate: (membershipId: string, patch: Partial<MemberSummary>) => void;
+}) {
+  const { activeOrg: org } = useAuth();
+  const isOwner = org?.role === "OWNER";
+
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.orgProjects(orgId),
+    queryFn: () => api.listProjects(orgId),
+  });
+  const projects = projectsQuery.data ?? [];
+
+  const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
+  const [pendingViewAll, setPendingViewAll] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const grantedIds = new Set((member.projectAccess ?? []).map((p) => p.id));
+
+  const toggleProject = async (projectId: string, projectName: string) => {
+    setPendingProjectId(projectId);
+    setError(null);
+    try {
+      if (grantedIds.has(projectId)) {
+        await api.revokeProjectAccess(orgId, member.membershipId, projectId);
+        onUpdate(member.membershipId, {
+          projectAccess: (member.projectAccess ?? []).filter((p) => p.id !== projectId),
+        });
+      } else {
+        await api.grantProjectAccess(orgId, member.membershipId, projectId);
+        onUpdate(member.membershipId, {
+          projectAccess: [...(member.projectAccess ?? []), { id: projectId, name: projectName }],
+        });
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update project access");
+    } finally {
+      setPendingProjectId(null);
+    }
+  };
+
+  const toggleViewAll = async () => {
+    setPendingViewAll(true);
+    setError(null);
+    try {
+      const next = !member.canViewAllProjects;
+      await api.setCanViewAllProjects(orgId, member.membershipId, next);
+      onUpdate(member.membershipId, { canViewAllProjects: next });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update view-all access");
+    } finally {
+      setPendingViewAll(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-[#D0D7DE] bg-surface-container-low px-md py-md dark:border-outline-variant">
+      {error && (
+        <p className="mb-sm font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">{error}</p>
+      )}
+
+      {isOwner && member.role !== "OWNER" && (
+        <label className="mb-md flex items-center gap-sm">
+          <input
+            type="checkbox"
+            checked={!!member.canViewAllProjects}
+            disabled={pendingViewAll}
+            onChange={toggleViewAll}
+            className="rounded border-outline-variant text-primary-container focus:ring-primary-container"
+          />
+          <span className="font-label-md text-label-md text-on-surface">
+            Can view all projects
+          </span>
+        </label>
+      )}
+
+      {member.canViewAllProjects ? (
+        <p className="font-body-sm text-body-sm text-on-surface-variant">
+          This member can already see every project in the organization.
+        </p>
+      ) : member.role === "OWNER" ? (
+        <p className="font-body-sm text-body-sm text-on-surface-variant">
+          Owners always have access to every project.
+        </p>
+      ) : projects.length === 0 ? (
+        <p className="font-body-sm text-body-sm text-on-surface-variant">No projects yet.</p>
+      ) : (
+        <div className="flex flex-col gap-xs">
+          <p className="font-body-sm text-[11px] uppercase tracking-wider text-on-surface-variant">
+            Project access
+          </p>
+          {projects.map((p) => (
+            <label key={p.id} className="flex items-center gap-sm">
+              <input
+                type="checkbox"
+                checked={grantedIds.has(p.id)}
+                disabled={pendingProjectId === p.id}
+                onChange={() => toggleProject(p.id, p.name)}
+                className="rounded border-outline-variant text-primary-container focus:ring-primary-container"
+              />
+              <span className="font-body-sm text-body-sm text-on-surface">{p.name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function MembersSection({ search }: { search: string }) {
   const { activeOrg: org } = useAuth();
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!org) {
@@ -52,6 +169,14 @@ export function MembersSection({ search }: { search: string }) {
     );
   }
 
+  const canManageAccess = org.role === "OWNER" || org.role === "ADMIN";
+
+  const onMemberUpdate = (membershipId: string, patch: Partial<MemberSummary>) => {
+    setMembers((prev) =>
+      prev.map((m) => (m.membershipId === membershipId ? { ...m, ...patch } : m))
+    );
+  };
+
   const filteredMembers = search.trim()
     ? members.filter((m) => {
         const q = search.trim().toLowerCase();
@@ -90,31 +215,56 @@ export function MembersSection({ search }: { search: string }) {
                 No members match your search.
               </p>
             )}
-            {filteredMembers.map((m) => (
-              <div
-                key={m.membershipId}
-                className="flex items-center justify-between px-md py-md transition-colors hover:bg-[#F6F8FA] dark:hover:bg-surface-container-low"
-              >
-                <div className="flex items-center gap-md">
-                  <Avatar name={m.user.name} seed={m.user.email} className="h-10 w-10" />
-                  <div>
-                    <div className="flex items-center gap-sm">
-                      <span className="font-body-md text-body-md font-bold text-on-surface">
-                        {m.user.name}
-                      </span>
-                      <span
-                        className={`rounded-full px-sm py-[1px] text-[10px] font-bold uppercase ${roleBadgeClass(m.role)}`}
-                      >
-                        {m.role}
-                      </span>
+            {filteredMembers.map((m) => {
+              const expandable = canManageAccess && m.canViewAllProjects !== undefined;
+              const expanded = expandable && expandedId === m.membershipId;
+              return (
+                <div key={m.membershipId}>
+                  <div
+                    className={`flex items-center justify-between px-md py-md transition-colors hover:bg-[#F6F8FA] dark:hover:bg-surface-container-low ${
+                      expandable ? "cursor-pointer" : ""
+                    }`}
+                    onClick={() =>
+                      expandable &&
+                      setExpandedId((prev) => (prev === m.membershipId ? null : m.membershipId))
+                    }
+                  >
+                    <div className="flex items-center gap-md">
+                      <Avatar name={m.user.name} seed={m.user.email} className="h-10 w-10" />
+                      <div>
+                        <div className="flex items-center gap-sm">
+                          <span className="font-body-md text-body-md font-bold text-on-surface">
+                            {m.user.name}
+                          </span>
+                          <span
+                            className={`rounded-full px-sm py-[1px] text-[10px] font-bold uppercase ${roleBadgeClass(m.role)}`}
+                          >
+                            {m.role}
+                          </span>
+                          {m.canViewAllProjects && m.role !== "OWNER" && (
+                            <span className="rounded-full border border-primary/20 bg-primary/10 px-sm py-[1px] text-[10px] font-bold uppercase text-primary">
+                              All Projects
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-body-sm text-body-sm text-on-surface-variant">
+                          {m.user.email}
+                        </div>
+                      </div>
                     </div>
-                    <div className="font-body-sm text-body-sm text-on-surface-variant">
-                      {m.user.email}
-                    </div>
+                    {expandable && (
+                      <Icon
+                        name={expanded ? "expand_less" : "expand_more"}
+                        className="text-secondary"
+                      />
+                    )}
                   </div>
+                  {expanded && (
+                    <ProjectAccessRow orgId={org.id} member={m} onUpdate={onMemberUpdate} />
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -123,11 +273,12 @@ export function MembersSection({ search }: { search: string }) {
         <Icon name="info" className="text-primary" filled />
         <div>
           <h4 className="font-body-md text-body-md font-bold text-on-surface">
-            Role Propagation
+            Project-Level Access
           </h4>
           <p className="mt-xs font-body-sm text-body-sm text-on-surface-variant">
-            Roles assigned at the project level will automatically propagate to all
-            microservices and sub-environments unless overridden in the Permission Matrix.
+            Members only see the projects they&apos;ve been explicitly granted access to,
+            unless they have the &quot;view all projects&quot; override. Owners always see
+            everything.
           </p>
         </div>
       </div>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "./Icon";
+import { SidebarFooterLinks } from "./sidebars/SidebarFooterLinks";
 
 export interface SectionNavItem {
   href: string;
@@ -38,6 +39,7 @@ export function SectionNav({ items }: { items: SectionNavItem[] }) {
             </Link>
           );
         })}
+        <SidebarFooterLinks />
       </aside>
 
       <nav className="flex gap-xs overflow-x-auto border-b border-outline-variant bg-surface px-md py-sm md:hidden">

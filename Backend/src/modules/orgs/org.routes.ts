@@ -5,7 +5,11 @@ import { validate } from "../../common/validation/validate";
 import * as orgController from "./org.controller";
 import * as membershipController from "./membership.controller";
 import { createOrgSchema, updateOrgSchema } from "./org.validators";
-import { addMemberSchema, updateMemberRoleSchema } from "./membership.validators";
+import {
+  addMemberSchema,
+  setCanViewAllProjectsSchema,
+  updateMemberRoleSchema,
+} from "./membership.validators";
 
 export const orgRouter = Router();
 
@@ -30,6 +34,11 @@ orgRouter.delete(
   requireOrgRole("OWNER", orgIdFromParam()),
   orgController.deleteOrg
 );
+orgRouter.get(
+  "/:orgId/export",
+  requireOrgRole("OWNER", orgIdFromParam()),
+  orgController.exportOrgData
+);
 
 orgRouter.get(
   "/:orgId/members",
@@ -52,4 +61,20 @@ orgRouter.delete(
   "/:orgId/members/:membershipId",
   requireOrgRole("ADMIN", orgIdFromParam()),
   membershipController.removeMember
+);
+orgRouter.post(
+  "/:orgId/members/:membershipId/projects/:projectId",
+  requireOrgRole("ADMIN", orgIdFromParam()),
+  membershipController.grantProjectAccess
+);
+orgRouter.delete(
+  "/:orgId/members/:membershipId/projects/:projectId",
+  requireOrgRole("ADMIN", orgIdFromParam()),
+  membershipController.revokeProjectAccess
+);
+orgRouter.patch(
+  "/:orgId/members/:membershipId/view-all",
+  requireOrgRole("OWNER", orgIdFromParam()),
+  validate({ body: setCanViewAllProjectsSchema }),
+  membershipController.setCanViewAllProjects
 );

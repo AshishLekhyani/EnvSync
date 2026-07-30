@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { FormEvent, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "../Icon";
 import { Select } from "../Select";
+import { SidebarFooterLinks } from "./SidebarFooterLinks";
 import { useAuth } from "@/lib/auth-context";
 import { queryKeys } from "@/lib/query-keys";
 import {
@@ -163,6 +164,7 @@ function EnvironmentList({ projectId }: { projectId: string }) {
 export function ProjectsSidebar() {
   const { activeOrg: org } = useAuth();
   const params = useParams<{ projectId?: string }>();
+  const router = useRouter();
 
   const projectsQuery = useQuery({
     queryKey: queryKeys.orgProjects(org?.id ?? ""),
@@ -170,6 +172,16 @@ export function ProjectsSidebar() {
     enabled: !!org,
   });
   const projects = projectsQuery.data ?? [];
+
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(
+    params.projectId ?? null
+  );
+
+  // Landing directly on a project's page still shows it expanded by default,
+  // without overriding a manual expand/collapse of a *different* row.
+  useEffect(() => {
+    if (params.projectId) setExpandedProjectId(params.projectId);
+  }, [params.projectId]);
 
   return (
     <>
@@ -189,14 +201,24 @@ export function ProjectsSidebar() {
           ) : (
             projects.map((project) => {
               const active = project.id === params.projectId;
+              const expanded = project.id === expandedProjectId;
               return (
                 <div key={project.id} className="flex flex-col gap-xs">
-                  <Link
-                    href={`/projects/${project.id}`}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    title="Click to expand, double-click to open"
+                    onClick={() =>
+                      setExpandedProjectId((prev) => (prev === project.id ? null : project.id))
+                    }
+                    onDoubleClick={() => router.push(`/projects/${project.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") router.push(`/projects/${project.id}`);
+                    }}
                     className={
                       active
-                        ? "flex items-center justify-between gap-xs rounded-lg bg-surface-container-high px-md py-sm text-on-surface"
-                        : "flex items-center justify-between gap-xs rounded-lg px-md py-sm text-on-surface-variant transition-colors hover:bg-surface-container-high"
+                        ? "flex cursor-pointer items-center justify-between gap-xs rounded-lg bg-surface-container-high px-md py-sm text-on-surface"
+                        : "flex cursor-pointer items-center justify-between gap-xs rounded-lg px-md py-sm text-on-surface-variant transition-colors hover:bg-surface-container-high"
                     }
                   >
                     <span className="flex items-center gap-xs truncate font-label-md text-label-md">
@@ -206,30 +228,15 @@ export function ProjectsSidebar() {
                     <span className="flex-shrink-0 rounded-full bg-surface-container-highest px-xs text-[10px] text-on-surface-variant">
                       {project.environmentCount}
                     </span>
-                  </Link>
-                  {active && <EnvironmentList projectId={project.id} />}
+                  </div>
+                  {expanded && <EnvironmentList projectId={project.id} />}
                 </div>
               );
             })
           )}
         </div>
 
-        <div className="mt-auto flex flex-col gap-xs border-t border-outline-variant pt-md">
-          <Link
-            href="/docs"
-            className="flex items-center gap-md rounded-lg px-md py-sm text-on-surface-variant transition-colors hover:bg-surface-container-high"
-          >
-            <Icon name="description" />
-            <span className="font-label-md text-label-md">Docs</span>
-          </Link>
-          <a
-            href="mailto:support@envsync.io"
-            className="flex items-center gap-md rounded-lg px-md py-sm text-on-surface-variant transition-colors hover:bg-surface-container-high"
-          >
-            <Icon name="contact_support" />
-            <span className="font-label-md text-label-md">Support</span>
-          </a>
-        </div>
+        <SidebarFooterLinks />
       </aside>
 
       <nav className="flex gap-xs overflow-x-auto border-b border-outline-variant bg-surface px-md py-sm md:hidden">

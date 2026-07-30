@@ -12,7 +12,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "postinstall": "prisma generate",
-    "smoke-test": "tsx scripts/smoke-test.ts"
+    "smoke-test": "tsx scripts/smoke-test.ts",
+    "backfill-project-access": "tsx scripts/backfill-project-access.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",

@@ -1,9 +1,20 @@
 import { asyncHandler } from "../../common/middleware/asyncHandler";
 import * as membershipService from "./membership.service";
-import { AddMemberInput, UpdateMemberRoleInput } from "./membership.validators";
+import { getAccessibleProjectIds } from "../rbac/projectAccess.service";
+import {
+  AddMemberInput,
+  SetCanViewAllProjectsInput,
+  UpdateMemberRoleInput,
+} from "./membership.validators";
 
 export const listMembers = asyncHandler(async (req, res) => {
-  const members = await membershipService.listMembers(req.params.orgId);
+  const accessibleProjectIds = await getAccessibleProjectIds(
+    req.params.orgId,
+    req.user!.id,
+    req.membership!.role,
+    req.membership!
+  );
+  const members = await membershipService.listMembers(req.params.orgId, accessibleProjectIds);
   res.status(200).json(members);
 });
 
@@ -36,4 +47,37 @@ export const removeMember = asyncHandler(async (req, res) => {
     req.ip
   );
   res.status(204).send();
+});
+
+export const grantProjectAccess = asyncHandler(async (req, res) => {
+  await membershipService.grantProjectAccess(
+    req.params.orgId,
+    req.params.membershipId,
+    req.params.projectId,
+    req.membership!,
+    req.ip
+  );
+  res.status(204).send();
+});
+
+export const revokeProjectAccess = asyncHandler(async (req, res) => {
+  await membershipService.revokeProjectAccess(
+    req.params.orgId,
+    req.params.membershipId,
+    req.params.projectId,
+    req.membership!,
+    req.ip
+  );
+  res.status(204).send();
+});
+
+export const setCanViewAllProjects = asyncHandler(async (req, res) => {
+  const membership = await membershipService.setCanViewAllProjects(
+    req.params.orgId,
+    req.params.membershipId,
+    (req.body as SetCanViewAllProjectsInput).canViewAllProjects,
+    req.user!.id,
+    req.ip
+  );
+  res.status(200).json(membership);
 });

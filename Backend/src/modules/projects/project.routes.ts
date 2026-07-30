@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { requireAuth } from "../auth/auth.middleware";
-import { orgIdFromParam, orgIdFromProjectParam, requireOrgRole } from "../rbac/rbac.middleware";
+import {
+  orgIdFromParam,
+  orgIdFromProjectParam,
+  projectIdFromParam,
+  requireOrgRole,
+  requireProjectAccess,
+} from "../rbac/rbac.middleware";
 import { validate } from "../../common/validation/validate";
 import * as projectController from "./project.controller";
 import { createProjectSchema, updateProjectSchema } from "./project.validators";
@@ -26,16 +32,19 @@ projectRouter.use(requireAuth);
 projectRouter.get(
   "/:projectId",
   requireOrgRole("VIEWER", orgIdFromProjectParam()),
+  requireProjectAccess(projectIdFromParam()),
   projectController.getProject
 );
 projectRouter.patch(
   "/:projectId",
   requireOrgRole("ADMIN", orgIdFromProjectParam()),
+  requireProjectAccess(projectIdFromParam()),
   validate({ body: updateProjectSchema }),
   projectController.updateProject
 );
 projectRouter.delete(
   "/:projectId",
   requireOrgRole("ADMIN", orgIdFromProjectParam()),
+  requireProjectAccess(projectIdFromParam()),
   projectController.deleteProject
 );

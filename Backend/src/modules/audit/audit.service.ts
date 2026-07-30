@@ -28,7 +28,10 @@ export type AuditAction =
   | "permission.override_set"
   | "permission.override_reset"
   | "invite.create"
-  | "invite.accept";
+  | "invite.accept"
+  | "member.project_access_grant"
+  | "member.project_access_revoke"
+  | "member.view_all_set";
 
 interface WriteAuditLogInput {
   orgId: string;
@@ -65,11 +68,33 @@ interface ListAuditLogsFilters {
   limit?: number;
 }
 
-export function listAuditLogs(orgId: string, filters: ListAuditLogsFilters) {
+function resolveProjectFilter(
+  requestedProjectId: string | undefined,
+  accessibleProjectIds: "all" | string[]
+): string | { in: string[] } | undefined {
+  if (accessibleProjectIds === "all") {
+    return requestedProjectId;
+  }
+
+  if (requestedProjectId) {
+    // Explicitly requesting a project outside the caller's access must return
+    // nothing, not silently fall back to their whole accessible set — a
+    // sentinel that can never match a real cuid keeps this a single query.
+    return accessibleProjectIds.includes(requestedProjectId) ? requestedProjectId : "__no_access__";
+  }
+
+  return { in: accessibleProjectIds };
+}
+
+export function listAuditLogs(
+  orgId: string,
+  filters: ListAuditLogsFilters,
+  accessibleProjectIds: "all" | string[]
+) {
   return prisma.auditLog.findMany({
     where: {
       orgId,
-      projectId: filters.projectId,
+      projectId: resolveProjectFilter(filters.projectId, accessibleProjectIds),
       action: filters.action,
     },
     include: {

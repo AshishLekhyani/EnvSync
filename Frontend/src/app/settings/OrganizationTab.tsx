@@ -1,10 +1,163 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, MemberSummary } from "@/lib/api";
+import { downloadJson } from "@/lib/csv";
+
+function ProjectVisibilitySection({ orgId }: { orgId: string }) {
+  const [members, setMembers] = useState<MemberSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    api
+      .listMembers(orgId)
+      .then((list) => {
+        if (!cancelled) {
+          setMembers(list.filter((m) => m.role !== "OWNER"));
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : "Failed to load members");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
+
+  const toggle = async (member: MemberSummary) => {
+    setPendingId(member.membershipId);
+    setError(null);
+    try {
+      const next = !member.canViewAllProjects;
+      await api.setCanViewAllProjects(orgId, member.membershipId, next);
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.membershipId === member.membershipId ? { ...m, canViewAllProjects: next } : m
+        )
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update");
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
+      <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
+        <Icon name="visibility" className="text-primary" />
+        <h2 className="font-h3 text-h3 text-on-surface">Project Visibility</h2>
+      </div>
+      <div className="flex flex-col gap-sm p-md">
+        <p className="font-body-sm text-body-sm text-on-surface-variant">
+          By default, members only see projects they&apos;ve been explicitly granted access
+          to (from the Team page). Turn this on for someone to let them see every project in
+          the organization instead.
+        </p>
+        {error && (
+          <p className="font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">{error}</p>
+        )}
+        {loading ? (
+          <div className="flex justify-center py-md text-secondary">
+            <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 20 }} />
+          </div>
+        ) : members.length === 0 ? (
+          <p className="font-body-sm text-body-sm text-on-surface-variant">
+            No other members yet.
+          </p>
+        ) : (
+          <div className="flex flex-col divide-y divide-outline-variant">
+            {members.map((m) => (
+              <label
+                key={m.membershipId}
+                className="flex items-center justify-between gap-md py-sm"
+              >
+                <div>
+                  <p className="font-body-sm text-body-sm font-bold text-on-surface">
+                    {m.user.name}
+                  </p>
+                  <p className="font-body-sm text-[11px] text-on-surface-variant">
+                    {m.user.email} · {m.role}
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={!!m.canViewAllProjects}
+                  disabled={pendingId === m.membershipId}
+                  onChange={() => toggle(m)}
+                  className="rounded border-outline-variant text-primary-container focus:ring-primary-container"
+                />
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DataExportSection({ orgId, orgSlug }: { orgId: string; orgSlug: string }) {
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onExport = async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const data = await api.exportOrgData(orgId);
+      downloadJson(`envsync-export-${orgSlug}-${new Date().toISOString().slice(0, 10)}.json`, data);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to export data");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
+      <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
+        <Icon name="download" className="text-primary" />
+        <h2 className="font-h3 text-h3 text-on-surface">Data Export</h2>
+      </div>
+      <div className="flex flex-col gap-sm p-md">
+        <p className="font-body-sm text-body-sm text-on-surface-variant">
+          Download a JSON export of this organization&apos;s projects, environments, and
+          members. Secret values are never included.
+        </p>
+        {error && (
+          <p className="font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">{error}</p>
+        )}
+        <button
+          type="button"
+          disabled={exporting}
+          onClick={onExport}
+          className="flex w-fit items-center gap-xs rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container disabled:opacity-60"
+        >
+          <Icon
+            name={exporting ? "progress_activity" : "download"}
+            className={exporting ? "animate-spin" : ""}
+          />
+          {exporting ? "Exporting..." : "Download organization data"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function OrganizationTab() {
   const { activeOrg: org, organizations, refreshMe, switchOrg } = useAuth();
@@ -117,6 +270,10 @@ export function OrganizationTab() {
           )}
         </div>
       </div>
+
+      {isOwner && <ProjectVisibilitySection orgId={org.id} />}
+
+      {isOwner && <DataExportSection orgId={org.id} orgSlug={org.slug} />}
 
       {isOwner && (
         <div className="rounded-xl border border-[#CF222E]/30 bg-[#FFEBE9] p-md dark:border-red-500/30 dark:bg-red-500/10">

@@ -35,3 +35,8 @@ export const deleteOrg = asyncHandler(async (req, res) => {
   await orgService.deleteOrganization(req.params.orgId, req.user!.id, req.ip);
   res.status(204).send();
 });
+
+export const exportOrgData = asyncHandler(async (req, res) => {
+  const data = await orgService.exportOrganizationData(req.params.orgId);
+  res.status(200).json(data);
+});

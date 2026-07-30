@@ -164,6 +164,10 @@ export interface MemberSummary {
   membershipId: string;
   role: OrgRole;
   user: { id: string; name: string; email: string };
+  // Present only when the requester can view all projects (Owner, or an
+  // explicit view-all override) — absent for a project-scoped requester.
+  canViewAllProjects?: boolean;
+  projectAccess?: { id: string; name: string }[];
 }
 
 export interface AuditLogEntry {
@@ -234,6 +238,7 @@ export interface InviteSummary {
   id: string;
   email: string;
   role: OrgRole;
+  projectId: string | null;
   createdAt: string;
   expiresAt: string;
   acceptedAt: string | null;
@@ -248,6 +253,7 @@ export interface PublicInvite {
   orgSlug: string;
   role: OrgRole;
   email: string;
+  project: { id: string; name: string } | null;
   expiresAt: string;
   accepted: boolean;
   expired: boolean;
@@ -311,6 +317,8 @@ export const api = {
     }),
 
   deleteOrg: (orgId: string) => request<void>(`/orgs/${orgId}`, { method: "DELETE" }),
+
+  exportOrgData: (orgId: string) => request<Record<string, unknown>>(`/orgs/${orgId}/export`),
 
   listProjects: (orgId: string) => request<Project[]>(`/orgs/${orgId}/projects`),
 
@@ -384,11 +392,30 @@ export const api = {
 
   listMembers: (orgId: string) => request<MemberSummary[]>(`/orgs/${orgId}/members`),
 
-  addMember: (orgId: string, input: { email: string; role: OrgRole }) =>
+  addMember: (orgId: string, input: { email: string; role: OrgRole; projectId?: string }) =>
     request<MemberSummary>(`/orgs/${orgId}/members`, {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
+  grantProjectAccess: (orgId: string, membershipId: string, projectId: string) =>
+    request<void>(`/orgs/${orgId}/members/${membershipId}/projects/${projectId}`, {
+      method: "POST",
+    }),
+
+  revokeProjectAccess: (orgId: string, membershipId: string, projectId: string) =>
+    request<void>(`/orgs/${orgId}/members/${membershipId}/projects/${projectId}`, {
+      method: "DELETE",
+    }),
+
+  setCanViewAllProjects: (orgId: string, membershipId: string, canViewAllProjects: boolean) =>
+    request<{ id: string; canViewAllProjects: boolean }>(
+      `/orgs/${orgId}/members/${membershipId}/view-all`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ canViewAllProjects }),
+      }
+    ),
 
   listAuditLogs: (
     orgId: string,
@@ -461,7 +488,7 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  createInvite: (orgId: string, input: { email: string; role: OrgRole }) =>
+  createInvite: (orgId: string, input: { email: string; role: OrgRole; projectId?: string }) =>
     request<InviteCreated>(`/orgs/${orgId}/invites`, {
       method: "POST",
       body: JSON.stringify(input),

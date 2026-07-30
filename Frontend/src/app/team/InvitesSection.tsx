@@ -1,9 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/Icon";
 import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
+import { queryKeys } from "@/lib/query-keys";
 import { api, ApiError, InviteCreated, InviteSummary, OrgRole } from "@/lib/api";
 
 function inviteStatus(invite: InviteSummary): { label: string; className: string } {
@@ -32,10 +34,19 @@ export function InvitesSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.orgProjects(org?.id ?? ""),
+    queryFn: () => api.listProjects(org!.id),
+    enabled: !!org,
+  });
+  const projects = projectsQuery.data ?? [];
+  const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
+
   const [showForm, setShowForm] = useState(false);
   const [directAddMode, setDirectAddMode] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgRole>("DEVELOPER");
+  const [projectId, setProjectId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [justCreated, setJustCreated] = useState<InviteCreated | null>(null);
   const [directAddSuccess, setDirectAddSuccess] = useState<string | null>(null);
@@ -88,6 +99,7 @@ export function InvitesSection() {
     setJustCreated(null);
     setDirectAddSuccess(null);
     setEmail("");
+    setProjectId("");
   };
 
   const onInvite = async (e: FormEvent) => {
@@ -97,10 +109,15 @@ export function InvitesSection() {
     setError(null);
 
     try {
-      const invite = await api.createInvite(org.id, { email, role });
+      const invite = await api.createInvite(org.id, {
+        email,
+        role,
+        projectId: projectId || undefined,
+      });
       setJustCreated(invite);
       setInvites((prev) => [invite, ...prev]);
       setEmail("");
+      setProjectId("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create invite");
     } finally {
@@ -115,9 +132,14 @@ export function InvitesSection() {
     setError(null);
 
     try {
-      const membership = await api.addMember(org.id, { email, role });
+      const membership = await api.addMember(org.id, {
+        email,
+        role,
+        projectId: projectId || undefined,
+      });
       setDirectAddSuccess(`${membership.user.name} was added directly and can log in now.`);
       setEmail("");
+      setProjectId("");
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -161,7 +183,11 @@ export function InvitesSection() {
           <h2 className="font-h3 text-h3 text-on-surface">Invite Created</h2>
           <p className="font-body-sm text-body-sm text-secondary">
             Share this link with <strong>{justCreated.email}</strong> — anyone with it can
-            join as <strong>{justCreated.role}</strong>. It won&apos;t be shown again.
+            join as <strong>{justCreated.role}</strong>
+            {justCreated.projectId
+              ? ` with access to ${projectNameById.get(justCreated.projectId) ?? "one project"}`
+              : ", with no project access until one is granted"}
+            . It won&apos;t be shown again.
           </p>
           <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
             <span className="truncate pr-md font-code-md text-code-md text-on-surface">
@@ -238,6 +264,23 @@ export function InvitesSection() {
               <option value="VIEWER">Viewer</option>
             </Select>
           </div>
+          <Select
+            label="Project access"
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+          >
+            <option value="">No specific project (org-wide only)</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
+          <p className="-mt-xs font-body-sm text-[11px] text-on-surface-variant">
+            {directAddMode
+              ? "Optionally grant immediate access to one project. They'll only see this project unless given access to more later."
+              : "Optionally grant immediate access to one project when they accept. They'll only see this project unless given access to more later."}
+          </p>
           <div className="flex items-center gap-sm">
             <button
               type="submit"
@@ -309,7 +352,11 @@ export function InvitesSection() {
                       </span>
                     </div>
                     <div className="font-body-sm text-body-sm text-on-surface-variant">
-                      Invited as {invite.role} · {new Date(invite.createdAt).toLocaleDateString()}
+                      Invited as {invite.role}
+                      {invite.projectId &&
+                        ` · ${projectNameById.get(invite.projectId) ?? "a project"}`}
+                      {" · "}
+                      {new Date(invite.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                 </div>

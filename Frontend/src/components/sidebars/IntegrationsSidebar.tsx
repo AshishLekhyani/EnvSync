@@ -1,4 +1,5 @@
 import { Icon } from "../Icon";
+import { SidebarFooterLinks } from "./SidebarFooterLinks";
 
 const ITEMS = [
   { href: "#github-actions", label: "GitHub Actions", icon: "hub" },
@@ -21,6 +22,7 @@ export function IntegrationsSidebar() {
             <span className="font-label-md text-label-md">{item.label}</span>
           </a>
         ))}
+        <SidebarFooterLinks />
       </aside>
 
       <nav className="flex gap-xs overflow-x-auto border-b border-outline-variant bg-surface px-md py-sm md:hidden">

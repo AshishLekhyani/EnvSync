@@ -107,10 +107,10 @@ export function OrgSwitcher() {
               <button
                 type="button"
                 onClick={() => setCreating(true)}
-                className="flex w-full items-center gap-xs font-label-md text-label-md text-primary hover:underline"
+                className="flex w-full items-center gap-xs font-label-md text-label-md text-primary"
               >
                 <Icon name="add" style={{ fontSize: 18 }} />
-                Create Organization
+                <span className="hover:underline">Create Organization</span>
               </button>
             )}
           </div>
