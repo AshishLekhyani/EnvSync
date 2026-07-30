@@ -1,12 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useParams, useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { SideNav } from "./SideNav";
+import { usePathname, useRouter } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { ProjectsSidebar } from "./sidebars/ProjectsSidebar";
+import { TeamSidebar } from "./sidebars/TeamSidebar";
+import { SettingsSidebar } from "./sidebars/SettingsSidebar";
+import { AuditSidebar } from "./sidebars/AuditSidebar";
+import { IntegrationsSidebar } from "./sidebars/IntegrationsSidebar";
 import { TopNav } from "./TopNav";
 import { Icon } from "./Icon";
 import { useAuth } from "@/lib/auth-context";
+
+function SectionSidebar({ pathname }: { pathname: string }) {
+  if (pathname === "/projects" || pathname.startsWith("/projects/")) {
+    return <ProjectsSidebar />;
+  }
+  if (pathname.startsWith("/team")) {
+    return <TeamSidebar />;
+  }
+  if (pathname.startsWith("/audit")) {
+    return <AuditSidebar />;
+  }
+  if (pathname.startsWith("/integrations")) {
+    return <IntegrationsSidebar />;
+  }
+  if (pathname.startsWith("/settings")) {
+    return <SettingsSidebar />;
+  }
+  return null;
+}
 
 const MOBILE = [
   {
@@ -50,9 +73,7 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const params = useParams<{ projectId?: string }>();
   const { user, loading } = useAuth();
-  const showSideNav = !!params.projectId;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -76,11 +97,11 @@ export function AppShell({
         onSearch={onSearch}
         trailing={trailing}
       />
-      <div className="flex min-h-[calc(100vh-64px)]">
-        {showSideNav && <SideNav projectId={params.projectId!} />}
-        <main className={`${mainClassName} ${showSideNav ? "md:ml-64" : ""}`}>
-          {children}
-        </main>
+      <Suspense fallback={null}>
+        <SectionSidebar pathname={pathname} />
+      </Suspense>
+      <div className="min-h-[calc(100vh-64px)]">
+        <main className={`${mainClassName} md:ml-64`}>{children}</main>
       </div>
 
       {showMobileNav && (

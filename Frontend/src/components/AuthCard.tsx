@@ -190,12 +190,12 @@ export function AuthCard({
 
         {isLogin && (
           <div className="flex items-center justify-end">
-            <span
-              className="cursor-not-allowed font-body-sm text-body-sm font-medium text-secondary opacity-60"
-              title="Coming soon"
+            <Link
+              href="/forgot-password"
+              className="font-body-sm text-body-sm font-medium text-primary hover:underline"
             >
               Forgot password?
-            </span>
+            </Link>
           </div>
         )}
 

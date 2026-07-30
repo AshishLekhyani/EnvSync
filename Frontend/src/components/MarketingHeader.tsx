@@ -5,7 +5,7 @@ const LINKS = [
   { href: "#features", label: "Features" },
   { href: "#cli", label: "CLI" },
   { href: "#security", label: "Security" },
-  { href: "#docs", label: "Docs" },
+  { href: "/docs", label: "Docs" },
 ] as const;
 
 export function MarketingHeader() {

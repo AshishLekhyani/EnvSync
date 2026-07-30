@@ -204,7 +204,10 @@ aws secretsmanager put-secret-value \\
           </div>
 
           <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
-            <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
+            <div
+              id="github-actions"
+              className="flex scroll-mt-24 flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]"
+            >
               <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
                 <Icon name="hub" className="text-primary" />
                 <h2 className="font-h3 text-h3 text-on-surface">GitHub Actions</h2>
@@ -222,7 +225,10 @@ aws secretsmanager put-secret-value \\
               </div>
             </div>
 
-            <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
+            <div
+              id="docker"
+              className="flex scroll-mt-24 flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]"
+            >
               <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
                 <Icon name="deployed_code" className="text-primary" />
                 <h2 className="font-h3 text-h3 text-on-surface">Docker</h2>
@@ -240,7 +246,10 @@ aws secretsmanager put-secret-value \\
               </div>
             </div>
 
-            <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
+            <div
+              id="vercel"
+              className="flex scroll-mt-24 flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]"
+            >
               <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
                 <Icon name="bolt" className="text-primary" />
                 <h2 className="font-h3 text-h3 text-on-surface">Vercel</h2>
@@ -258,7 +267,10 @@ aws secretsmanager put-secret-value \\
               </div>
             </div>
 
-            <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
+            <div
+              id="aws"
+              className="flex scroll-mt-24 flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]"
+            >
               <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
                 <Icon name="lock" className="text-primary" />
                 <h2 className="font-h3 text-h3 text-on-surface">AWS Secrets Manager</h2>

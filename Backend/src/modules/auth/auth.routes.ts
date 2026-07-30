@@ -4,10 +4,18 @@ import * as authController from "./auth.controller";
 import * as githubController from "./github.controller";
 import * as googleController from "./google.controller";
 import { requireAuth } from "./auth.middleware";
-import { loginRateLimiter, refreshRateLimiter, signupRateLimiter } from "./auth.rateLimit";
+import {
+  forgotPasswordRateLimiter,
+  loginRateLimiter,
+  refreshRateLimiter,
+  resetPasswordRateLimiter,
+  signupRateLimiter,
+} from "./auth.rateLimit";
 import {
   changePasswordSchema,
+  forgotPasswordSchema,
   loginSchema,
+  resetPasswordSchema,
   signupSchema,
   updateProfileSchema,
 } from "./auth.validators";
@@ -40,6 +48,18 @@ authRouter.post(
   requireAuth,
   validate({ body: changePasswordSchema }),
   authController.changePassword
+);
+authRouter.post(
+  "/forgot-password",
+  forgotPasswordRateLimiter,
+  validate({ body: forgotPasswordSchema }),
+  authController.forgotPassword
+);
+authRouter.post(
+  "/reset-password",
+  resetPasswordRateLimiter,
+  validate({ body: resetPasswordSchema }),
+  authController.resetPassword
 );
 authRouter.get("/sessions", requireAuth, authController.listSessions);
 authRouter.delete("/sessions/:sessionId", requireAuth, authController.revokeSession);

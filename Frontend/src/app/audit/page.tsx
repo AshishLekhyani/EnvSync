@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
@@ -8,8 +9,10 @@ import { api, ApiError, AuditLogEntry } from "@/lib/api";
 import { getActionDisplay } from "@/lib/auditActions";
 import { exportAuditLogsCsv } from "@/lib/auditExport";
 
-export default function AuditPage() {
+function AuditPageContent() {
   const { activeOrg: org } = useAuth();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
 
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,7 +29,7 @@ export default function AuditPage() {
     setLoading(true);
 
     api
-      .listAuditLogs(org.id, { limit: 50 })
+      .listAuditLogs(org.id, { limit: 50, projectId: projectId ?? undefined })
       .then((result) => {
         if (!cancelled) {
           setLogs(result);
@@ -45,7 +48,7 @@ export default function AuditPage() {
     return () => {
       cancelled = true;
     };
-  }, [org]);
+  }, [org, projectId]);
 
   const onExport = async () => {
     if (!org) return;
@@ -111,7 +114,7 @@ export default function AuditPage() {
               </div>
             ) : logs.length === 0 ? (
               <p className="px-md py-xl text-center font-body-md text-body-md text-secondary">
-                No activity yet.
+                {projectId ? "No activity for this project yet." : "No activity yet."}
               </p>
             ) : (
               <div className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
@@ -155,5 +158,13 @@ export default function AuditPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function AuditPage() {
+  return (
+    <Suspense fallback={null}>
+      <AuditPageContent />
+    </Suspense>
   );
 }

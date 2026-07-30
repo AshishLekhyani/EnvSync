@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { prisma } from "../../db/prisma";
 import {
   BadRequestError,
@@ -5,6 +6,7 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from "../../common/errors/AppError";
+import { sha256Hex } from "../../common/hash";
 import { hashPassword, verifyPassword } from "./password";
 import {
   generateRefreshToken,
@@ -12,8 +14,18 @@ import {
   hashRefreshToken,
   signAccessToken,
 } from "./tokens";
-import { ChangePasswordInput, LoginInput, SignupInput, UpdateProfileInput } from "./auth.validators";
+import {
+  ChangePasswordInput,
+  ForgotPasswordInput,
+  LoginInput,
+  ResetPasswordInput,
+  SignupInput,
+  UpdateProfileInput,
+} from "./auth.validators";
 import { notifyUserSessionsRevoked } from "./sse";
+
+const RESET_TOKEN_PREFIX = "reset_";
+const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000;
 
 export interface SessionMeta {
   userAgent?: string;
@@ -233,4 +245,54 @@ export async function getMe(userId: string) {
       role: m.role,
     })),
   };
+}
+
+export async function requestPasswordReset(input: ForgotPasswordInput) {
+  const user = await prisma.user.findUnique({ where: { email: input.email } });
+
+  if (!user || user.authProvider !== "PASSWORD") {
+    return { resetToken: null };
+  }
+
+  const rawToken = RESET_TOKEN_PREFIX + crypto.randomBytes(32).toString("base64url");
+  const tokenHash = sha256Hex(rawToken);
+
+  await prisma.passwordResetToken.create({
+    data: {
+      userId: user.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + RESET_TOKEN_EXPIRY_MS),
+    },
+  });
+
+  return { resetToken: rawToken };
+}
+
+export async function resetPassword(input: ResetPasswordInput) {
+  const tokenHash = sha256Hex(input.token);
+
+  const resetToken = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+
+  if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+    throw new UnauthorizedError("This reset link is invalid or has expired");
+  }
+
+  const newHash = await hashPassword(input.newPassword);
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: resetToken.userId },
+      data: { passwordHash: newHash },
+    }),
+    prisma.passwordResetToken.update({
+      where: { id: resetToken.id },
+      data: { usedAt: new Date() },
+    }),
+    prisma.session.updateMany({
+      where: { userId: resetToken.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
+
+  notifyUserSessionsRevoked(resetToken.userId);
 }

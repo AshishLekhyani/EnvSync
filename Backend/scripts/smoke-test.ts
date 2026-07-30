@@ -1186,6 +1186,114 @@ async function main() {
   }
   ok("changing password revokes every other active session but keeps the current one");
 
+  res = await fetch(`${BASE}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: `nonexistent-${rand}@example.com` }),
+  });
+  const nonexistentForgot = await res.json();
+  if (res.status !== 200 || nonexistentForgot.resetToken !== null) {
+    fail("forgot-password for a nonexistent email should still be 200 with resetToken:null", nonexistentForgot);
+  }
+  ok("forgot-password for a nonexistent email returns 200 with no token (no enumeration leak)");
+
+  res = await fetch(`${BASE}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: fakeGithubProfile.email }),
+  });
+  const oauthForgot = await res.json();
+  if (res.status !== 200 || oauthForgot.resetToken !== null) {
+    fail("forgot-password for an OAuth-only account should return resetToken:null", oauthForgot);
+  }
+  ok("forgot-password for an OAuth-only account returns no token (nothing to reset)");
+
+  res = await fetch(`${BASE}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: profileTestEmail }),
+  });
+  const realForgot = await res.json();
+  if (res.status !== 200 || typeof realForgot.resetToken !== "string") {
+    fail("forgot-password for a real password account should return a resetToken", realForgot);
+  }
+  ok("forgot-password for a real password account returns a resetToken");
+
+  res = await fetch(`${BASE}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: "reset_garbage-token-value", newPassword: "irrelevant123" }),
+  });
+  if (res.status !== 401) fail("reset-password with a garbage token should be 401", await res.text());
+  ok("reset-password rejects an invalid token (401)");
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: profileTestEmail, password: "newsupersecret456" }),
+  });
+  const preResetLogin = await res.json();
+  if (res.status !== 200) fail("login before reset should still succeed with the current password", preResetLogin);
+  const preResetRefreshCookie = extractCookie(res.headers.get("set-cookie"), "refreshToken");
+
+  const newResetPassword = "resetflowpassword789";
+  res = await fetch(`${BASE}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: realForgot.resetToken, newPassword: newResetPassword }),
+  });
+  if (res.status !== 204) fail("reset-password with a valid token should be 204", await res.text());
+  ok("reset-password succeeds with a valid token (204)");
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: profileTestEmail, password: "newsupersecret456" }),
+  });
+  if (res.status !== 401) fail("login with the pre-reset password should now be rejected", await res.text());
+  ok("old password is rejected after reset");
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: profileTestEmail, password: newResetPassword }),
+  });
+  if (res.status !== 200) fail("login with the new post-reset password should succeed", await res.text());
+  ok("new password works after reset");
+
+  res = await fetch(`${BASE}/auth/refresh`, {
+    method: "POST",
+    headers: { Cookie: `refreshToken=${preResetRefreshCookie}` },
+  });
+  if (res.status !== 401) fail("a session that existed before the reset should be revoked", await res.text());
+  ok("resetting a password revokes every session that existed beforehand");
+
+  res = await fetch(`${BASE}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: realForgot.resetToken, newPassword: "anothernewpassword123" }),
+  });
+  if (res.status !== 401) fail("reusing an already-used reset token should be 401", await res.text());
+  ok("an already-used reset token is rejected (401)");
+
+  res = await fetch(`${BASE}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: profileTestEmail }),
+  });
+  const secondForgot = await res.json();
+  await prisma.passwordResetToken.updateMany({
+    where: { userId: (await prisma.user.findUnique({ where: { email: profileTestEmail } }))!.id },
+    data: { expiresAt: new Date(Date.now() - 1000) },
+  });
+  res = await fetch(`${BASE}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: secondForgot.resetToken, newPassword: "yetanotherpassword123" }),
+  });
+  if (res.status !== 401) fail("an expired reset token should be 401", await res.text());
+  ok("an expired reset token is rejected (401)");
+
   const hammerEmail = `hammer-${rand}@example.com`;
   res = await fetch(`${BASE}/auth/signup`, {
     method: "POST",

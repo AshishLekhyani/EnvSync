@@ -32,6 +32,7 @@ model User {
   notifications           Notification[]  @relation("NotificationRecipient")
   invitesSent             OrgInvite[]     @relation("InviteInviter")
   invitesAccepted         OrgInvite[]     @relation("InviteAcceptor")
+  passwordResetTokens     PasswordResetToken[]
 
   @@unique([authProvider, providerId])
 }
@@ -279,4 +280,17 @@ model OrgInvite {
 
   @@index([orgId])
   @@index([email])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

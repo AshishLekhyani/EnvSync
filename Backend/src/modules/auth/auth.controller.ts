@@ -3,7 +3,14 @@ import { asyncHandler } from "../../common/middleware/asyncHandler";
 import { UnauthorizedError } from "../../common/errors/AppError";
 import { env } from "../../config/env";
 import * as authService from "./auth.service";
-import { ChangePasswordInput, LoginInput, SignupInput, UpdateProfileInput } from "./auth.validators";
+import {
+  ChangePasswordInput,
+  ForgotPasswordInput,
+  LoginInput,
+  ResetPasswordInput,
+  SignupInput,
+  UpdateProfileInput,
+} from "./auth.validators";
 import { REFRESH_TOKEN_MAX_AGE_MS } from "./tokens";
 import { registerConnection, unregisterConnection } from "./sse";
 
@@ -126,5 +133,15 @@ export const changePassword = asyncHandler(async (req, res) => {
     req.body as ChangePasswordInput,
     currentSession?.id
   );
+  res.status(204).send();
+});
+
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const result = await authService.requestPasswordReset(req.body as ForgotPasswordInput);
+  res.status(200).json(result);
+});
+
+export const resetPassword = asyncHandler(async (req, res) => {
+  await authService.resetPassword(req.body as ResetPasswordInput);
   res.status(204).send();
 });

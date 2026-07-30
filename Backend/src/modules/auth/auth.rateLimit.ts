@@ -37,3 +37,24 @@ export const refreshRateLimiter = rateLimit({
   keyGenerator: (req) => ipKeyGenerator(req.ip ?? ""),
   handler: rateLimitHandler,
 });
+
+export const forgotPasswordRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? ""),
+  handler: rateLimitHandler,
+});
+
+// Separate from forgotPasswordRateLimiter: submitting a reset token means guessing a 256-bit
+// value, which a generous limit doesn't meaningfully aid — unlike forgot-password's account
+// enumeration/spam risk, which is why that one stays tight.
+export const resetPasswordRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? ""),
+  handler: rateLimitHandler,
+});

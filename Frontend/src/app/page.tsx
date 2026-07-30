@@ -1,5 +1,6 @@
 ﻿import Link from "next/link";
 import { GuestOnly } from "@/components/GuestOnly";
+import { MarketingFooter } from "@/components/MarketingFooter";
 import { MarketingHeader } from "@/components/MarketingHeader";
 import { Icon } from "@/components/Icon";
 
@@ -35,12 +36,12 @@ export default function LandingPage() {
               >
                 Get Started for Free
               </Link>
-              <a
-                href="#docs"
+              <Link
+                href="/docs"
                 className="rounded-lg border border-outline-variant bg-surface-container-low px-xl py-md font-label-md text-label-md text-on-surface transition-all hover:bg-surface-container-high"
               >
                 View the Docs
-              </a>
+              </Link>
             </div>
           </div>
 
@@ -348,71 +349,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* Footer */}
-      <footer
-        id="docs"
-        className="scroll-mt-24 border-t border-outline-variant bg-surface-container-low py-xl"
-      >
-        <div className="mx-auto grid max-w-[1280px] grid-cols-2 gap-xl px-margin-mobile md:grid-cols-4 md:px-margin-desktop lg:grid-cols-5">
-          <div className="col-span-2 lg:col-span-1">
-            <span className="mb-md block font-h3 text-h3 font-black text-primary">
-              EnvSync
-            </span>
-            <p className="mb-md font-body-sm text-body-sm text-secondary">
-              The modern standard for secret management and environment syncing.
-            </p>
-            <div className="flex gap-md">
-              <Icon name="public" className="text-outline" />
-              <Icon name="groups" className="text-outline" />
-              <Icon name="hub" className="text-outline" />
-            </div>
-          </div>
-          {[
-            {
-              title: "Product",
-              items: ["Changelog", "Documentation", "CLI Reference", "Integrations"],
-            },
-            {
-              title: "Company",
-              items: ["About", "Blog", "Careers", "Customers"],
-            },
-            {
-              title: "Security",
-              items: ["Trust Center", "Privacy", "Terms", "Security Portal"],
-            },
-          ].map((col) => (
-            <div key={col.title}>
-              <h4 className="mb-md font-label-md text-label-md text-on-surface">
-                {col.title}
-              </h4>
-              <ul className="space-y-sm font-body-sm text-body-sm text-secondary">
-                {col.items.map((item) =>
-                  item === "Integrations" ? (
-                    <li key={item}>
-                      <Link href="/integrations" className="hover:text-primary">
-                        {item}
-                      </Link>
-                    </li>
-                  ) : (
-                    <li
-                      key={item}
-                      className="cursor-not-allowed opacity-60"
-                      title="Coming soon"
-                    >
-                      {item}
-                    </li>
-                  )
-                )}
-              </ul>
-            </div>
-          ))}
-        </div>
-        <div className="mx-auto mt-xl max-w-[1280px] border-t border-outline-variant px-margin-mobile pt-lg text-center md:px-margin-desktop md:text-left">
-          <p className="font-body-sm text-body-sm text-outline">
-            © 2026 EnvSync Inc. All rights reserved.
-          </p>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
     </GuestOnly>
   );
