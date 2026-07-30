@@ -189,20 +189,13 @@ export function AuthCard({
         </label>
 
         {isLogin && (
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-sm font-body-sm text-body-sm text-secondary">
-              <input
-                type="checkbox"
-                className="rounded border-outline-variant text-primary-container focus:ring-primary-container"
-              />
-              Remember me
-            </label>
-            <a
-              href="#"
-              className="font-body-sm text-body-sm font-medium text-primary hover:underline"
+          <div className="flex items-center justify-end">
+            <span
+              className="cursor-not-allowed font-body-sm text-body-sm font-medium text-secondary opacity-60"
+              title="Coming soon"
             >
               Forgot password?
-            </a>
+            </span>
           </div>
         )}
 

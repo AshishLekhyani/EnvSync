@@ -225,7 +225,10 @@ export default function LandingPage() {
                       <Icon name="arrow_forward" style={{ fontSize: 16 }} />
                     </Link>
                   ) : (
-                    <span className="flex cursor-pointer items-center gap-xs font-label-md text-label-md text-primary">
+                    <span
+                      className="flex cursor-not-allowed items-center gap-xs font-label-md text-label-md text-secondary opacity-60"
+                      title="Coming soon"
+                    >
                       {card.cta}{" "}
                       <Icon name="arrow_forward" style={{ fontSize: 16 }} />
                     </span>
@@ -359,18 +362,9 @@ export default function LandingPage() {
               The modern standard for secret management and environment syncing.
             </p>
             <div className="flex gap-md">
-              <Icon
-                name="public"
-                className="cursor-pointer text-secondary hover:text-primary"
-              />
-              <Icon
-                name="groups"
-                className="cursor-pointer text-secondary hover:text-primary"
-              />
-              <Icon
-                name="hub"
-                className="cursor-pointer text-secondary hover:text-primary"
-              />
+              <Icon name="public" className="text-outline" />
+              <Icon name="groups" className="text-outline" />
+              <Icon name="hub" className="text-outline" />
             </div>
           </div>
           {[
@@ -400,7 +394,11 @@ export default function LandingPage() {
                       </Link>
                     </li>
                   ) : (
-                    <li key={item} className="cursor-pointer hover:text-primary">
+                    <li
+                      key={item}
+                      className="cursor-not-allowed opacity-60"
+                      title="Coming soon"
+                    >
                       {item}
                     </li>
                   )
