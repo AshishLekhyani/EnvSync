@@ -1,6 +1,6 @@
 import { EnvironmentType, OrgRole } from "@prisma/client";
 
-const ROLE_WEIGHT: Record<OrgRole, number> = {
+export const ROLE_WEIGHT: Record<OrgRole, number> = {
   VIEWER: 1,
   DEVELOPER: 2,
   ADMIN: 3,

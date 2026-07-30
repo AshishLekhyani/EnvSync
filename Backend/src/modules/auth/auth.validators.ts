@@ -34,3 +34,8 @@ export const resetPasswordSchema = z.object({
   newPassword: z.string().min(8).max(200),
 });
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const deleteAccountSchema = z.object({
+  confirmEmail: z.string().email(),
+});
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;

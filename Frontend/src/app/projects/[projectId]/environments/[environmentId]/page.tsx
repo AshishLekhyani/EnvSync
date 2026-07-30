@@ -720,7 +720,7 @@ export default function EnvironmentSecretsPage() {
                                             : MASKED}
                                         </span>
                                         <span className="font-body-sm text-body-sm text-on-surface-variant">
-                                          {v.author.name}
+                                          {v.author?.name ?? "Unknown"}
                                         </span>
                                         <span className="font-body-sm text-body-sm text-secondary">
                                           {new Date(v.createdAt).toLocaleString()}

@@ -4,21 +4,25 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
+import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
 import { queryKeys } from "@/lib/query-keys";
-import { api, ApiError, MemberSummary } from "@/lib/api";
+import { assignableRoles } from "@/lib/roles";
+import { api, ApiError, MemberSummary, OrgRole } from "@/lib/api";
 import { roleBadgeClass } from "@/lib/roleBadge";
 
 function ProjectAccessRow({
   orgId,
   member,
   onUpdate,
+  onRemoved,
 }: {
   orgId: string;
   member: MemberSummary;
   onUpdate: (membershipId: string, patch: Partial<MemberSummary>) => void;
+  onRemoved: (membershipId: string) => void;
 }) {
-  const { activeOrg: org } = useAuth();
+  const { activeOrg: org, user } = useAuth();
   const isOwner = org?.role === "OWNER";
 
   const projectsQuery = useQuery({
@@ -29,7 +33,54 @@ function ProjectAccessRow({
 
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [pendingViewAll, setPendingViewAll] = useState(false);
+  const [changingRole, setChangingRole] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const roleOptions = org ? assignableRoles(org.role) : [];
+  const canChangeRole = member.role !== "OWNER" && roleOptions.length > 0;
+  const canRemove = member.role === "OWNER" ? member.user.id === user?.id : true;
+
+  const onChangeRole = async (nextRole: OrgRole) => {
+    if (nextRole === member.role) return;
+    if (
+      !window.confirm(`Change ${member.user.name}'s role from ${member.role} to ${nextRole}?`)
+    ) {
+      return;
+    }
+    setChangingRole(true);
+    setError(null);
+    try {
+      await api.updateMemberRole(orgId, member.membershipId, nextRole);
+      onUpdate(member.membershipId, { role: nextRole });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to change role");
+    } finally {
+      setChangingRole(false);
+    }
+  };
+
+  const onRemove = async () => {
+    const isSelf = member.user.id === user?.id;
+    if (
+      !window.confirm(
+        isSelf
+          ? "Leave this organization? You'll lose access immediately."
+          : `Remove ${member.user.name} from this organization?`
+      )
+    ) {
+      return;
+    }
+    setRemoving(true);
+    setError(null);
+    try {
+      await api.removeMember(orgId, member.membershipId);
+      onRemoved(member.membershipId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to remove member");
+      setRemoving(false);
+    }
+  };
 
   const grantedIds = new Set((member.projectAccess ?? []).map((p) => p.id));
 
@@ -73,6 +124,45 @@ function ProjectAccessRow({
     <div className="border-t border-[#D0D7DE] bg-surface-container-low px-md py-md dark:border-outline-variant">
       {error && (
         <p className="mb-sm font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">{error}</p>
+      )}
+
+      {(canChangeRole || canRemove) && (
+        <div className="mb-md flex flex-wrap items-center gap-md">
+          {canChangeRole && (
+            <Select
+              label="Role"
+              wrapperClassName="w-40"
+              value={member.role}
+              disabled={changingRole}
+              onChange={(e) => onChangeRole(e.target.value as OrgRole)}
+            >
+              <option value={member.role}>
+                {member.role.charAt(0) + member.role.slice(1).toLowerCase()}
+              </option>
+              {roleOptions
+                .filter((r) => r !== member.role)
+                .map((r) => (
+                  <option key={r} value={r}>
+                    {r.charAt(0) + r.slice(1).toLowerCase()}
+                  </option>
+                ))}
+            </Select>
+          )}
+          {canRemove && (
+            <button
+              type="button"
+              disabled={removing}
+              onClick={onRemove}
+              className="font-label-md text-label-md text-xs text-error hover:underline disabled:opacity-50"
+            >
+              {removing
+                ? "Removing..."
+                : member.user.id === user?.id
+                  ? "Leave organization"
+                  : "Remove from organization"}
+            </button>
+          )}
+        </div>
       )}
 
       {isOwner && member.role !== "OWNER" && (
@@ -177,6 +267,11 @@ export function MembersSection({ search }: { search: string }) {
     );
   };
 
+  const onMemberRemoved = (membershipId: string) => {
+    setMembers((prev) => prev.filter((m) => m.membershipId !== membershipId));
+    setExpandedId((prev) => (prev === membershipId ? null : prev));
+  };
+
   const filteredMembers = search.trim()
     ? members.filter((m) => {
         const q = search.trim().toLowerCase();
@@ -260,7 +355,12 @@ export function MembersSection({ search }: { search: string }) {
                     )}
                   </div>
                   {expanded && (
-                    <ProjectAccessRow orgId={org.id} member={m} onUpdate={onMemberUpdate} />
+                    <ProjectAccessRow
+                      orgId={org.id}
+                      member={m}
+                      onUpdate={onMemberUpdate}
+                      onRemoved={onMemberRemoved}
+                    />
                   )}
                 </div>
               );

@@ -167,6 +167,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // tab/device (or by an admin), the backend notifies over SSE. We don't know
   // whether it was THIS tab's session, so we just verify via a silent refresh —
   // harmless if it was a different session, forces logout if it was this one.
+  //
+  // The same connection also carries "access-changed" events (project access
+  // granted/revoked, role changed, view-all toggled, removed from an org) so
+  // an already-open tab reflects it immediately instead of needing a reload.
   useEffect(() => {
     if (!user) return;
 
@@ -178,10 +182,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     };
 
+    const onAccessChanged = (event: MessageEvent) => {
+      let orgId: string | undefined;
+      try {
+        orgId = JSON.parse(event.data)?.orgId;
+      } catch {
+        /* ignore malformed payload */
+      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.me() });
+      if (orgId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.orgProjects(orgId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.orgMembers(orgId) });
+      }
+    };
+
     source.addEventListener("session-revoked", onRevoked);
+    source.addEventListener("access-changed", onAccessChanged);
 
     return () => {
       source.removeEventListener("session-revoked", onRevoked);
+      source.removeEventListener("access-changed", onAccessChanged);
       source.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

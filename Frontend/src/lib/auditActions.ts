@@ -33,6 +33,40 @@ export const ACTION_DISPLAY: Record<string, ActionDisplay> = {
   "secret.rotate": { icon: "autorenew", label: "Rotated secret", iconClass: "text-primary" },
   "apitoken.create": { icon: "key", label: "Created API token", iconClass: "text-primary" },
   "apitoken.revoke": { icon: "block", label: "Revoked API token", iconClass: "text-error" },
+  "permission.override_set": {
+    icon: "tune",
+    label: "Changed environment permission",
+    iconClass: "text-primary",
+  },
+  "permission.override_reset": {
+    icon: "settings_backup_restore",
+    label: "Reset environment permission",
+    iconClass: "text-primary",
+  },
+  "invite.create": { icon: "mail", label: "Sent invite", iconClass: "text-primary" },
+  "invite.accept": { icon: "how_to_reg", label: "Accepted invite", iconClass: "text-primary" },
+  "invite.approve": { icon: "check_circle", label: "Approved invite", iconClass: "text-primary" },
+  "invite.reject": { icon: "cancel", label: "Rejected invite", iconClass: "text-error" },
+  "invite.auto_approve_set": {
+    icon: "rule",
+    label: "Changed invite auto-approval",
+    iconClass: "text-primary",
+  },
+  "member.project_access_grant": {
+    icon: "add_moderator",
+    label: "Granted project access",
+    iconClass: "text-primary",
+  },
+  "member.project_access_revoke": {
+    icon: "remove_moderator",
+    label: "Revoked project access",
+    iconClass: "text-error",
+  },
+  "member.view_all_set": {
+    icon: "visibility",
+    label: "Changed project visibility",
+    iconClass: "text-primary",
+  },
 };
 
 const FALLBACK_DISPLAY: ActionDisplay = {
@@ -43,4 +77,96 @@ const FALLBACK_DISPLAY: ActionDisplay = {
 
 export function getActionDisplay(action: string): ActionDisplay {
   return ACTION_DISPLAY[action] ?? { ...FALLBACK_DISPLAY, label: action };
+}
+
+interface AuditLogLike {
+  action: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+export function describeAuditLog(log: AuditLogLike): string | null {
+  const m = log.metadata ?? {};
+
+  switch (log.action) {
+    case "member.role_change": {
+      const prev = asString(m.previousRole);
+      const next = asString(m.newRole);
+      return prev && next ? `${prev} → ${next}` : null;
+    }
+    case "member.project_access_grant":
+    case "member.project_access_revoke": {
+      const project = asString(m.projectName);
+      const email = asString(m.targetUserEmail);
+      if (!project) return null;
+      const verb = log.action === "member.project_access_grant" ? "Granted" : "Revoked";
+      return email ? `${verb} access to ${project} for ${email}` : `${verb} access to ${project}`;
+    }
+    case "member.view_all_set": {
+      const email = asString(m.targetUserEmail);
+      const on = m.canViewAllProjects === true;
+      const verb = on ? "can now see every project" : "restricted to granted projects";
+      return email ? `${email} ${verb}` : null;
+    }
+    case "member.add":
+    case "invite.accept": {
+      const role = asString(m.role);
+      return role ? `Joined as ${role}` : null;
+    }
+    case "invite.create": {
+      const email = asString(m.email);
+      const role = asString(m.role);
+      return email && role ? `Invited ${email} as ${role}` : null;
+    }
+    case "org.update": {
+      const prev = asString(m.previousName);
+      const next = asString(m.newName);
+      return prev && next && prev !== next ? `Renamed from '${prev}' to '${next}'` : null;
+    }
+    case "project.update": {
+      const prevName = asString(m.previousName);
+      const newName = asString(m.newName);
+      if (prevName && newName && prevName !== newName) {
+        return `Renamed from '${prevName}' to '${newName}'`;
+      }
+      return null;
+    }
+    case "project.create":
+    case "project.delete":
+    case "org.delete": {
+      const name = asString(m.name);
+      return name ? `'${name}'` : null;
+    }
+    case "environment.create":
+    case "environment.delete": {
+      const type = asString(m.type);
+      return type ? type : null;
+    }
+    case "secret.create":
+    case "secret.update":
+    case "secret.delete":
+    case "secret.rotate":
+    case "secret.restore":
+    case "secret.expiry_update": {
+      const envName = asString(m.environmentName);
+      const envType = asString(m.environmentType);
+      return envName ? `in ${envName}${envType ? ` (${envType})` : ""}` : null;
+    }
+    case "permission.override_set": {
+      const role = asString(m.role);
+      const envType = asString(m.environmentType);
+      const access = asString(m.access);
+      return role && envType && access ? `${role} on ${envType} → ${access}` : null;
+    }
+    case "permission.override_reset": {
+      const role = asString(m.role);
+      const envType = asString(m.environmentType);
+      return role && envType ? `${role} on ${envType} reset to default` : null;
+    }
+    default:
+      return null;
+  }
 }

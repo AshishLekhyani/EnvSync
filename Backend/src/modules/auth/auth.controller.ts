@@ -5,6 +5,7 @@ import { env } from "../../config/env";
 import * as authService from "./auth.service";
 import {
   ChangePasswordInput,
+  DeleteAccountInput,
   ForgotPasswordInput,
   LoginInput,
   ResetPasswordInput,
@@ -143,5 +144,11 @@ export const forgotPassword = asyncHandler(async (req, res) => {
 
 export const resetPassword = asyncHandler(async (req, res) => {
   await authService.resetPassword(req.body as ResetPasswordInput);
+  res.status(204).send();
+});
+
+export const deleteAccount = asyncHandler(async (req, res) => {
+  await authService.deleteAccount(req.user!.id, req.body as DeleteAccountInput);
+  res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
   res.status(204).send();
 });

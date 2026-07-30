@@ -1,11 +1,11 @@
 import crypto from "node:crypto";
-import { OrgRole } from "@prisma/client";
+import { InviteApprovalStatus, OrgRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { sha256Hex } from "../../common/hash";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
 import { assertCanAssignRole, Actor } from "../orgs/membership.service";
 import { writeAuditLog } from "../audit/audit.service";
-import { CreateInviteInput } from "./invite.validators";
+import { CreateInviteInput, SetBlanketAutoApproveInput } from "./invite.validators";
 
 export const INVITE_PREFIX = "invite_";
 const INVITE_EXPIRY_DAYS = 7;
@@ -19,6 +19,7 @@ interface InviteRow {
   email: string;
   role: OrgRole;
   projectId: string | null;
+  approvalStatus: InviteApprovalStatus;
   createdAt: Date;
   expiresAt: Date;
   acceptedAt: Date | null;
@@ -30,10 +31,56 @@ function toSummary(invite: InviteRow) {
     email: invite.email,
     role: invite.role,
     projectId: invite.projectId,
+    approvalStatus: invite.approvalStatus,
     createdAt: invite.createdAt,
     expiresAt: invite.expiresAt,
     acceptedAt: invite.acceptedAt,
   };
+}
+
+async function notifyApprovers(
+  orgId: string,
+  invite: { id: string; email: string; role: OrgRole },
+  inviter: { id: string; name: string }
+) {
+  const inviterMembership = await prisma.orgMembership.findUnique({
+    where: { userId_orgId: { userId: inviter.id, orgId } },
+    select: { invitedById: true },
+  });
+
+  let recipientIds: string[] = [];
+
+  if (inviterMembership?.invitedById) {
+    const traceableApprover = await prisma.orgMembership.findUnique({
+      where: { userId_orgId: { userId: inviterMembership.invitedById, orgId } },
+      select: { userId: true, role: true },
+    });
+    if (traceableApprover && (traceableApprover.role === "OWNER" || traceableApprover.role === "ADMIN")) {
+      recipientIds = [traceableApprover.userId];
+    }
+  }
+
+  if (recipientIds.length === 0) {
+    const admins = await prisma.orgMembership.findMany({
+      where: { orgId, role: { in: ["OWNER", "ADMIN"] } },
+      select: { userId: true },
+    });
+    recipientIds = admins.map((a) => a.userId);
+  }
+
+  if (recipientIds.length === 0) return;
+
+  await prisma.notification.createMany({
+    data: recipientIds.map((recipientId) => ({
+      orgId,
+      recipientId,
+      type: "invite.approval_requested",
+      message: `${inviter.name} wants to invite ${invite.email} as ${invite.role}`,
+      targetType: "OrgInvite",
+      targetId: invite.id,
+      metadata: { orgId, inviteId: invite.id, inviteEmail: invite.email, inviterName: inviter.name },
+    })),
+  });
 }
 
 export async function createInvite(
@@ -61,6 +108,16 @@ export async function createInvite(
     }
   }
 
+  let needsApproval = actor.role === "DEVELOPER";
+  if (needsApproval) {
+    const autoApproveRule = await prisma.inviteAutoApproveRule.findFirst({
+      where: { orgId, OR: [{ inviterId: actor.id }, { inviterId: null }] },
+    });
+    if (autoApproveRule) {
+      needsApproval = false;
+    }
+  }
+
   const rawToken = generateRawToken();
   const tokenHash = sha256Hex(rawToken);
   const expiresAt = new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
@@ -78,6 +135,7 @@ export async function createInvite(
         projectId: input.projectId,
         tokenHash,
         invitedById: actor.id,
+        approvalStatus: needsApproval ? "PENDING" : "NONE",
         expiresAt,
       },
     });
@@ -89,12 +147,25 @@ export async function createInvite(
       targetType: "OrgInvite",
       targetId: invite.id,
       projectId: invite.projectId ?? undefined,
-      metadata: { email: input.email, role: input.role, projectId: input.projectId ?? null },
+      metadata: {
+        email: input.email,
+        role: input.role,
+        projectId: input.projectId ?? null,
+        approvalStatus: invite.approvalStatus,
+      },
       ipAddress,
     });
 
     return invite;
   });
+
+  if (needsApproval) {
+    const inviter = await prisma.user.findUniqueOrThrow({
+      where: { id: actor.id },
+      select: { id: true, name: true },
+    });
+    await notifyApprovers(orgId, created, inviter);
+  }
 
   return { ...toSummary(created), token: rawToken };
 }
@@ -132,6 +203,8 @@ export async function getInviteByToken(rawToken: string) {
     expiresAt: invite.expiresAt,
     accepted: invite.acceptedAt !== null,
     expired: invite.expiresAt < new Date(),
+    pendingApproval: invite.approvalStatus === "PENDING",
+    rejected: invite.approvalStatus === "REJECTED",
   };
 }
 
@@ -155,6 +228,14 @@ export async function acceptInvite(
     throw new ConflictError("This invite has expired");
   }
 
+  if (invite.approvalStatus === "PENDING") {
+    throw new ConflictError("This invite is still waiting on admin approval");
+  }
+
+  if (invite.approvalStatus === "REJECTED") {
+    throw new ConflictError("This invite was declined");
+  }
+
   if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
     throw new ForbiddenError("This invite was sent to a different email address");
   }
@@ -174,7 +255,12 @@ export async function acceptInvite(
           include: { user: { select: { id: true, name: true, email: true } } },
         })
       : await tx.orgMembership.create({
-          data: { userId: user.id, orgId: invite.orgId, role: invite.role },
+          data: {
+            userId: user.id,
+            orgId: invite.orgId,
+            role: invite.role,
+            invitedById: invite.invitedById,
+          },
           include: { user: { select: { id: true, name: true, email: true } } },
         });
 
@@ -217,4 +303,155 @@ export async function acceptInvite(
     role: membership.role,
     user: membership.user,
   };
+}
+
+async function getPendingInvite(orgId: string, inviteId: string) {
+  const invite = await prisma.orgInvite.findUnique({ where: { id: inviteId } });
+  if (!invite || invite.orgId !== orgId) {
+    throw new NotFoundError("Invite not found");
+  }
+  if (invite.approvalStatus !== "PENDING") {
+    throw new ConflictError("This invite is not waiting on approval");
+  }
+  return invite;
+}
+
+export async function approveInvite(
+  orgId: string,
+  inviteId: string,
+  actor: Actor,
+  ipAddress?: string
+) {
+  const invite = await getPendingInvite(orgId, inviteId);
+
+  const updated = await prisma.orgInvite.update({
+    where: { id: inviteId },
+    data: {
+      approvalStatus: "APPROVED",
+      approvedById: actor.id,
+      approvedAt: new Date(),
+      expiresAt: new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  await writeAuditLog(prisma, {
+    orgId,
+    actorId: actor.id,
+    action: "invite.approve",
+    targetType: "OrgInvite",
+    targetId: inviteId,
+    metadata: { email: invite.email, role: invite.role },
+    ipAddress,
+  });
+
+  return toSummary(updated);
+}
+
+export async function rejectInvite(
+  orgId: string,
+  inviteId: string,
+  actor: Actor,
+  ipAddress?: string
+) {
+  const invite = await getPendingInvite(orgId, inviteId);
+
+  const updated = await prisma.orgInvite.update({
+    where: { id: inviteId },
+    data: { approvalStatus: "REJECTED" },
+  });
+
+  await writeAuditLog(prisma, {
+    orgId,
+    actorId: actor.id,
+    action: "invite.reject",
+    targetType: "OrgInvite",
+    targetId: inviteId,
+    metadata: { email: invite.email, role: invite.role },
+    ipAddress,
+  });
+
+  return toSummary(updated);
+}
+
+export async function listAutoApproveRules(orgId: string) {
+  const rules = await prisma.inviteAutoApproveRule.findMany({
+    where: { orgId },
+    include: {
+      inviter: { select: { id: true, name: true, email: true } },
+      createdBy: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return rules.map((r) => ({
+    id: r.id,
+    inviter: r.inviter,
+    createdByName: r.createdBy.name,
+    createdAt: r.createdAt,
+  }));
+}
+
+export async function setBlanketAutoApprove(
+  orgId: string,
+  input: SetBlanketAutoApproveInput,
+  actor: Actor,
+  ipAddress?: string
+) {
+  await prisma.$transaction(async (tx) => {
+    await tx.inviteAutoApproveRule.deleteMany({ where: { orgId, inviterId: null } });
+
+    if (input.enabled) {
+      await tx.inviteAutoApproveRule.create({
+        data: { orgId, inviterId: null, createdById: actor.id },
+      });
+    }
+
+    await writeAuditLog(tx, {
+      orgId,
+      actorId: actor.id,
+      action: "invite.auto_approve_set",
+      targetType: "InviteAutoApproveRule",
+      metadata: { scope: "org-wide", enabled: input.enabled },
+      ipAddress,
+    });
+  });
+
+  return listAutoApproveRules(orgId);
+}
+
+export async function setInviterAutoApprove(
+  orgId: string,
+  inviterUserId: string,
+  enabled: boolean,
+  actor: Actor,
+  ipAddress?: string
+) {
+  const membership = await prisma.orgMembership.findUnique({
+    where: { userId_orgId: { userId: inviterUserId, orgId } },
+    include: { user: { select: { email: true } } },
+  });
+  if (!membership) {
+    throw new NotFoundError("Member not found");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.inviteAutoApproveRule.deleteMany({ where: { orgId, inviterId: inviterUserId } });
+
+    if (enabled) {
+      await tx.inviteAutoApproveRule.create({
+        data: { orgId, inviterId: inviterUserId, createdById: actor.id },
+      });
+    }
+
+    await writeAuditLog(tx, {
+      orgId,
+      actorId: actor.id,
+      action: "invite.auto_approve_set",
+      targetType: "InviteAutoApproveRule",
+      metadata: { scope: "member", targetUserEmail: membership.user.email, enabled },
+      ipAddress,
+    });
+  });
+
+  return listAutoApproveRules(orgId);
 }

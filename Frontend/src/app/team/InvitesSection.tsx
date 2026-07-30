@@ -1,18 +1,140 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/Icon";
 import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
 import { queryKeys } from "@/lib/query-keys";
-import { api, ApiError, InviteCreated, InviteSummary, OrgRole } from "@/lib/api";
+import { assignableRoles } from "@/lib/roles";
+import { api, ApiError, InviteCreated, InviteSummary, MemberSummary, OrgRole } from "@/lib/api";
+
+function AutoApproveSettings({ orgId }: { orgId: string }) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const membersQuery = useQuery({
+    queryKey: queryKeys.orgMembers(orgId),
+    queryFn: () => api.listMembers(orgId),
+  });
+  const rulesQuery = useQuery({
+    queryKey: queryKeys.orgAutoApproveRules(orgId),
+    queryFn: () => api.listAutoApproveRules(orgId),
+  });
+
+  const developers = (membersQuery.data ?? []).filter(
+    (m: MemberSummary) => m.role === "DEVELOPER"
+  );
+  const rules = rulesQuery.data ?? [];
+  const blanketRule = rules.find((r) => r.inviter === null);
+  const perInviterIds = new Set(rules.filter((r) => r.inviter !== null).map((r) => r.inviter!.id));
+
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.orgAutoApproveRules(orgId) });
+
+  const toggleBlanket = async () => {
+    setPendingId("blanket");
+    setError(null);
+    try {
+      await api.setBlanketAutoApprove(orgId, !blanketRule);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update");
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  const toggleInviter = async (userId: string, enabled: boolean) => {
+    setPendingId(userId);
+    setError(null);
+    try {
+      if (enabled) {
+        await api.disableInviterAutoApprove(orgId, userId);
+      } else {
+        await api.enableInviterAutoApprove(orgId, userId);
+      }
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update");
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  if (developers.length === 0 && !blanketRule) {
+    return null;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
+      <div className="border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
+        <h3 className="font-label-md text-label-md font-bold text-on-surface">
+          Auto-Approve Settings
+        </h3>
+        <p className="mt-xs font-body-sm text-[11px] text-on-surface-variant">
+          Developer-issued invites normally need an Admin or Owner to approve them. Turn
+          this on to skip that step for everyone, or for specific people.
+        </p>
+      </div>
+      <div className="flex flex-col divide-y divide-[#D0D7DE] dark:divide-outline-variant p-md">
+        {error && (
+          <p className="pb-sm font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
+            {error}
+          </p>
+        )}
+        <label className="flex items-center justify-between gap-md py-sm">
+          <span className="font-body-sm text-body-sm text-on-surface">
+            Auto-approve all Developer invites org-wide
+          </span>
+          <input
+            type="checkbox"
+            checked={!!blanketRule}
+            disabled={pendingId === "blanket"}
+            onChange={toggleBlanket}
+            className="rounded border-outline-variant text-primary-container focus:ring-primary-container"
+          />
+        </label>
+        {developers.map((m) => {
+          const enabled = perInviterIds.has(m.user.id);
+          return (
+            <label key={m.membershipId} className="flex items-center justify-between gap-md py-sm">
+              <span className="font-body-sm text-body-sm text-on-surface">
+                {m.user.name} <span className="text-on-surface-variant">({m.user.email})</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={enabled}
+                disabled={pendingId === m.user.id || !!blanketRule}
+                onChange={() => toggleInviter(m.user.id, enabled)}
+                className="rounded border-outline-variant text-primary-container focus:ring-primary-container"
+              />
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function inviteStatus(invite: InviteSummary): { label: string; className: string } {
   if (invite.acceptedAt) {
     return {
       label: "Accepted",
       className: "bg-[#1A7F37]/10 text-[#1A7F37] dark:bg-green-500/10 dark:text-green-400",
+    };
+  }
+  if (invite.approvalStatus === "REJECTED") {
+    return {
+      label: "Rejected",
+      className: "bg-error/10 text-error",
+    };
+  }
+  if (invite.approvalStatus === "PENDING") {
+    return {
+      label: "Awaiting Approval",
+      className: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
     };
   }
   if (new Date(invite.expiresAt) < new Date()) {
@@ -42,15 +164,27 @@ export function InvitesSection() {
   const projects = projectsQuery.data ?? [];
   const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
 
+  const roles = org ? assignableRoles(org.role) : [];
+  const canInvite = roles.length > 0;
+  const canManageApprovals = org?.role === "OWNER" || org?.role === "ADMIN";
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+
   const [showForm, setShowForm] = useState(false);
   const [directAddMode, setDirectAddMode] = useState(false);
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<OrgRole>("DEVELOPER");
+  const [role, setRole] = useState<OrgRole>("VIEWER");
   const [projectId, setProjectId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [justCreated, setJustCreated] = useState<InviteCreated | null>(null);
   const [directAddSuccess, setDirectAddSuccess] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
+
+  useEffect(() => {
+    if (roles.length > 0 && !roles.includes(role)) {
+      setRole(roles[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org?.role]);
 
   useEffect(() => {
     if (!org) {
@@ -100,6 +234,23 @@ export function InvitesSection() {
     setDirectAddSuccess(null);
     setEmail("");
     setProjectId("");
+  };
+
+  const onDecision = async (inviteId: string, decision: "approve" | "reject") => {
+    if (!org) return;
+    setDecidingId(inviteId);
+    setError(null);
+    try {
+      const updated =
+        decision === "approve"
+          ? await api.approveInvite(org.id, inviteId)
+          : await api.rejectInvite(org.id, inviteId);
+      setInvites((prev) => prev.map((i) => (i.id === inviteId ? updated : i)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update invite");
+    } finally {
+      setDecidingId(null);
+    }
   };
 
   const onInvite = async (e: FormEvent) => {
@@ -161,11 +312,17 @@ export function InvitesSection() {
 
   return (
     <div className="flex flex-col gap-md">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-sm">
+        {!canInvite && (
+          <span className="font-body-sm text-body-sm text-secondary">
+            Viewers can&apos;t invite anyone.
+          </span>
+        )}
         <button
           type="button"
+          disabled={!canInvite}
           onClick={() => (showForm ? closeForm() : setShowForm(true))}
-          className="flex items-center gap-xs rounded-lg border border-[#e2761d] bg-primary-container px-md py-sm font-label-md text-label-md text-white shadow-sm transition-opacity hover:opacity-90"
+          className="flex items-center gap-xs rounded-lg border border-[#e2761d] bg-primary-container px-md py-sm font-label-md text-label-md text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Icon name="person_add" />
           Invite Member
@@ -239,6 +396,12 @@ export function InvitesSection() {
               ? "They need an existing EnvSync account."
               : "Anyone with the generated link can join with the selected role."}
           </p>
+          {org.role === "DEVELOPER" && (
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-md py-sm font-body-sm text-body-sm text-amber-700 dark:text-amber-400">
+              As a Developer, you can only invite Viewers, and it needs an Admin or Owner to
+              approve before the link works — unless they&apos;ve set up auto-approval for you.
+            </p>
+          )}
           <div className="flex flex-col gap-md sm:flex-row">
             <label className="block flex-1">
               <span className="mb-xs block font-label-md text-label-md text-on-surface">
@@ -259,9 +422,11 @@ export function InvitesSection() {
               value={role}
               onChange={(e) => setRole(e.target.value as OrgRole)}
             >
-              <option value="ADMIN">Admin</option>
-              <option value="DEVELOPER">Developer</option>
-              <option value="VIEWER">Viewer</option>
+              {roles.map((r) => (
+                <option key={r} value={r}>
+                  {r.charAt(0) + r.slice(1).toLowerCase()}
+                </option>
+              ))}
             </Select>
           </div>
           <Select
@@ -313,6 +478,8 @@ export function InvitesSection() {
         </form>
       )}
 
+      {canManageApprovals && <AutoApproveSettings orgId={org.id} />}
+
       <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
         <div className="border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
           <h3 className="font-label-md text-label-md font-bold text-on-surface">
@@ -359,6 +526,26 @@ export function InvitesSection() {
                       {new Date(invite.createdAt).toLocaleDateString()}
                     </div>
                   </div>
+                  {canManageApprovals && invite.approvalStatus === "PENDING" && (
+                    <div className="flex flex-shrink-0 gap-sm">
+                      <button
+                        type="button"
+                        disabled={decidingId === invite.id}
+                        onClick={() => onDecision(invite.id, "approve")}
+                        className="rounded-lg bg-primary-container px-sm py-1 font-label-md text-[11px] text-on-primary disabled:opacity-50"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={decidingId === invite.id}
+                        onClick={() => onDecision(invite.id, "reject")}
+                        className="rounded-lg border border-outline-variant px-sm py-1 font-label-md text-[11px] text-on-surface disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

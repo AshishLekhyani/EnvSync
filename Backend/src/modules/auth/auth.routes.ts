@@ -13,6 +13,7 @@ import {
 } from "./auth.rateLimit";
 import {
   changePasswordSchema,
+  deleteAccountSchema,
   forgotPasswordSchema,
   loginSchema,
   resetPasswordSchema,
@@ -60,6 +61,12 @@ authRouter.post(
   resetPasswordRateLimiter,
   validate({ body: resetPasswordSchema }),
   authController.resetPassword
+);
+authRouter.delete(
+  "/me",
+  requireAuth,
+  validate({ body: deleteAccountSchema }),
+  authController.deleteAccount
 );
 authRouter.get("/sessions", requireAuth, authController.listSessions);
 authRouter.delete("/sessions/:sessionId", requireAuth, authController.revokeSession);

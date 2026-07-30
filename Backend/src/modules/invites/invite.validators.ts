@@ -6,3 +6,8 @@ export const createInviteSchema = z.object({
   projectId: z.string().min(1).optional(),
 });
 export type CreateInviteInput = z.infer<typeof createInviteSchema>;
+
+export const setBlanketAutoApproveSchema = z.object({
+  enabled: z.boolean(),
+});
+export type SetBlanketAutoApproveInput = z.infer<typeof setBlanketAutoApproveSchema>;

@@ -74,6 +74,8 @@ export async function updateOrganization(
   ipAddress?: string
 ) {
   return prisma.$transaction(async (tx) => {
+    const existing = await tx.organization.findUniqueOrThrow({ where: { id: orgId } });
+
     const updated = await tx.organization.update({
       where: { id: orgId },
       data: { name: input.name },
@@ -85,6 +87,7 @@ export async function updateOrganization(
       action: "org.update",
       targetType: "Organization",
       targetId: orgId,
+      metadata: { previousName: existing.name, newName: updated.name },
       ipAddress,
     });
 

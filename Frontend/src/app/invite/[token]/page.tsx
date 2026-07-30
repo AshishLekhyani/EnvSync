@@ -88,6 +88,14 @@ export default function InvitePage() {
           <p className="text-center font-body-md text-body-md text-secondary">
             This invite has expired — ask an admin to send a new one.
           </p>
+        ) : invite.rejected ? (
+          <p className="text-center font-body-md text-body-md text-secondary">
+            This invite was declined by an admin.
+          </p>
+        ) : invite.pendingApproval ? (
+          <p className="text-center font-body-md text-body-md text-secondary">
+            This invite is waiting on admin approval. Check back soon.
+          </p>
         ) : (
           <>
             <h1 className="mb-md text-center font-h1 text-h1 text-on-surface">

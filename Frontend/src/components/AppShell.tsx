@@ -12,6 +12,39 @@ import { TopNav } from "./TopNav";
 import { Icon } from "./Icon";
 import { useAuth } from "@/lib/auth-context";
 
+function MobileNavItem({
+  item,
+  pathname,
+  locked,
+}: {
+  item: (typeof MOBILE)[number];
+  pathname: string;
+  locked: boolean;
+}) {
+  if (locked) {
+    return (
+      <span
+        title="Create an organization first"
+        className="flex cursor-not-allowed flex-col items-center gap-base text-secondary opacity-40"
+      >
+        <Icon name={item.icon} />
+        <span className="text-[10px] font-bold uppercase">{item.label}</span>
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={item.href}
+      className={`flex flex-col items-center gap-base ${
+        item.match(pathname) ? "text-primary" : "text-secondary"
+      }`}
+    >
+      <Icon name={item.icon} filled={item.match(pathname)} />
+      <span className="text-[10px] font-bold uppercase">{item.label}</span>
+    </Link>
+  );
+}
+
 function SectionSidebar({ pathname }: { pathname: string }) {
   if (pathname === "/projects" || pathname.startsWith("/projects/")) {
     return <ProjectsSidebar />;
@@ -37,20 +70,35 @@ const MOBILE = [
     label: "Projects",
     icon: "folder",
     match: (p: string) => p === "/projects" || p.startsWith("/projects/"),
+    requiresOrg: false,
   },
-  { href: "/team", label: "Team", icon: "group", match: (p: string) => p.startsWith("/team") },
-  { href: "/audit", label: "Logs", icon: "history", match: (p: string) => p.startsWith("/audit") },
+  {
+    href: "/team",
+    label: "Team",
+    icon: "group",
+    match: (p: string) => p.startsWith("/team"),
+    requiresOrg: true,
+  },
+  {
+    href: "/audit",
+    label: "Logs",
+    icon: "history",
+    match: (p: string) => p.startsWith("/audit"),
+    requiresOrg: true,
+  },
   {
     href: "/integrations",
     label: "Integrations",
     icon: "hub",
     match: (p: string) => p.startsWith("/integrations"),
+    requiresOrg: true,
   },
   {
     href: "/settings",
     label: "Settings",
     icon: "settings",
     match: (p: string) => p.startsWith("/settings"),
+    requiresOrg: false,
   },
 ] as const;
 
@@ -73,7 +121,7 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, activeOrg, loading } = useAuth();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -107,16 +155,12 @@ export function AppShell({
       {showMobileNav && (
         <footer className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-outline-variant bg-surface px-md shadow-lg md:hidden">
           {MOBILE.slice(0, 2).map((item) => (
-            <Link
+            <MobileNavItem
               key={item.href}
-              href={item.href}
-              className={`flex flex-col items-center gap-base ${
-                item.match(pathname) ? "text-primary" : "text-secondary"
-              }`}
-            >
-              <Icon name={item.icon} filled={item.match(pathname)} />
-              <span className="text-[10px] font-bold uppercase">{item.label}</span>
-            </Link>
+              item={item}
+              pathname={pathname}
+              locked={item.requiresOrg && !activeOrg}
+            />
           ))}
           <div className="relative -top-4">
             <button
@@ -129,16 +173,12 @@ export function AppShell({
             </button>
           </div>
           {MOBILE.slice(2).map((item) => (
-            <Link
+            <MobileNavItem
               key={item.href}
-              href={item.href}
-              className={`flex flex-col items-center gap-base ${
-                item.match(pathname) ? "text-primary" : "text-secondary"
-              }`}
-            >
-              <Icon name={item.icon} filled={item.match(pathname)} />
-              <span className="text-[10px] font-bold uppercase">{item.label}</span>
-            </Link>
+              item={item}
+              pathname={pathname}
+              locked={item.requiresOrg && !activeOrg}
+            />
           ))}
         </footer>
       )}

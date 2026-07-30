@@ -1,0 +1,19 @@
+import { OrgRole } from "./api";
+
+const ROLE_WEIGHT: Record<OrgRole, number> = {
+  VIEWER: 1,
+  DEVELOPER: 2,
+  ADMIN: 3,
+  OWNER: 4,
+};
+
+const ALL_ROLES: OrgRole[] = ["OWNER", "ADMIN", "DEVELOPER", "VIEWER"];
+
+// Mirrors the backend's assertCanAssignRole: an Owner can assign any role;
+// everyone else can only assign a role strictly below their own.
+export function assignableRoles(actorRole: OrgRole): OrgRole[] {
+  if (actorRole === "OWNER") {
+    return ALL_ROLES.filter((r) => r !== "OWNER");
+  }
+  return ALL_ROLES.filter((r) => ROLE_WEIGHT[r] < ROLE_WEIGHT[actorRole]);
+}

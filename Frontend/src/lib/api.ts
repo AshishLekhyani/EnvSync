@@ -189,7 +189,7 @@ export interface SecretVersionMetadata {
   id: string;
   version: number;
   changeType: SecretChangeType;
-  author: { id: string; name: string; email: string };
+  author: { id: string; name: string; email: string } | null;
   createdAt: string;
 }
 
@@ -212,6 +212,7 @@ export interface NotificationSummary {
   message: string;
   targetType: string | null;
   targetId: string | null;
+  metadata: Record<string, unknown> | null;
   read: boolean;
   createdAt: string;
 }
@@ -234,11 +235,14 @@ export interface PermissionCell {
 
 export type PermissionMatrix = Record<OrgRole, Record<EnvironmentType, PermissionCell>>;
 
+export type InviteApprovalStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+
 export interface InviteSummary {
   id: string;
   email: string;
   role: OrgRole;
   projectId: string | null;
+  approvalStatus: InviteApprovalStatus;
   createdAt: string;
   expiresAt: string;
   acceptedAt: string | null;
@@ -257,6 +261,15 @@ export interface PublicInvite {
   expiresAt: string;
   accepted: boolean;
   expired: boolean;
+  pendingApproval: boolean;
+  rejected: boolean;
+}
+
+export interface AutoApproveRule {
+  id: string;
+  inviter: { id: string; name: string; email: string } | null;
+  createdByName: string;
+  createdAt: string;
 }
 
 export const api = {
@@ -300,6 +313,12 @@ export const api = {
     request<void>("/auth/reset-password", {
       method: "POST",
       body: JSON.stringify({ token, newPassword }),
+    }),
+
+  deleteAccount: (confirmEmail: string) =>
+    request<void>("/auth/me", {
+      method: "DELETE",
+      body: JSON.stringify({ confirmEmail }),
     }),
 
   listOrgs: () => request<OrgSummary[]>("/orgs"),
@@ -397,6 +416,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
+  updateMemberRole: (orgId: string, membershipId: string, role: OrgRole) =>
+    request<{ id: string; role: OrgRole }>(`/orgs/${orgId}/members/${membershipId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
+
+  removeMember: (orgId: string, membershipId: string) =>
+    request<void>(`/orgs/${orgId}/members/${membershipId}`, { method: "DELETE" }),
 
   grantProjectAccess: (orgId: string, membershipId: string, projectId: string) =>
     request<void>(`/orgs/${orgId}/members/${membershipId}/projects/${projectId}`, {
@@ -500,4 +528,29 @@ export const api = {
 
   acceptInvite: (token: string) =>
     request<MemberSummary>(`/invites/${token}/accept`, { method: "POST" }),
+
+  approveInvite: (orgId: string, inviteId: string) =>
+    request<InviteSummary>(`/orgs/${orgId}/invites/${inviteId}/approve`, { method: "POST" }),
+
+  rejectInvite: (orgId: string, inviteId: string) =>
+    request<InviteSummary>(`/orgs/${orgId}/invites/${inviteId}/reject`, { method: "POST" }),
+
+  listAutoApproveRules: (orgId: string) =>
+    request<AutoApproveRule[]>(`/orgs/${orgId}/invites/auto-approve`),
+
+  setBlanketAutoApprove: (orgId: string, enabled: boolean) =>
+    request<AutoApproveRule[]>(`/orgs/${orgId}/invites/auto-approve/blanket`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
+
+  enableInviterAutoApprove: (orgId: string, userId: string) =>
+    request<AutoApproveRule[]>(`/orgs/${orgId}/invites/auto-approve/${userId}`, {
+      method: "POST",
+    }),
+
+  disableInviterAutoApprove: (orgId: string, userId: string) =>
+    request<AutoApproveRule[]>(`/orgs/${orgId}/invites/auto-approve/${userId}`, {
+      method: "DELETE",
+    }),
 };

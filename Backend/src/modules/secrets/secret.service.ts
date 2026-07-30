@@ -113,7 +113,12 @@ export async function createSecret(
       targetType: "Secret",
       targetId: created.id,
       projectId: environment.projectId,
-      metadata: { key: input.key, environmentId },
+      metadata: {
+        key: input.key,
+        environmentId,
+        environmentName: environment.name,
+        environmentType: environment.type,
+      },
       ipAddress,
     });
 
@@ -188,7 +193,11 @@ export async function revealSecret(
     targetType: "Secret",
     targetId: secret.id,
     projectId: secret.environment.projectId,
-    metadata: { key: secret.key },
+    metadata: {
+      key: secret.key,
+      environmentName: secret.environment.name,
+      environmentType: secret.environment.type,
+    },
     ipAddress,
   });
 
@@ -237,7 +246,12 @@ export async function updateSecret(
       targetType: "Secret",
       targetId: secretId,
       projectId: secret.environment.projectId,
-      metadata: { key: secret.key, version: nextVersion },
+      metadata: {
+        key: secret.key,
+        version: nextVersion,
+        environmentName: secret.environment.name,
+        environmentType: secret.environment.type,
+      },
       ipAddress,
     });
 
@@ -268,7 +282,12 @@ export async function setSecretExpiry(
       targetType: "Secret",
       targetId: secretId,
       projectId: secret.environment.projectId,
-      metadata: { key: secret.key, expiresAt },
+      metadata: {
+        key: secret.key,
+        expiresAt,
+        environmentName: secret.environment.name,
+        environmentType: secret.environment.type,
+      },
       ipAddress,
     });
 
@@ -321,7 +340,13 @@ export async function rotateSecret(
       targetType: "Secret",
       targetId: secretId,
       projectId: secret.environment.projectId,
-      metadata: { key: secret.key, version: nextVersion, length },
+      metadata: {
+        key: secret.key,
+        version: nextVersion,
+        length,
+        environmentName: secret.environment.name,
+        environmentType: secret.environment.type,
+      },
       ipAddress,
     });
 
@@ -346,7 +371,11 @@ export async function deleteSecret(
       targetType: "Secret",
       targetId: secretId,
       projectId: secret.environment.projectId,
-      metadata: { key: secret.key },
+      metadata: {
+        key: secret.key,
+        environmentName: secret.environment.name,
+        environmentType: secret.environment.type,
+      },
       ipAddress,
     });
 
@@ -408,7 +437,12 @@ export async function revealSecretVersion(
     targetType: "Secret",
     targetId: secret.id,
     projectId: secret.environment.projectId,
-    metadata: { key: secret.key, version },
+    metadata: {
+      key: secret.key,
+      version,
+      environmentName: secret.environment.name,
+      environmentType: secret.environment.type,
+    },
     ipAddress,
   });
 
@@ -461,7 +495,13 @@ export async function restoreSecretVersion(
       targetType: "Secret",
       targetId: secretId,
       projectId: secret.environment.projectId,
-      metadata: { key: secret.key, restoredFromVersion: version, newVersion: nextVersion },
+      metadata: {
+        key: secret.key,
+        restoredFromVersion: version,
+        newVersion: nextVersion,
+        environmentName: secret.environment.name,
+        environmentType: secret.environment.type,
+      },
       ipAddress,
     });
 

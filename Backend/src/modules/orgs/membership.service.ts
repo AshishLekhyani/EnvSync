@@ -1,9 +1,10 @@
 import { OrgMembership, OrgRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
-import { hasAtLeastRole } from "../rbac/roles";
+import { ROLE_WEIGHT } from "../rbac/roles";
 import { hasProjectAccess } from "../rbac/projectAccess.service";
 import { writeAuditLog } from "../audit/audit.service";
+import { notifyUserAccessChanged } from "../auth/sse";
 import { AddMemberInput, UpdateMemberRoleInput } from "./membership.validators";
 
 export interface Actor {
@@ -11,12 +12,14 @@ export interface Actor {
   role: OrgRole;
 }
 
+// An Owner can assign any role. Everyone else can only assign a role
+// strictly below their own — an Admin can invite/promote Developers and
+// Viewers but never another Admin or Owner, a Developer can only ever reach
+// Viewer, and a Viewer (nothing is below it) can never assign a role at all.
 export function assertCanAssignRole(actorRole: OrgRole, targetRole: OrgRole) {
-  if (targetRole === "OWNER" && actorRole !== "OWNER") {
-    throw new ForbiddenError("Only an owner can grant the owner role");
-  }
-  if (!hasAtLeastRole(actorRole, targetRole)) {
-    throw new ForbiddenError("Cannot assign a role higher than your own");
+  if (actorRole === "OWNER") return;
+  if (ROLE_WEIGHT[targetRole] >= ROLE_WEIGHT[actorRole]) {
+    throw new ForbiddenError("You can only assign a role below your own");
   }
 }
 
@@ -76,7 +79,10 @@ export async function grantProjectAccess(
   actorMembership: OrgMembership,
   ipAddress?: string
 ) {
-  const membership = await prisma.orgMembership.findUnique({ where: { id: membershipId } });
+  const membership = await prisma.orgMembership.findUnique({
+    where: { id: membershipId },
+    include: { user: { select: { email: true } } },
+  });
   if (!membership || membership.orgId !== orgId) {
     throw new NotFoundError("Membership not found");
   }
@@ -112,9 +118,16 @@ export async function grantProjectAccess(
     targetType: "ProjectMembership",
     targetId: membershipId,
     projectId,
-    metadata: { targetUserId: membership.userId, projectId },
+    metadata: {
+      targetUserId: membership.userId,
+      targetUserEmail: membership.user.email,
+      projectId,
+      projectName: project.name,
+    },
     ipAddress,
   });
+
+  notifyUserAccessChanged(membership.userId, orgId);
 }
 
 export async function revokeProjectAccess(
@@ -124,10 +137,15 @@ export async function revokeProjectAccess(
   actorMembership: OrgMembership,
   ipAddress?: string
 ) {
-  const membership = await prisma.orgMembership.findUnique({ where: { id: membershipId } });
+  const membership = await prisma.orgMembership.findUnique({
+    where: { id: membershipId },
+    include: { user: { select: { email: true } } },
+  });
   if (!membership || membership.orgId !== orgId) {
     throw new NotFoundError("Membership not found");
   }
+
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
 
   if (actorMembership.role !== "OWNER") {
     const allowed = await hasProjectAccess(
@@ -153,9 +171,16 @@ export async function revokeProjectAccess(
     targetType: "ProjectMembership",
     targetId: membershipId,
     projectId,
-    metadata: { targetUserId: membership.userId, projectId },
+    metadata: {
+      targetUserId: membership.userId,
+      targetUserEmail: membership.user.email,
+      projectId,
+      projectName: project?.name ?? null,
+    },
     ipAddress,
   });
+
+  notifyUserAccessChanged(membership.userId, orgId);
 }
 
 export async function setCanViewAllProjects(
@@ -165,7 +190,10 @@ export async function setCanViewAllProjects(
   actorId: string,
   ipAddress?: string
 ) {
-  const membership = await prisma.orgMembership.findUnique({ where: { id: membershipId } });
+  const membership = await prisma.orgMembership.findUnique({
+    where: { id: membershipId },
+    include: { user: { select: { email: true } } },
+  });
   if (!membership || membership.orgId !== orgId) {
     throw new NotFoundError("Membership not found");
   }
@@ -185,9 +213,15 @@ export async function setCanViewAllProjects(
     action: "member.view_all_set",
     targetType: "OrgMembership",
     targetId: membershipId,
-    metadata: { targetUserId: membership.userId, canViewAllProjects: value },
+    metadata: {
+      targetUserId: membership.userId,
+      targetUserEmail: membership.user.email,
+      canViewAllProjects: value,
+    },
     ipAddress,
   });
+
+  notifyUserAccessChanged(membership.userId, orgId);
 
   return updated;
 }
@@ -223,7 +257,7 @@ export async function addMember(
 
   return prisma.$transaction(async (tx) => {
     const membership = await tx.orgMembership.create({
-      data: { userId: user.id, orgId, role: input.role },
+      data: { userId: user.id, orgId, role: input.role, invitedById: actor.id },
       include: { user: { select: { id: true, name: true, email: true } } },
     });
 
@@ -259,6 +293,7 @@ export async function updateMemberRole(
 
   const membership = await prisma.orgMembership.findUnique({
     where: { id: membershipId },
+    include: { user: { select: { email: true } } },
   });
 
   if (!membership || membership.orgId !== orgId) {
@@ -269,8 +304,8 @@ export async function updateMemberRole(
     throw new ForbiddenError("Only an owner can change another owner's role");
   }
 
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.orgMembership.update({
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.orgMembership.update({
       where: { id: membershipId },
       data: { role: input.role },
     });
@@ -281,12 +316,20 @@ export async function updateMemberRole(
       action: "member.role_change",
       targetType: "OrgMembership",
       targetId: membershipId,
-      metadata: { newRole: input.role, previousRole: membership.role },
+      metadata: {
+        email: membership.user.email,
+        newRole: input.role,
+        previousRole: membership.role,
+      },
       ipAddress,
     });
 
-    return updated;
+    return result;
   });
+
+  notifyUserAccessChanged(membership.userId, orgId);
+
+  return updated;
 }
 
 export async function removeMember(
@@ -297,6 +340,7 @@ export async function removeMember(
 ) {
   const membership = await prisma.orgMembership.findUnique({
     where: { id: membershipId },
+    include: { user: { select: { email: true } } },
   });
 
   if (!membership || membership.orgId !== orgId) {
@@ -314,10 +358,16 @@ export async function removeMember(
       action: "member.remove",
       targetType: "OrgMembership",
       targetId: membershipId,
-      metadata: { removedUserId: membership.userId, role: membership.role },
+      metadata: {
+        removedUserId: membership.userId,
+        email: membership.user.email,
+        role: membership.role,
+      },
       ipAddress,
     });
 
     await tx.orgMembership.delete({ where: { id: membershipId } });
   });
+
+  notifyUserAccessChanged(membership.userId, orgId);
 }

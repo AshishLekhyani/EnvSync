@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
+import { Modal } from "@/components/Modal";
+import { CreateOrgForm } from "@/components/CreateOrgForm";
 import { useAuth } from "@/lib/auth-context";
 import { api, ApiError, MemberSummary } from "@/lib/api";
 import { downloadJson } from "@/lib/csv";
@@ -172,10 +174,35 @@ export function OrganizationTab() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const [showCreateOrg, setShowCreateOrg] = useState(false);
+
+  const onOrgCreated = async (newOrg: { id: string }) => {
+    await refreshMe();
+    switchOrg(newOrg.id);
+    setShowCreateOrg(false);
+  };
+
+  const createOrgModal = (
+    <Modal open={showCreateOrg} onClose={() => setShowCreateOrg(false)} title="Create Organization">
+      <CreateOrgForm onCreated={onOrgCreated} onCancel={() => setShowCreateOrg(false)} />
+    </Modal>
+  );
+
   if (!org) {
     return (
-      <div className="github-card rounded-lg p-xl text-center font-body-md text-body-md text-secondary">
-        Create an organization on the Projects page first.
+      <div className="github-card flex flex-col items-center gap-md rounded-lg p-xl text-center">
+        <p className="font-body-md text-body-md text-secondary">
+          You don&apos;t have an organization yet.
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowCreateOrg(true)}
+          className="flex items-center gap-xs rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary"
+        >
+          <Icon name="add" style={{ fontSize: 18 }} />
+          Create Organization
+        </button>
+        {createOrgModal}
       </div>
     );
   }
@@ -220,9 +247,19 @@ export function OrganizationTab() {
   return (
     <div className="flex flex-col gap-lg">
       <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
-        <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
-          <Icon name="corporate_fare" className="text-primary" />
-          <h2 className="font-h3 text-h3 text-on-surface">Organization</h2>
+        <div className="flex items-center justify-between gap-sm border-b border-outline-variant bg-surface-container-low p-md">
+          <div className="flex items-center gap-sm">
+            <Icon name="corporate_fare" className="text-primary" />
+            <h2 className="font-h3 text-h3 text-on-surface">Organization</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCreateOrg(true)}
+            className="flex items-center gap-xs rounded-lg border border-outline-variant px-sm py-1 font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container"
+          >
+            <Icon name="add" style={{ fontSize: 16 }} />
+            New Organization
+          </button>
         </div>
         <div className="p-md">
           {isAdmin ? (
@@ -310,6 +347,8 @@ export function OrganizationTab() {
           </button>
         </div>
       )}
+
+      {createOrgModal}
     </div>
   );
 }

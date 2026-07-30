@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
 import { api, ApiError, AuditLogEntry } from "@/lib/api";
-import { getActionDisplay } from "@/lib/auditActions";
+import { describeAuditLog, getActionDisplay } from "@/lib/auditActions";
 import { exportAuditLogsCsv } from "@/lib/auditExport";
 
 function AuditPageContent() {
@@ -120,8 +120,15 @@ function AuditPageContent() {
               <div className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
                 {logs.map((log) => {
                   const display = getActionDisplay(log.action);
+                  const m = log.metadata;
                   const key =
-                    (log.metadata?.key as string | undefined) ?? log.targetType ?? "—";
+                    (m?.key as string | undefined) ??
+                    (m?.email as string | undefined) ??
+                    (m?.name as string | undefined) ??
+                    (m?.newName as string | undefined) ??
+                    log.targetType ??
+                    "—";
+                  const detail = describeAuditLog(log);
                   return (
                     <div
                       key={log.id}
@@ -143,6 +150,7 @@ function AuditPageContent() {
                           </p>
                           <p className="mt-xs font-body-sm text-body-sm text-on-surface-variant">
                             {log.project?.name ?? "—"}
+                            {detail ? ` · ${detail}` : ""}
                           </p>
                         </div>
                       </div>

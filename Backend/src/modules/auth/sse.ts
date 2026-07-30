@@ -29,3 +29,14 @@ export function notifyUserSessionsRevoked(userId: string) {
     res.write("event: session-revoked\ndata: {}\n\n");
   }
 }
+
+// Fired whenever a member's access within an org changes under them (project
+// grant/revoke, view-all toggle, role change, removal) so their already-open
+// tab can refetch instead of showing stale project/member lists until reload.
+export function notifyUserAccessChanged(userId: string, orgId: string) {
+  const set = connectionsByUserId.get(userId);
+  if (!set) return;
+  for (const res of set) {
+    res.write(`event: access-changed\ndata: ${JSON.stringify({ orgId })}\n\n`);
+  }
+}

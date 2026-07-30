@@ -1526,6 +1526,323 @@ async function main() {
   if (res.status !== 401) fail("an expired reset token should be 401", await res.text());
   ok("an expired reset token is rejected (401)");
 
+  // --- Phase 12: role-assignment hierarchy, invite approval workflow, auto-approve, account deletion ---
+
+  async function signupLogin(name: string, email: string): Promise<string> {
+    let r = await fetch(`${BASE}/auth/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, password }),
+    });
+    if (r.status !== 201) fail(`signup ${name}`, await r.text());
+    r = await fetch(`${BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const body = await r.json();
+    if (r.status !== 200) fail(`login ${name}`, body);
+    return body.accessToken;
+  }
+
+  const hierAdminEmail = `hier-admin-${rand}@example.com`;
+  const hierAdminToken = await signupLogin("Hierarchy Admin", hierAdminEmail);
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: hierAdminEmail, role: "ADMIN" }),
+  });
+  const hierAdminMembership = await res.json();
+  if (res.status !== 201) fail("add hierarchy-test admin", hierAdminMembership);
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(hierAdminToken),
+    body: JSON.stringify({ email: `admin-target-${rand}@example.com`, role: "ADMIN" }),
+  });
+  if (res.status !== 403) fail("an Admin should not be able to invite another Admin (strictly-below rule)", await res.text());
+  ok("Admin inviting another Admin is rejected (403, strictly-below-own-role hierarchy)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(hierAdminToken),
+    body: JSON.stringify({ email: `dev-target-${rand}@example.com`, role: "DEVELOPER" }),
+  });
+  if (res.status !== 201) fail("an Admin should be able to invite a Developer", await res.text());
+  ok("Admin inviting a Developer succeeds (below own role)");
+
+  const hierDevEmail = `hier-dev-${rand}@example.com`;
+  const hierDevToken = await signupLogin("Hierarchy Dev", hierDevEmail);
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: hierDevEmail, role: "DEVELOPER" }),
+  });
+  const hierDevMembership = await res.json();
+  if (res.status !== 201) fail("add hierarchy-test developer", hierDevMembership);
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(hierDevToken),
+    body: JSON.stringify({ email: `dev-peer-${rand}@example.com`, role: "DEVELOPER" }),
+  });
+  if (res.status !== 403) fail("a Developer should not be able to invite a fellow Developer", await res.text());
+  ok("Developer inviting a Developer is rejected (403, only Viewer is below Developer)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(viewerAccessToken),
+    body: JSON.stringify({ email: `nobody-${rand}@example.com`, role: "VIEWER" }),
+  });
+  if (res.status !== 403) fail("a Viewer should not be able to invite anyone", await res.text());
+  ok("Viewer cannot invite anyone (403, nothing is below Viewer)");
+
+  const pendingInviteEmail = `pending-viewer-${rand}@example.com`;
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(hierDevToken),
+    body: JSON.stringify({ email: pendingInviteEmail, role: "VIEWER" }),
+  });
+  const pendingInvite = await res.json();
+  if (res.status !== 201 || pendingInvite.approvalStatus !== "PENDING") {
+    fail("a Developer-created invite should land PENDING with no auto-approve rule active", pendingInvite);
+  }
+  ok("Developer-created invite lands PENDING approval (no auto-approve rule yet)");
+
+  res = await fetch(`${BASE}/invites/${pendingInvite.token}`);
+  const pendingPublicInvite = await res.json();
+  if (res.status !== 200 || pendingPublicInvite.pendingApproval !== true) {
+    fail("public invite view should report pendingApproval:true", pendingPublicInvite);
+  }
+  ok("public invite view reports pendingApproval:true while awaiting approval");
+
+  const pendingInviteeToken = await signupLogin("Pending Invitee", pendingInviteEmail);
+  res = await fetch(`${BASE}/invites/${pendingInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(pendingInviteeToken),
+  });
+  if (res.status !== 409) fail("accepting a still-pending invite should be 409", await res.text());
+  ok("accepting a PENDING (unapproved) invite is rejected (409)");
+
+  const ownerNotifsRes = await fetch(`${BASE}/notifications`, { headers: authHeaders(ownerAccessToken) });
+  const ownerApprovalNotifs = await ownerNotifsRes.json();
+  const approvalNotif = (ownerApprovalNotifs as { type: string; metadata: { inviteId?: string } }[]).find(
+    (n) => n.type === "invite.approval_requested" && n.metadata?.inviteId === pendingInvite.id
+  );
+  if (!approvalNotif) fail("owner should have received an invite.approval_requested notification", ownerApprovalNotifs);
+  ok("owner receives an invite.approval_requested notification for the Developer's pending invite");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites/${pendingInvite.id}/reject`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  const rejectedInvite = await res.json();
+  if (res.status !== 200 || rejectedInvite.approvalStatus !== "REJECTED") {
+    fail("reject invite", rejectedInvite);
+  }
+  ok("owner rejects the pending invite (approvalStatus -> REJECTED)");
+
+  res = await fetch(`${BASE}/invites/${pendingInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(pendingInviteeToken),
+  });
+  if (res.status !== 409) fail("accepting a rejected invite should be 409", await res.text());
+  ok("accepting a REJECTED invite is permanently blocked (409)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites/auto-approve/${hierDevMembership.userId}`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 200) fail("enable per-developer auto-approve rule", await res.text());
+  ok("owner enables a per-developer auto-approve rule for the Developer");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(hierDevToken),
+    body: JSON.stringify({ email: `auto-approved-${rand}@example.com`, role: "VIEWER" }),
+  });
+  const autoApprovedInvite = await res.json();
+  if (res.status !== 201 || autoApprovedInvite.approvalStatus !== "NONE") {
+    fail("with a per-developer auto-approve rule active, the invite should skip PENDING", autoApprovedInvite);
+  }
+  ok("Developer's invite is auto-approved (approvalStatus: NONE) once a per-developer rule is enabled");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites/auto-approve/${hierDevMembership.userId ?? hierDevMembership.id}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 200) fail("disable per-developer auto-approve rule", await res.text());
+  ok("owner disables the per-developer auto-approve rule");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites/auto-approve/blanket`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ enabled: true }),
+  });
+  if (res.status !== 200) fail("enable blanket auto-approve", await res.text());
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(hierDevToken),
+    body: JSON.stringify({ email: `blanket-approved-${rand}@example.com`, role: "VIEWER" }),
+  });
+  const blanketApprovedInvite = await res.json();
+  if (res.status !== 201 || blanketApprovedInvite.approvalStatus !== "NONE") {
+    fail("with the blanket auto-approve rule on, every Developer's invite should skip PENDING", blanketApprovedInvite);
+  }
+  ok("blanket org-wide auto-approve rule skips PENDING for any Developer's invite");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites/auto-approve/blanket`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ enabled: false }),
+  });
+  if (res.status !== 200) fail("disable blanket auto-approve", await res.text());
+  ok("owner disables the blanket auto-approve rule");
+
+  const approveFlowEmail = `approve-flow-${rand}@example.com`;
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(hierDevToken),
+    body: JSON.stringify({ email: approveFlowEmail, role: "VIEWER" }),
+  });
+  const approveFlowInvite = await res.json();
+  if (res.status !== 201 || approveFlowInvite.approvalStatus !== "PENDING") {
+    fail("expected a fresh Developer invite to be PENDING again after disabling auto-approve", approveFlowInvite);
+  }
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites/${approveFlowInvite.id}/approve`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  const approvedInvite = await res.json();
+  if (res.status !== 200 || approvedInvite.approvalStatus !== "APPROVED") {
+    fail("approve invite", approvedInvite);
+  }
+  ok("owner approves a pending invite (approvalStatus -> APPROVED)");
+
+  const approveFlowToken = await signupLogin("Approve Flow Invitee", approveFlowEmail);
+  res = await fetch(`${BASE}/invites/${approveFlowInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(approveFlowToken),
+  });
+  if (res.status !== 200) fail("accepting an approved invite should succeed", await res.text());
+  ok("an approved invite can be accepted normally");
+
+  // Audit metadata precision: org.update should now record before/after names.
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?action=org.update&limit=5`, {
+    headers: authHeaders(ownerAccessToken),
+  });
+  const orgUpdateLogs = await res.json();
+  const orgUpdateLog = (orgUpdateLogs as { metadata: { previousName?: string; newName?: string } }[])[0];
+  if (!orgUpdateLog || !orgUpdateLog.metadata?.previousName || !orgUpdateLog.metadata?.newName) {
+    fail("org.update audit entries should carry previousName/newName metadata", orgUpdateLog);
+  }
+  ok("org.update audit entries now record previousName/newName (Part 4 precision)");
+
+  // --- Account deletion ---
+
+  const soloDeleteEmail = `solo-delete-${rand}@example.com`;
+  const soloDeleteToken = await signupLogin("Solo Delete User", soloDeleteEmail);
+  res = await fetch(`${BASE}/orgs`, {
+    method: "POST",
+    headers: authHeaders(soloDeleteToken),
+    body: JSON.stringify({ name: `Solo Org ${rand}`, slug: `solo-org-${rand}` }),
+  });
+  const soloOrg = await res.json();
+  if (res.status !== 201) fail("create solo-owned org for account-deletion test", soloOrg);
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "DELETE",
+    headers: authHeaders(soloDeleteToken),
+    body: JSON.stringify({ confirmEmail: "wrong@example.com" }),
+  });
+  if (res.status !== 400) fail("deleteAccount with a mismatched confirmEmail should be 400", await res.text());
+  ok("account deletion rejects a mismatched confirmEmail (400)");
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "DELETE",
+    headers: authHeaders(soloDeleteToken),
+    body: JSON.stringify({ confirmEmail: soloDeleteEmail }),
+  });
+  if (res.status !== 204) fail("account deletion for a solo-owned-org user should succeed (204)", await res.text());
+  ok("account deletion succeeds for a user who only solo-owns orgs (204)");
+
+  res = await fetch(`${BASE}/orgs/${soloOrg.id}`, { headers: authHeaders(ownerAccessToken) });
+  if (res.status !== 404) fail("the solo-owned org should be gone after its sole owner's account is deleted", await res.text());
+  ok("the solo-owned org is cascade-deleted along with the account");
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: soloDeleteEmail, password }),
+  });
+  if (res.status !== 401) fail("logging in as a deleted account should fail (401)", await res.text());
+  ok("logging in as a deleted account fails (401) -- the account is truly gone");
+
+  const blockedOwnerEmail = `blocked-owner-${rand}@example.com`;
+  const blockedOwnerToken = await signupLogin("Blocked Owner", blockedOwnerEmail);
+  res = await fetch(`${BASE}/orgs`, {
+    method: "POST",
+    headers: authHeaders(blockedOwnerToken),
+    body: JSON.stringify({ name: `Blocked Org ${rand}`, slug: `blocked-org-${rand}` }),
+  });
+  const blockedOrg = await res.json();
+  if (res.status !== 201) fail("create org for blocked-deletion test", blockedOrg);
+
+  const blockedPeerEmail = `blocked-peer-${rand}@example.com`;
+  const blockedPeerToken = await signupLogin("Blocked Org Peer", blockedPeerEmail);
+  res = await fetch(`${BASE}/orgs/${blockedOrg.id}/members`, {
+    method: "POST",
+    headers: authHeaders(blockedOwnerToken),
+    body: JSON.stringify({ email: blockedPeerEmail, role: "VIEWER" }),
+  });
+  if (res.status !== 201) fail("add peer member to blocked-deletion org", await res.text());
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "DELETE",
+    headers: authHeaders(blockedOwnerToken),
+    body: JSON.stringify({ confirmEmail: blockedOwnerEmail }),
+  });
+  const blockedBody = await res.json();
+  if (res.status !== 409 || !blockedBody?.error?.message?.includes("Blocked Org")) {
+    fail("deleting an account that's the sole owner of an org with other members should be blocked (409)", blockedBody);
+  }
+  ok("account deletion is blocked while the user is the sole owner of an org with other members (409, names the org)");
+
+  void blockedPeerToken;
+
+  const nonOwnerDeleteEmail = `non-owner-delete-${rand}@example.com`;
+  const nonOwnerDeleteToken = await signupLogin("Non-Owner Delete User", nonOwnerDeleteEmail);
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: nonOwnerDeleteEmail, role: "VIEWER" }),
+  });
+  const nonOwnerMembership = await res.json();
+  if (res.status !== 201) fail("add non-owner member for account-deletion test", nonOwnerMembership);
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "DELETE",
+    headers: authHeaders(nonOwnerDeleteToken),
+    body: JSON.stringify({ confirmEmail: nonOwnerDeleteEmail }),
+  });
+  if (res.status !== 204) fail("account deletion for a non-owner member should succeed (204)", await res.text());
+  ok("account deletion succeeds for a non-owner org member (204)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(ownerAccessToken) });
+  const membersAfterDeletion = await res.json();
+  if (
+    (membersAfterDeletion as { user: { email: string } }[]).some(
+      (m) => m.user.email === nonOwnerDeleteEmail
+    )
+  ) {
+    fail("the deleted non-owner member should no longer appear in the org's member list", membersAfterDeletion);
+  }
+  res = await fetch(`${BASE}/orgs/${orgId}`, { headers: authHeaders(ownerAccessToken) });
+  if (res.status !== 200) fail("the org itself should still exist after a non-owner member deletes their account", await res.text());
+  ok("the org survives and the departed member's row is gone (non-owner account deletion doesn't touch the org)");
+
   const hammerEmail = `hammer-${rand}@example.com`;
   res = await fetch(`${BASE}/auth/signup`, {
     method: "POST",

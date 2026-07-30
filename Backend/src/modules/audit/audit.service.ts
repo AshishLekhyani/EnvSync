@@ -29,6 +29,9 @@ export type AuditAction =
   | "permission.override_reset"
   | "invite.create"
   | "invite.accept"
+  | "invite.approve"
+  | "invite.reject"
+  | "invite.auto_approve_set"
   | "member.project_access_grant"
   | "member.project_access_revoke"
   | "member.view_all_set";

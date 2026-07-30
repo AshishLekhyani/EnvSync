@@ -16,6 +16,7 @@ import {
 } from "./tokens";
 import {
   ChangePasswordInput,
+  DeleteAccountInput,
   ForgotPasswordInput,
   LoginInput,
   ResetPasswordInput,
@@ -23,6 +24,7 @@ import {
   UpdateProfileInput,
 } from "./auth.validators";
 import { notifyUserSessionsRevoked } from "./sse";
+import { writeAuditLog } from "../audit/audit.service";
 
 const RESET_TOKEN_PREFIX = "reset_";
 const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000;
@@ -295,4 +297,76 @@ export async function resetPassword(input: ResetPasswordInput) {
   ]);
 
   notifyUserSessionsRevoked(resetToken.userId);
+}
+
+export async function deleteAccount(userId: string, input: DeleteAccountInput) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  if (!user) {
+    throw new UnauthorizedError();
+  }
+
+  if (input.confirmEmail.toLowerCase() !== user.email.toLowerCase()) {
+    throw new BadRequestError("Type your account email exactly to confirm");
+  }
+
+  const ownerships = await prisma.orgMembership.findMany({
+    where: { userId, role: "OWNER" },
+    include: { org: { select: { id: true, name: true } } },
+  });
+
+  const soloOwnedOrgs: { id: string; name: string }[] = [];
+  const blockingOrgs: { id: string; name: string }[] = [];
+
+  for (const ownership of ownerships) {
+    const otherMembers = await prisma.orgMembership.count({
+      where: { orgId: ownership.orgId, userId: { not: userId } },
+    });
+    if (otherMembers > 0) {
+      blockingOrgs.push(ownership.org);
+    } else {
+      soloOwnedOrgs.push(ownership.org);
+    }
+  }
+
+  if (blockingOrgs.length > 0) {
+    const names = blockingOrgs.map((o) => o.name).join(", ");
+    throw new ConflictError(
+      `You're the sole owner of ${names}. Transfer ownership to someone else or delete ${
+        blockingOrgs.length > 1 ? "these organizations" : "this organization"
+      } before deleting your account.`
+    );
+  }
+
+  const otherMemberships = await prisma.orgMembership.findMany({
+    where: { userId, role: { not: "OWNER" } },
+    select: { id: true, orgId: true, role: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    for (const org of soloOwnedOrgs) {
+      await writeAuditLog(tx, {
+        orgId: org.id,
+        actorId: userId,
+        action: "org.delete",
+        targetType: "Organization",
+        targetId: org.id,
+        metadata: { name: org.name, reason: "account_deleted" },
+      });
+      await tx.organization.delete({ where: { id: org.id } });
+    }
+
+    for (const membership of otherMemberships) {
+      await writeAuditLog(tx, {
+        orgId: membership.orgId,
+        actorId: userId,
+        action: "member.remove",
+        targetType: "OrgMembership",
+        targetId: membership.id,
+        metadata: { email: user.email, role: membership.role, reason: "account_deleted" },
+      });
+    }
+
+    await tx.user.delete({ where: { id: userId } });
+  });
 }

@@ -1,16 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
 import { api, ApiError, SessionSummary } from "@/lib/api";
 
 export function SecurityTab() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const router = useRouter();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
+
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -60,7 +66,35 @@ export function SecurityTab() {
     }
   };
 
+  const onDeleteAccount = async () => {
+    if (
+      !window.confirm(
+        "This permanently deletes your account and everything only you have access to. This cannot be undone. Continue?"
+      )
+    ) {
+      return;
+    }
+    setDeletingAccount(true);
+    setDeleteAccountError(null);
+
+    try {
+      await api.deleteAccount(confirmEmail);
+      await logout();
+      // AppShell's own auth guard also redirects to /login the instant
+      // `user` clears, and wins that race against any other destination
+      // (the existing TopNav logout button already follows this same
+      // convention) — pushing here too just avoids a visible flash/retry.
+      router.push("/login");
+    } catch (err) {
+      setDeleteAccountError(
+        err instanceof ApiError ? err.message : "Failed to delete account"
+      );
+      setDeletingAccount(false);
+    }
+  };
+
   return (
+    <div className="flex flex-col gap-lg">
     <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
       <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
         <Icon name="devices" className="text-primary" />
@@ -126,6 +160,44 @@ export function SecurityTab() {
           )}
         </div>
       </div>
+    </div>
+
+    {user && (
+      <div className="rounded-xl border border-[#CF222E]/30 bg-[#FFEBE9] p-md dark:border-red-500/30 dark:bg-red-500/10">
+        <h4 className="flex items-center gap-sm font-body-md text-body-md font-bold text-[#CF222E] dark:text-red-400">
+          <Icon name="warning" />
+          Delete Account
+        </h4>
+        <p className="mt-xs font-body-sm text-body-sm text-[#CF222E]/80 dark:text-red-400/80">
+          This permanently deletes your account. If you&apos;re the sole owner of an
+          organization that still has other members, transfer ownership or delete that
+          organization first.
+        </p>
+        <label className="mt-md block max-w-sm">
+          <span className="mb-xs block font-label-md text-label-md text-[#CF222E] dark:text-red-400">
+            Type <span className="font-mono font-bold">{user.email}</span> to confirm
+          </span>
+          <input
+            value={confirmEmail}
+            onChange={(e) => setConfirmEmail(e.target.value)}
+            className="w-full rounded-lg border border-[#CF222E]/40 bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-[#CF222E] focus:ring-2 focus:ring-[#CF222E]/20"
+          />
+        </label>
+        {deleteAccountError && (
+          <p className="mt-sm font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
+            {deleteAccountError}
+          </p>
+        )}
+        <button
+          type="button"
+          disabled={confirmEmail.toLowerCase() !== user.email.toLowerCase() || deletingAccount}
+          onClick={onDeleteAccount}
+          className="mt-md rounded-lg border border-[#CF222E] bg-transparent px-md py-sm font-body-sm text-body-sm font-bold text-[#CF222E] transition-colors hover:bg-[#CF222E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/50 dark:text-red-400"
+        >
+          {deletingAccount ? "Deleting..." : "Delete My Account"}
+        </button>
+      </div>
+    )}
     </div>
   );
 }

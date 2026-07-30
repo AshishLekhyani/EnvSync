@@ -370,7 +370,12 @@ function ProjectsPageContent() {
                       {auditLogs.map((log) => {
                         const display = getActionDisplay(log.action);
                         const key =
-                          (log.metadata?.key as string | undefined) ?? log.targetType ?? "—";
+                          (log.metadata?.key as string | undefined) ??
+                          (log.metadata?.email as string | undefined) ??
+                          (log.metadata?.name as string | undefined) ??
+                          (log.metadata?.newName as string | undefined) ??
+                          log.targetType ??
+                          "—";
                         return (
                           <tr
                             key={log.id}

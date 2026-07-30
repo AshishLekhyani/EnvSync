@@ -48,6 +48,7 @@ export async function createProject(
       targetType: "Project",
       targetId: project.id,
       projectId: project.id,
+      metadata: { name: project.name },
       ipAddress,
     });
 
@@ -107,6 +108,12 @@ export async function updateProject(
       targetType: "Project",
       targetId: projectId,
       projectId,
+      metadata: {
+        previousName: project.name,
+        newName: updated.name,
+        previousDescription: project.description,
+        newDescription: updated.description,
+      },
       ipAddress,
     });
 
@@ -132,6 +139,7 @@ export async function deleteProject(
       action: "project.delete",
       targetType: "Project",
       targetId: projectId,
+      metadata: { name: project.name },
       ipAddress,
     });
 

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "./Icon";
+import { Modal } from "./Modal";
 import { CreateOrgForm } from "./CreateOrgForm";
 import { useAuth } from "@/lib/auth-context";
 import { roleBadgeClass } from "@/lib/roleBadge";
@@ -16,8 +17,11 @@ export function OrgSwitcher() {
   const ref = useRef<HTMLDivElement>(null);
 
   useOutsideClick(ref, () => {
+    // The create-org modal is portaled to document.body, outside this
+    // wrapper's DOM subtree — while it's open, its own backdrop/Escape
+    // handling owns closing, not this outside-click listener.
+    if (creating) return;
     setOpen(false);
-    setCreating(false);
   });
 
   if (!activeOrg) {
@@ -39,6 +43,12 @@ export function OrgSwitcher() {
     setOpen(false);
     router.push("/projects");
   };
+
+  const orgCreateModal = (
+    <Modal open={creating} onClose={() => setCreating(false)} title="Create Organization">
+      <CreateOrgForm onCreated={onOrgCreated} onCancel={() => setCreating(false)} />
+    </Modal>
+  );
 
   return (
     <div className="relative" ref={ref}>
@@ -98,24 +108,21 @@ export function OrgSwitcher() {
             ))}
           </div>
           <div className="border-t border-outline-variant p-md">
-            {creating ? (
-              <CreateOrgForm
-                onCreated={onOrgCreated}
-                onCancel={() => setCreating(false)}
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={() => setCreating(true)}
-                className="flex w-full items-center gap-xs font-label-md text-label-md text-primary"
-              >
-                <Icon name="add" style={{ fontSize: 18 }} />
-                <span className="hover:underline">Create Organization</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setCreating(true);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-xs font-label-md text-label-md text-primary"
+            >
+              <Icon name="add" style={{ fontSize: 18 }} />
+              <span className="hover:underline">Create Organization</span>
+            </button>
           </div>
         </div>
       )}
+      {orgCreateModal}
     </div>
   );
 }

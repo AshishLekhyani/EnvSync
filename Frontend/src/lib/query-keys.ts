@@ -8,6 +8,7 @@ export const queryKeys = {
   orgTokens: (orgId: string) => ["org", orgId, "tokens"] as const,
   orgPermissions: (orgId: string) => ["org", orgId, "permissions"] as const,
   orgInvites: (orgId: string) => ["org", orgId, "invites"] as const,
+  orgAutoApproveRules: (orgId: string) => ["org", orgId, "auto-approve"] as const,
   project: (projectId: string) => ["project", projectId] as const,
   projectEnvironments: (projectId: string) =>
     ["project", projectId, "environments"] as const,

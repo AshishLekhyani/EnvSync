@@ -6,6 +6,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "../Icon";
 import { Select } from "../Select";
+import { Modal } from "../Modal";
+import { CreateOrgForm } from "../CreateOrgForm";
 import { SidebarFooterLinks } from "./SidebarFooterLinks";
 import { useAuth } from "@/lib/auth-context";
 import { queryKeys } from "@/lib/query-keys";
@@ -162,9 +164,16 @@ function EnvironmentList({ projectId }: { projectId: string }) {
 }
 
 export function ProjectsSidebar() {
-  const { activeOrg: org } = useAuth();
+  const { activeOrg: org, refreshMe, switchOrg } = useAuth();
   const params = useParams<{ projectId?: string }>();
   const router = useRouter();
+  const [showCreateOrg, setShowCreateOrg] = useState(false);
+
+  const onOrgCreated = async (newOrg: { id: string }) => {
+    await refreshMe();
+    switchOrg(newOrg.id);
+    setShowCreateOrg(false);
+  };
 
   const projectsQuery = useQuery({
     queryKey: queryKeys.orgProjects(org?.id ?? ""),
@@ -190,7 +199,21 @@ export function ProjectsSidebar() {
           Projects
         </p>
         <div className="flex flex-col gap-xs overflow-y-auto">
-          {projectsQuery.isPending ? (
+          {!org ? (
+            <div className="flex flex-col items-start gap-sm px-md py-sm">
+              <p className="font-body-sm text-body-sm text-secondary">
+                No organization yet. Create one to start adding projects.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowCreateOrg(true)}
+                className="flex items-center gap-xs rounded-lg border border-primary/40 px-sm py-1 text-[12px] text-primary transition-colors hover:bg-primary/5"
+              >
+                <Icon name="add" style={{ fontSize: 14 }} />
+                Create Organization
+              </button>
+            </div>
+          ) : projectsQuery.isPending ? (
             <div className="flex justify-center py-md text-secondary">
               <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 20 }} />
             </div>
@@ -258,6 +281,14 @@ export function ProjectsSidebar() {
           );
         })}
       </nav>
+
+      <Modal
+        open={showCreateOrg}
+        onClose={() => setShowCreateOrg(false)}
+        title="Create Organization"
+      >
+        <CreateOrgForm onCreated={onOrgCreated} onCancel={() => setShowCreateOrg(false)} />
+      </Modal>
     </>
   );
 }

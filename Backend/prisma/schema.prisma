@@ -25,6 +25,7 @@ model User {
   updatedAt       DateTime     @updatedAt
 
   memberships            OrgMembership[]
+  membershipsInvited     OrgMembership[] @relation("MembershipInviter")
   sessions               Session[]
   auditLogs               AuditLog[]      @relation("ActorUser")
   secretVersionsAuthored  SecretVersion[] @relation("SecretVersionAuthor")
@@ -32,9 +33,12 @@ model User {
   notifications           Notification[]  @relation("NotificationRecipient")
   invitesSent             OrgInvite[]     @relation("InviteInviter")
   invitesAccepted         OrgInvite[]     @relation("InviteAcceptor")
+  invitesApproved         OrgInvite[]     @relation("InviteApprover")
   passwordResetTokens     PasswordResetToken[]
   projectAccess           ProjectMembership[] @relation("ProjectMember")
   projectAccessGranted    ProjectMembership[] @relation("ProjectAccessGrantor")
+  autoApproveRulesAsInviter InviteAutoApproveRule[] @relation("AutoApproveInviter")
+  autoApproveRulesCreated   InviteAutoApproveRule[] @relation("AutoApproveCreatedBy")
 
   @@unique([authProvider, providerId])
 }
@@ -61,6 +65,7 @@ model Organization {
   notifications       Notification[]
   invites             OrgInvite[]
   permissionOverrides OrgEnvironmentPermission[]
+  inviteAutoApproveRules InviteAutoApproveRule[]
 }
 
 model OrgMembership {
@@ -69,11 +74,13 @@ model OrgMembership {
   orgId              String
   role               OrgRole  @default(VIEWER)
   canViewAllProjects Boolean  @default(false)
+  invitedById        String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy User?        @relation("MembershipInviter", fields: [invitedById], references: [id], onDelete: SetNull)
 
   @@unique([userId, orgId])
 }
@@ -171,11 +178,11 @@ model SecretVersion {
   iv          Bytes
   authTag     Bytes
   changeType  SecretChangeType
-  createdById String
+  createdById String?
   createdAt   DateTime         @default(now())
 
   secret Secret @relation(fields: [secretId], references: [id], onDelete: Cascade)
-  author User   @relation("SecretVersionAuthor", fields: [createdById], references: [id])
+  author User?  @relation("SecretVersionAuthor", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@unique([secretId, version])
 }
@@ -283,26 +290,56 @@ model OrgEnvironmentPermission {
   @@index([orgId])
 }
 
+enum InviteApprovalStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model OrgInvite {
-  id           String    @id @default(cuid())
-  orgId        String
-  email        String
-  role         OrgRole
-  projectId    String?
-  tokenHash    String    @unique
-  invitedById  String
-  createdAt    DateTime  @default(now())
-  expiresAt    DateTime
-  acceptedAt   DateTime?
-  acceptedById String?
+  id             String               @id @default(cuid())
+  orgId          String
+  email          String
+  role           OrgRole
+  projectId      String?
+  tokenHash      String               @unique
+  invitedById    String
+  approvalStatus InviteApprovalStatus @default(NONE)
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  acceptedById   String?
 
   org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   project    Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   invitedBy  User         @relation("InviteInviter", fields: [invitedById], references: [id], onDelete: Cascade)
+  approvedBy User?        @relation("InviteApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   acceptedBy User?        @relation("InviteAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
 
   @@index([orgId])
   @@index([email])
+}
+
+model InviteAutoApproveRule {
+  id          String   @id @default(cuid())
+  orgId       String
+  inviterId   String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  inviter   User?        @relation("AutoApproveInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  createdBy User         @relation("AutoApproveCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  // Postgres does not enforce uniqueness among multiple NULLs in a unique
+  // index, so this only dedupes per-inviter rules — the blanket
+  // (inviterId: null) rule must be kept unique in application code by
+  // deleting any existing blanket row before inserting a new one.
+  @@unique([orgId, inviterId])
+  @@index([orgId])
 }
 
 model PasswordResetToken {

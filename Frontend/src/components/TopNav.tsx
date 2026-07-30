@@ -9,14 +9,14 @@ import { OrgSwitcher } from "./OrgSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
 import { useOutsideClick } from "@/lib/useOutsideClick";
-import { api, NotificationSummary } from "@/lib/api";
+import { api, ApiError, NotificationSummary } from "@/lib/api";
 
 const NAV = [
-  { href: "/projects", label: "Projects" },
-  { href: "/team", label: "Team" },
-  { href: "/audit", label: "Audit Logs" },
-  { href: "/integrations", label: "Integrations" },
-  { href: "/settings", label: "Settings" },
+  { href: "/projects", label: "Projects", requiresOrg: false },
+  { href: "/team", label: "Team", requiresOrg: true },
+  { href: "/audit", label: "Audit Logs", requiresOrg: true },
+  { href: "/integrations", label: "Integrations", requiresOrg: true },
+  { href: "/settings", label: "Settings", requiresOrg: false },
 ] as const;
 
 function navActive(pathname: string, href: string) {
@@ -39,7 +39,7 @@ export function TopNav({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, activeOrg, logout } = useAuth();
 
   const [searchValue, setSearchValue] = useState("");
   const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
@@ -51,6 +51,9 @@ export function TopNav({
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   useOutsideClick(profileRef, () => setProfileOpen(false));
+
+  const [approvalPending, setApprovalPending] = useState<string | null>(null);
+  const [approvalResult, setApprovalResult] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setSearchValue("");
@@ -82,6 +85,30 @@ export function TopNav({
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
+  const onInviteDecision = async (n: NotificationSummary, decision: "approve" | "reject") => {
+    const orgId = n.metadata?.orgId as string | undefined;
+    const inviteId = n.metadata?.inviteId as string | undefined;
+    if (!orgId || !inviteId) return;
+
+    setApprovalPending(n.id);
+    try {
+      if (decision === "approve") {
+        await api.approveInvite(orgId, inviteId);
+      } else {
+        await api.rejectInvite(orgId, inviteId);
+      }
+      setApprovalResult((prev) => ({ ...prev, [n.id]: decision }));
+      await onMarkRead(n.id);
+    } catch (err) {
+      setApprovalResult((prev) => ({
+        ...prev,
+        [n.id]: err instanceof ApiError ? `error: ${err.message}` : "error",
+      }));
+    } finally {
+      setApprovalPending(null);
+    }
+  };
+
   const onLogout = async () => {
     await logout();
     router.push("/login");
@@ -100,6 +127,17 @@ export function TopNav({
         <OrgSwitcher />
         <nav className="hidden h-full items-center gap-lg pt-2 md:flex">
           {NAV.map((item) => {
+            if (item.requiresOrg && !activeOrg) {
+              return (
+                <span
+                  key={item.href}
+                  title="Create an organization first"
+                  className="cursor-not-allowed pb-2 font-body-md text-body-md text-secondary opacity-40"
+                >
+                  {item.label}
+                </span>
+              );
+            }
             const active = navActive(pathname, item.href);
             return (
               <Link
@@ -185,23 +223,74 @@ export function TopNav({
                     No notifications yet.
                   </p>
                 ) : (
-                  notifications.map((n) => (
-                    <button
-                      key={n.id}
-                      type="button"
-                      onClick={() => onMarkRead(n.id)}
-                      className={`flex w-full flex-col items-start gap-xs border-b border-outline-variant px-md py-sm text-left transition-colors last:border-b-0 hover:bg-surface-container-low ${
-                        n.read ? "" : "bg-primary/5"
-                      }`}
-                    >
-                      <span className="font-body-sm text-body-sm text-on-surface">
-                        {n.message}
-                      </span>
-                      <span className="font-body-sm text-[11px] text-secondary">
-                        {new Date(n.createdAt).toLocaleString()}
-                      </span>
-                    </button>
-                  ))
+                  notifications.map((n) => {
+                    const isApprovalRequest = n.type === "invite.approval_requested";
+                    const decided = approvalResult[n.id];
+
+                    if (isApprovalRequest && (!n.read || decided)) {
+                      return (
+                        <div
+                          key={n.id}
+                          className={`flex w-full flex-col items-start gap-xs border-b border-outline-variant px-md py-sm text-left ${
+                            n.read ? "" : "bg-primary/5"
+                          }`}
+                        >
+                          <span className="font-body-sm text-body-sm text-on-surface">
+                            {n.message}
+                          </span>
+                          <span className="font-body-sm text-[11px] text-secondary">
+                            {new Date(n.createdAt).toLocaleString()}
+                          </span>
+                          {decided ? (
+                            <span className="font-body-sm text-[11px] text-secondary">
+                              {decided === "approve"
+                                ? "Approved."
+                                : decided === "reject"
+                                  ? "Rejected."
+                                  : "Something went wrong."}
+                            </span>
+                          ) : (
+                            <div className="mt-xs flex gap-sm">
+                              <button
+                                type="button"
+                                disabled={approvalPending === n.id}
+                                onClick={() => onInviteDecision(n, "approve")}
+                                className="rounded-lg bg-primary-container px-sm py-1 font-label-md text-[11px] text-on-primary disabled:opacity-50"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                disabled={approvalPending === n.id}
+                                onClick={() => onInviteDecision(n, "reject")}
+                                className="rounded-lg border border-outline-variant px-sm py-1 font-label-md text-[11px] text-on-surface disabled:opacity-50"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => onMarkRead(n.id)}
+                        className={`flex w-full flex-col items-start gap-xs border-b border-outline-variant px-md py-sm text-left transition-colors last:border-b-0 hover:bg-surface-container-low ${
+                          n.read ? "" : "bg-primary/5"
+                        }`}
+                      >
+                        <span className="font-body-sm text-body-sm text-on-surface">
+                          {n.message}
+                        </span>
+                        <span className="font-body-sm text-[11px] text-secondary">
+                          {new Date(n.createdAt).toLocaleString()}
+                        </span>
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </div>
