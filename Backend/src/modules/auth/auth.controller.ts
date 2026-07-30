@@ -5,6 +5,7 @@ import { env } from "../../config/env";
 import * as authService from "./auth.service";
 import { ChangePasswordInput, LoginInput, SignupInput, UpdateProfileInput } from "./auth.validators";
 import { REFRESH_TOKEN_MAX_AGE_MS } from "./tokens";
+import { registerConnection, unregisterConnection } from "./sse";
 
 export const REFRESH_COOKIE = "refreshToken";
 export const REFRESH_COOKIE_PATH = "/api/auth";
@@ -85,6 +86,36 @@ export const revokeSession = asyncHandler(async (req, res) => {
 export const updateProfile = asyncHandler(async (req, res) => {
   const user = await authService.updateProfile(req.user!.id, req.body as UpdateProfileInput);
   res.status(200).json(user);
+});
+
+export const events = asyncHandler(async (req, res) => {
+  const raw = req.cookies?.[REFRESH_COOKIE];
+  if (!raw) {
+    throw new UnauthorizedError();
+  }
+
+  const session = await authService.findSessionByRefreshToken(raw);
+  if (!session || session.revokedAt || session.expiresAt < new Date()) {
+    throw new UnauthorizedError();
+  }
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+  res.write(": connected\n\n");
+
+  registerConnection(session.userId, res);
+
+  const heartbeat = setInterval(() => {
+    res.write(": heartbeat\n\n");
+  }, 20000);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    unregisterConnection(session.userId, res);
+  });
 });
 
 export const changePassword = asyncHandler(async (req, res) => {

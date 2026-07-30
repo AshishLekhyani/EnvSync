@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { SideNav } from "./SideNav";
 import { TopNav } from "./TopNav";
@@ -37,7 +37,7 @@ export function AppShell({
   showSearch = true,
   onSearch,
   trailing,
-  mainClassName = "flex-1 p-xl md:ml-64",
+  mainClassName = "flex-1 p-xl",
   showMobileNav = true,
 }: {
   children: React.ReactNode;
@@ -50,7 +50,9 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const params = useParams<{ projectId?: string }>();
   const { user, loading } = useAuth();
+  const showSideNav = !!params.projectId;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -75,8 +77,10 @@ export function AppShell({
         trailing={trailing}
       />
       <div className="flex min-h-[calc(100vh-64px)]">
-        <SideNav />
-        <main className={mainClassName}>{children}</main>
+        {showSideNav && <SideNav projectId={params.projectId!} />}
+        <main className={`${mainClassName} ${showSideNav ? "md:ml-64" : ""}`}>
+          {children}
+        </main>
       </div>
 
       {showMobileNav && (

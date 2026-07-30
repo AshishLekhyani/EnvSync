@@ -1,4 +1,5 @@
 ﻿import Link from "next/link";
+import { GuestOnly } from "@/components/GuestOnly";
 import { MarketingHeader } from "@/components/MarketingHeader";
 import { Icon } from "@/components/Icon";
 
@@ -10,6 +11,7 @@ const secrets = [
 
 export default function LandingPage() {
   return (
+    <GuestOnly>
     <div className="min-h-screen bg-[#F6F8FA] dark:bg-background font-body-md text-body-md text-on-surface antialiased">
       <MarketingHeader />
 
@@ -414,5 +416,6 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
+    </GuestOnly>
   );
 }

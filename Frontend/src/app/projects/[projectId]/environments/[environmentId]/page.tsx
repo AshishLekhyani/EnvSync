@@ -50,7 +50,7 @@ export default function EnvironmentSecretsPage() {
     projectId: string;
     environmentId: string;
   }>();
-  const { activeOrg: org } = useAuth();
+  const { user, activeOrg: org } = useAuth();
 
   const [environment, setEnvironment] = useState<EnvironmentSummary | null>(null);
   const [secrets, setSecrets] = useState<SecretMetadata[]>([]);
@@ -87,6 +87,8 @@ export default function EnvironmentSecretsPage() {
   const [savingExpiry, setSavingExpiry] = useState(false);
 
   useEffect(() => {
+    if (!user) return;
+
     let cancelled = false;
     setLoading(true);
 
@@ -114,7 +116,7 @@ export default function EnvironmentSecretsPage() {
     return () => {
       cancelled = true;
     };
-  }, [environmentId, org]);
+  }, [environmentId, org, user]);
 
   const memberName = (userId: string) => {
     const m = members.find((mm) => mm.user.id === userId);
@@ -334,7 +336,7 @@ export default function EnvironmentSecretsPage() {
           </button>
         )
       }
-      mainClassName="flex-1 overflow-y-auto p-xl md:ml-64"
+      mainClassName="flex-1 overflow-y-auto p-xl"
       showMobileNav={false}
     >
       <div className="mx-auto max-w-[1280px] pb-xl">

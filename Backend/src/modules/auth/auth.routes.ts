@@ -43,6 +43,7 @@ authRouter.post(
 );
 authRouter.get("/sessions", requireAuth, authController.listSessions);
 authRouter.delete("/sessions/:sessionId", requireAuth, authController.revokeSession);
+authRouter.get("/events", authController.events);
 authRouter.get("/github", githubController.start);
 authRouter.get("/github/callback", githubController.callback);
 authRouter.get("/google", googleController.start);

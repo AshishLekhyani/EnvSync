@@ -9,7 +9,16 @@ import {
   useState,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, MeResponse, OrgSummary, PublicUser, setAccessToken } from "./api";
+import {
+  api,
+  API_URL,
+  MeResponse,
+  OrgSummary,
+  PublicUser,
+  setAccessToken,
+  setSessionExpiredHandler,
+  trySilentRefresh,
+} from "./api";
 import { queryKeys } from "./query-keys";
 
 const ACTIVE_ORG_STORAGE_KEY = "envsync.activeOrgId";
@@ -129,19 +138,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [login]
   );
 
+  const forceLogout = useCallback(() => {
+    setAccessToken(null);
+    setUser(null);
+    queryClient.clear();
+  }, [queryClient]);
+
   const logout = useCallback(async () => {
     try {
       await api.logout();
     } finally {
-      setAccessToken(null);
-      setUser(null);
-      queryClient.removeQueries({ queryKey: queryKeys.me() });
+      forceLogout();
     }
-  }, [queryClient]);
+  }, [forceLogout]);
 
   const refreshMe = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: queryKeys.me() });
   }, [queryClient]);
+
+  // Lets the plain api.ts module force a logout when a silent token refresh
+  // fails (expired access token or a revoked session) mid-request.
+  useEffect(() => {
+    setSessionExpiredHandler(forceLogout);
+    return () => setSessionExpiredHandler(null);
+  }, [forceLogout]);
+
+  // Real-time push: when this account's session is revoked from another
+  // tab/device (or by an admin), the backend notifies over SSE. We don't know
+  // whether it was THIS tab's session, so we just verify via a silent refresh —
+  // harmless if it was a different session, forces logout if it was this one.
+  useEffect(() => {
+    if (!user) return;
+
+    const source = new EventSource(`${API_URL}/auth/events`, { withCredentials: true });
+
+    const onRevoked = () => {
+      trySilentRefresh().then((ok) => {
+        if (!ok) forceLogout();
+      });
+    };
+
+    source.addEventListener("session-revoked", onRevoked);
+
+    return () => {
+      source.removeEventListener("session-revoked", onRevoked);
+      source.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, forceLogout]);
 
   const loading = bootstrapping || (!!user && meQuery.isPending);
 

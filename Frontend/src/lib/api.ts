@@ -6,6 +6,14 @@ export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
+let sessionExpiredHandler: (() => void) | null = null;
+
+// Called once by AuthProvider so this plain module can force a logout when
+// a silent token refresh fails (expired or revoked session) without importing React here.
+export function setSessionExpiredHandler(handler: (() => void) | null) {
+  sessionExpiredHandler = handler;
+}
+
 export class ApiError extends Error {
   status: number;
   code: string;
@@ -17,7 +25,46 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// Paths where a 401 means "these credentials/token are wrong," not "the access
+// token expired" — retrying after a refresh would never help and /auth/refresh
+// itself must never trigger another refresh (infinite recursion).
+const NO_REFRESH_RETRY_PATHS = new Set(["/auth/refresh", "/auth/login", "/auth/signup"]);
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (!res.ok) return false;
+        const body = await res.json();
+        accessToken = body.accessToken;
+        return true;
+      } catch {
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
+}
+
+// Also used by the SSE listener in auth-context to proactively verify a session
+// is still valid the moment another tab/device revokes it.
+export async function trySilentRefresh(): Promise<boolean> {
+  return refreshAccessToken();
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  isRetry = false
+): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
   if (accessToken) {
@@ -32,6 +79,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 204) {
     return undefined as T;
+  }
+
+  if (res.status === 401 && !isRetry && !NO_REFRESH_RETRY_PATHS.has(path)) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      return request<T>(path, options, true);
+    }
+    accessToken = null;
+    sessionExpiredHandler?.();
   }
 
   const body = await res.json().catch(() => null);

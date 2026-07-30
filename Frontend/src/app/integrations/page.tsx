@@ -145,7 +145,7 @@ aws secretsmanager put-secret-value \\
   --secret-string file://.env`;
 
   return (
-    <AppShell showSearch={false} mainClassName="mx-auto w-full max-w-container-max flex-1 p-md md:ml-64 lg:p-xl">
+    <AppShell showSearch={false} mainClassName="mx-auto w-full max-w-container-max flex-1 p-md lg:p-xl">
       <div className="mb-lg">
         <h1 className="font-h1 text-h1 text-on-surface">Integrations</h1>
         <p className="mt-xs max-w-2xl font-body-md text-body-md text-secondary">

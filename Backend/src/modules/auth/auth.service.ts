@@ -13,6 +13,7 @@ import {
   signAccessToken,
 } from "./tokens";
 import { ChangePasswordInput, LoginInput, SignupInput, UpdateProfileInput } from "./auth.validators";
+import { notifyUserSessionsRevoked } from "./sse";
 
 export interface SessionMeta {
   userAgent?: string;
@@ -153,6 +154,8 @@ export async function revokeSession(userId: string, sessionId: string) {
     where: { id: sessionId },
     data: { revokedAt: new Date() },
   });
+
+  notifyUserSessionsRevoked(userId);
 }
 
 export async function updateProfile(userId: string, input: UpdateProfileInput) {
@@ -200,6 +203,8 @@ export async function changePassword(
     },
     data: { revokedAt: new Date() },
   });
+
+  notifyUserSessionsRevoked(userId);
 }
 
 export async function findSessionByRefreshToken(rawRefreshToken: string) {

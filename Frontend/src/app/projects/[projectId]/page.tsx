@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { Select } from "@/components/Select";
+import { useAuth } from "@/lib/auth-context";
 import { queryKeys } from "@/lib/query-keys";
 import {
   api,
@@ -39,14 +40,17 @@ const ALL_ENV_TYPES: EnvironmentType[] = [
 export default function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const projectQuery = useQuery({
     queryKey: queryKeys.project(projectId),
     queryFn: () => api.getProject(projectId),
+    enabled: !!user,
   });
   const environmentsQuery = useQuery({
     queryKey: queryKeys.projectEnvironments(projectId),
     queryFn: () => api.listEnvironments(projectId),
+    enabled: !!user,
   });
 
   const project = projectQuery.data ?? null;

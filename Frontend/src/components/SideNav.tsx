@@ -36,33 +36,27 @@ const ALL_ENV_TYPES: EnvironmentType[] = [
   "PRODUCTION",
 ];
 
-export function SideNav() {
-  const { activeOrg: org } = useAuth();
-  const params = useParams<{ projectId?: string; environmentId?: string }>();
+/**
+ * Only ever rendered by AppShell for project-scoped routes (/projects/[projectId]/...),
+ * so the active project always comes straight from the URL — never a fallback guess.
+ */
+export function SideNav({ projectId }: { projectId: string }) {
+  const { user } = useAuth();
+  const params = useParams<{ environmentId?: string }>();
   const queryClient = useQueryClient();
 
-  const orgProjectsQuery = useQuery({
-    queryKey: queryKeys.orgProjects(org?.id ?? ""),
-    queryFn: () => api.listProjects(org!.id),
-    enabled: !!org && !params.projectId,
-  });
-
   const projectQuery = useQuery({
-    queryKey: queryKeys.project(params.projectId ?? ""),
-    queryFn: () => api.getProject(params.projectId!),
-    enabled: !!params.projectId,
+    queryKey: queryKeys.project(projectId),
+    queryFn: () => api.getProject(projectId),
+    enabled: !!user,
   });
-
-  const project = params.projectId
-    ? projectQuery.data ?? null
-    : orgProjectsQuery.data?.[0] ?? null;
-
-  const loading = params.projectId ? projectQuery.isPending : orgProjectsQuery.isPending;
+  const project = projectQuery.data ?? null;
+  const loading = projectQuery.isPending;
 
   const environmentsQuery = useQuery({
-    queryKey: queryKeys.projectEnvironments(project?.id ?? ""),
-    queryFn: () => api.listEnvironments(project!.id),
-    enabled: !!project,
+    queryKey: queryKeys.projectEnvironments(projectId),
+    queryFn: () => api.listEnvironments(projectId),
+    enabled: !!user,
   });
   const environments = environmentsQuery.data ?? [];
 
@@ -77,14 +71,14 @@ export function SideNav() {
 
   const onCreateEnv = async (e: FormEvent) => {
     e.preventDefault();
-    if (!project || !newEnvType) return;
+    if (!newEnvType) return;
     setCreatingEnv(true);
     setEnvError(null);
 
     try {
-      const env = await api.createEnvironment(project.id, { type: newEnvType });
+      const env = await api.createEnvironment(projectId, { type: newEnvType });
       queryClient.setQueryData<EnvironmentSummary[]>(
-        queryKeys.projectEnvironments(project.id),
+        queryKeys.projectEnvironments(projectId),
         (prev) => [...(prev ?? []), env]
       );
       setShowNewEnv(false);
@@ -104,7 +98,7 @@ export function SideNav() {
         </div>
         <div>
           <div className="font-label-md text-label-md font-bold leading-none text-on-surface">
-            {project ? project.name : "No project"}
+            {project ? project.name : loading ? "Loading..." : "Not found"}
           </div>
           <div className="mt-xs font-body-sm text-[10px] uppercase tracking-wider text-on-surface-variant">
             {project ? project.slug : "—"}
@@ -138,7 +132,7 @@ export function SideNav() {
         </div>
       ) : (
         <p className="px-md font-body-sm text-body-sm text-secondary">
-          Create a project to add environments.
+          This project couldn&apos;t be found.
         </p>
       )}
 
