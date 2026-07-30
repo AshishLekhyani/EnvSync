@@ -16,6 +16,9 @@ export const listAuditLogs = asyncHandler(async (req, res) => {
     {
       projectId: query.projectId,
       action: query.action,
+      actorId: query.actorId,
+      startDate: query.startDate,
+      endDate: query.endDate,
       limit: query.limit,
     },
     accessibleProjectIds

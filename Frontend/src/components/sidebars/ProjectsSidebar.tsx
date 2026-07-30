@@ -192,6 +192,18 @@ export function ProjectsSidebar() {
     if (params.projectId) setExpandedProjectId(params.projectId);
   }, [params.projectId]);
 
+  const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
+
+  const onRequestAccess = async (projectId: string) => {
+    if (!org) return;
+    try {
+      await api.requestProjectAccess(org.id, projectId);
+      setRequestedIds((prev) => new Set(prev).add(projectId));
+    } catch {
+      /* the button just stays clickable to retry */
+    }
+  };
+
   return (
     <>
       <aside className="fixed bottom-0 left-0 top-16 z-40 hidden w-64 flex-col gap-base border-r border-outline-variant bg-surface-container-low p-md md:flex">
@@ -225,6 +237,31 @@ export function ProjectsSidebar() {
             projects.map((project) => {
               const active = project.id === params.projectId;
               const expanded = project.id === expandedProjectId;
+
+              if (project.hasAccess === false) {
+                const requested = requestedIds.has(project.id);
+                return (
+                  <div
+                    key={project.id}
+                    title="You don't have access to this project yet"
+                    className="flex items-center justify-between gap-xs rounded-lg px-md py-sm text-on-surface-variant opacity-70"
+                  >
+                    <span className="flex items-center gap-xs truncate font-label-md text-label-md">
+                      <Icon name="lock" style={{ fontSize: 18 }} />
+                      <span className="truncate">{project.name}</span>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={requested}
+                      onClick={() => onRequestAccess(project.id)}
+                      className="flex-shrink-0 rounded-full border border-primary/40 px-sm text-[10px] text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {requested ? "Requested" : "Request"}
+                    </button>
+                  </div>
+                );
+              }
+
               return (
                 <div key={project.id} className="flex flex-col gap-xs">
                   <div
@@ -263,7 +300,7 @@ export function ProjectsSidebar() {
       </aside>
 
       <nav className="flex gap-xs overflow-x-auto border-b border-outline-variant bg-surface px-md py-sm md:hidden">
-        {projects.map((project) => {
+        {projects.filter((project) => project.hasAccess !== false).map((project) => {
           const active = project.id === params.projectId;
           return (
             <Link

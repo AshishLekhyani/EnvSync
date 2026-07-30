@@ -1,18 +1,45 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
+import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
+import { queryKeys } from "@/lib/query-keys";
 import { api, ApiError, AuditLogEntry } from "@/lib/api";
-import { describeAuditLog, getActionDisplay } from "@/lib/auditActions";
+import { ACTION_DISPLAY, describeAuditLog, getActionDisplay } from "@/lib/auditActions";
 import { exportAuditLogsCsv } from "@/lib/auditExport";
+
+const ACTION_OPTIONS = Object.keys(ACTION_DISPLAY).sort();
 
 function AuditPageContent() {
   const { activeOrg: org } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId");
+  const action = searchParams.get("action");
+  const actorId = searchParams.get("actorId");
+  const startDate = searchParams.get("startDate");
+  const endDate = searchParams.get("endDate");
+
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (value) {
+      next.set(key, value);
+    } else {
+      next.delete(key);
+    }
+    router.push(`/audit${next.toString() ? `?${next}` : ""}`);
+  };
+
+  const membersQuery = useQuery({
+    queryKey: queryKeys.orgMembers(org?.id ?? ""),
+    queryFn: () => api.listMembers(org!.id),
+    enabled: !!org,
+  });
+  const members = membersQuery.data ?? [];
 
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,7 +56,14 @@ function AuditPageContent() {
     setLoading(true);
 
     api
-      .listAuditLogs(org.id, { limit: 50, projectId: projectId ?? undefined })
+      .listAuditLogs(org.id, {
+        limit: 50,
+        projectId: projectId ?? undefined,
+        action: action ?? undefined,
+        actorId: actorId ?? undefined,
+        startDate: startDate ?? undefined,
+        endDate: endDate ?? undefined,
+      })
       .then((result) => {
         if (!cancelled) {
           setLogs(result);
@@ -48,7 +82,7 @@ function AuditPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [org, projectId]);
+  }, [org, projectId, action, actorId, startDate, endDate]);
 
   const onExport = async () => {
     if (!org) return;
@@ -87,6 +121,66 @@ function AuditPageContent() {
             {exporting ? "Exporting..." : "Export Logs"}
           </button>
         </div>
+
+        {org && (
+          <div className="mb-lg flex flex-col gap-md rounded-xl border border-outline-variant bg-surface-container-lowest p-md sm:flex-row sm:flex-wrap sm:items-end">
+            <Select
+              label="Action"
+              wrapperClassName="flex-1 min-w-[160px]"
+              value={action ?? ""}
+              onChange={(e) => setFilter("action", e.target.value)}
+            >
+              <option value="">All actions</option>
+              {ACTION_OPTIONS.map((a) => (
+                <option key={a} value={a}>
+                  {getActionDisplay(a).label}
+                </option>
+              ))}
+            </Select>
+            <Select
+              label="Actor"
+              wrapperClassName="flex-1 min-w-[160px]"
+              value={actorId ?? ""}
+              onChange={(e) => setFilter("actorId", e.target.value)}
+            >
+              <option value="">Everyone</option>
+              {members.map((m) => (
+                <option key={m.membershipId} value={m.user.id}>
+                  {m.user.name}
+                </option>
+              ))}
+            </Select>
+            <label className="flex-1 min-w-[140px]">
+              <span className="mb-xs block font-label-md text-label-md text-on-surface">
+                From
+              </span>
+              <input
+                type="date"
+                value={startDate ?? ""}
+                onChange={(e) => setFilter("startDate", e.target.value)}
+                className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
+              />
+            </label>
+            <label className="flex-1 min-w-[140px]">
+              <span className="mb-xs block font-label-md text-label-md text-on-surface">To</span>
+              <input
+                type="date"
+                value={endDate ?? ""}
+                onChange={(e) => setFilter("endDate", e.target.value)}
+                className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
+              />
+            </label>
+            {(action || actorId || startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => router.push(projectId ? `/audit?projectId=${projectId}` : "/audit")}
+                className="font-body-sm text-body-sm text-primary hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
 
         {error && (
           <div className="mb-md rounded-lg border border-[#CF222E]/30 bg-[#FFEBE9] px-md py-sm font-body-sm text-body-sm text-[#CF222E] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">

@@ -39,6 +39,8 @@ model User {
   projectAccessGranted    ProjectMembership[] @relation("ProjectAccessGrantor")
   autoApproveRulesAsInviter InviteAutoApproveRule[] @relation("AutoApproveInviter")
   autoApproveRulesCreated   InviteAutoApproveRule[] @relation("AutoApproveCreatedBy")
+  projectAccessRequested    ProjectAccessRequest[]  @relation("ProjectAccessRequester")
+  projectAccessDecided      ProjectAccessRequest[]  @relation("ProjectAccessDecider")
 
   @@unique([authProvider, providerId])
 }
@@ -66,6 +68,7 @@ model Organization {
   invites             OrgInvite[]
   permissionOverrides OrgEnvironmentPermission[]
   inviteAutoApproveRules InviteAutoApproveRule[]
+  projectAccessRequests  ProjectAccessRequest[]
 }
 
 model OrgMembership {
@@ -99,6 +102,7 @@ model Project {
   auditLogs    AuditLog[]
   memberships  ProjectMembership[]
   invites      OrgInvite[]
+  accessRequests ProjectAccessRequest[]
 
   @@unique([orgId, slug])
 }
@@ -353,4 +357,29 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ProjectAccessRequest {
+  id            String               @id @default(cuid())
+  orgId         String
+  projectId     String
+  requestedById String
+  status        AccessRequestStatus  @default(PENDING)
+  decidedById   String?
+  decidedAt     DateTime?
+  createdAt     DateTime             @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedBy User         @relation("ProjectAccessRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  decidedBy   User?        @relation("ProjectAccessDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([projectId])
 }

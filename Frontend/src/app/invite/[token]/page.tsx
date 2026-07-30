@@ -11,7 +11,7 @@ import { api, ApiError, PublicInvite } from "@/lib/api";
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
-  const { user, loading: authLoading, logout, refreshMe } = useAuth();
+  const { user, loading: authLoading, logout, refreshMe, switchOrg } = useAuth();
 
   const [invite, setInvite] = useState<PublicInvite | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +50,9 @@ export default function InvitePage() {
     try {
       await api.acceptInvite(token);
       await refreshMe();
+      if (invite) {
+        switchOrg(invite.orgId);
+      }
       router.push("/projects");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to accept invite");

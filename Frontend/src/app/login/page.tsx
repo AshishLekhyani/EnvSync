@@ -19,7 +19,7 @@ export default function LoginPage() {
             <Icon name="enhanced_encryption" className="text-primary-container" filled />
           </div>
           <h2 className="mb-md font-h1 text-h1 text-inverse-on-surface">
-            Encrypted secrets. Zero-knowledge by design.
+            Encrypted secrets. Access verified on every request.
           </h2>
           <p className="font-body-lg text-body-lg text-surface-dim">
             AES-256 encryption, role-based access, and a CLI that keeps plaintext

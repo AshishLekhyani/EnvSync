@@ -1,16 +1,63 @@
-﻿import Link from "next/link";
+﻿"use client";
+
+import Link from "next/link";
+import { useState } from "react";
 import { GuestOnly } from "@/components/GuestOnly";
 import { MarketingFooter } from "@/components/MarketingFooter";
 import { MarketingHeader } from "@/components/MarketingHeader";
 import { Icon } from "@/components/Icon";
 
-const secrets = [
-  { key: "DATABASE_URL", value: "••••••••••••••••••••••••" },
-  { key: "STRIPE_SECRET", value: "••••••••••••••••••••••••" },
-  { key: "AWS_ACCESS_KEY", value: "AKIA292X88..." },
+type DemoEnv = "PRODUCTION" | "STAGING" | "DEVELOPMENT";
+
+const DEMO_TABS: { key: DemoEnv; label: string; icon: string }[] = [
+  { key: "PRODUCTION", label: "Production", icon: "rocket_launch" },
+  { key: "STAGING", label: "Staging", icon: "swipe_left" },
+  { key: "DEVELOPMENT", label: "Development", icon: "code" },
 ];
 
+const DEMO_SECRETS: Record<DemoEnv, { key: string; value: string }[]> = {
+  PRODUCTION: [
+    { key: "DATABASE_URL", value: "postgres://prod-db.internal:5432/app" },
+    { key: "STRIPE_SECRET", value: "sk_live_51H8x9k2eZvKYlo2C" },
+    { key: "AWS_ACCESS_KEY", value: "AKIA292X88QK7RSTUV1" },
+  ],
+  STAGING: [
+    { key: "DATABASE_URL", value: "postgres://staging-db.internal:5432/app" },
+    { key: "STRIPE_SECRET", value: "sk_test_51H8x9k2eZvKYlo2C" },
+  ],
+  DEVELOPMENT: [
+    { key: "DATABASE_URL", value: "postgres://localhost:5432/app_dev" },
+    { key: "DEBUG", value: "true" },
+  ],
+};
+
 export default function LandingPage() {
+  const [activeDemoEnv, setActiveDemoEnv] = useState<DemoEnv>("PRODUCTION");
+  const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
+  const [showCopyToast, setShowCopyToast] = useState(false);
+
+  const toggleReveal = (key: string) => {
+    setRevealedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const copyValue = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setShowCopyToast(true);
+      window.setTimeout(() => setShowCopyToast(false), 3000);
+    } catch {
+      /* ignore */
+    }
+  };
+
   return (
     <GuestOnly>
     <div className="min-h-screen bg-[#F6F8FA] dark:bg-background font-body-md text-body-md text-on-surface antialiased">
@@ -61,22 +108,27 @@ export default function LandingPage() {
               <div className="flex gap-lg p-md">
                 <div className="hidden w-48 border-r border-outline-variant pr-md md:block">
                   <div className="space-y-sm">
-                    <div className="flex items-center gap-xs rounded-lg bg-primary-container/10 p-sm font-label-md text-label-md text-primary-container">
-                      <Icon name="rocket_launch" style={{ fontSize: 18 }} />{" "}
-                      Production
-                    </div>
-                    <div className="flex items-center gap-xs rounded-lg p-sm font-label-md text-label-md text-secondary transition-colors hover:bg-surface-container">
-                      <Icon name="swipe_left" style={{ fontSize: 18 }} /> Staging
-                    </div>
-                    <div className="flex items-center gap-xs rounded-lg p-sm font-label-md text-label-md text-secondary transition-colors hover:bg-surface-container">
-                      <Icon name="code" style={{ fontSize: 18 }} /> Development
-                    </div>
+                    {DEMO_TABS.map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setActiveDemoEnv(tab.key)}
+                        className={
+                          activeDemoEnv === tab.key
+                            ? "flex w-full items-center gap-xs rounded-lg bg-primary-container/10 p-sm font-label-md text-label-md text-primary-container"
+                            : "flex w-full items-center gap-xs rounded-lg p-sm font-label-md text-label-md text-secondary transition-colors hover:bg-surface-container"
+                        }
+                      >
+                        <Icon name={tab.icon} style={{ fontSize: 18 }} />
+                        {tab.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div className="flex-1">
                   <div className="mb-md flex items-center justify-between">
                     <h3 className="font-h3 text-h3 text-on-surface">
-                      Production Secrets
+                      {DEMO_TABS.find((t) => t.key === activeDemoEnv)?.label} Secrets
                     </h3>
                     <div className="flex gap-sm">
                       <span className="flex items-center gap-1 rounded-full bg-on-error-container/10 px-sm py-1 text-[11px] font-bold text-error">
@@ -92,38 +144,53 @@ export default function LandingPage() {
                       </span>
                       <button
                         type="button"
-                        className="rounded bg-primary-container px-sm py-1 text-[12px] font-bold text-white"
+                        title="This is an illustrative preview, not a live editor"
+                        className="rounded bg-primary-container px-sm py-1 text-[12px] font-bold text-white opacity-80"
                       >
                         + Add Variable
                       </button>
                     </div>
                   </div>
                   <div className="space-y-xs">
-                    {secrets.map((row) => (
-                      <div
-                        key={row.key}
-                        className="group flex items-center justify-between rounded-lg border border-transparent p-sm transition-colors hover:border-outline-variant hover:bg-surface-container-low"
-                      >
-                        <div className="flex items-center gap-md">
-                          <span className="font-code-md text-code-md font-bold text-on-surface">
-                            {row.key}
-                          </span>
-                          <span className="text-xs text-outline">{row.value}</span>
+                    {DEMO_SECRETS[activeDemoEnv].map((row) => {
+                      const revealed = revealedKeys.has(row.key);
+                      return (
+                        <div
+                          key={row.key}
+                          className="group flex items-center justify-between rounded-lg border border-transparent p-sm transition-colors hover:border-outline-variant hover:bg-surface-container-low"
+                        >
+                          <div className="flex items-center gap-md">
+                            <span className="font-code-md text-code-md font-bold text-on-surface">
+                              {row.key}
+                            </span>
+                            <span className="font-mono text-xs text-outline">
+                              {revealed ? row.value : "•".repeat(Math.min(row.value.length, 24))}
+                            </span>
+                          </div>
+                          <div className="flex gap-sm opacity-0 transition-opacity group-hover:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => toggleReveal(row.key)}
+                              aria-label={revealed ? "Hide value" : "Reveal value"}
+                              className="text-secondary hover:text-primary"
+                            >
+                              <Icon
+                                name={revealed ? "visibility_off" : "visibility"}
+                                style={{ fontSize: 18 }}
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => copyValue(row.value)}
+                              aria-label="Copy value"
+                              className="text-secondary hover:text-primary"
+                            >
+                              <Icon name="content_copy" style={{ fontSize: 18 }} />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex gap-sm opacity-0 transition-opacity group-hover:opacity-100">
-                          <Icon
-                            name="visibility"
-                            className="cursor-pointer text-secondary"
-                            style={{ fontSize: 18 }}
-                          />
-                          <Icon
-                            name="content_copy"
-                            className="cursor-pointer text-secondary"
-                            style={{ fontSize: 18 }}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -133,17 +200,17 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Trusted by */}
+        {/* Built with */}
         <section className="mt-24 overflow-hidden border-y border-outline-variant py-xl">
           <p className="mb-lg text-center font-label-md text-label-md uppercase tracking-widest text-secondary">
-            Trusted by modern engineering teams
+            Built with
           </p>
           <div className="flex flex-wrap items-center justify-center gap-xl opacity-60 grayscale transition-all duration-500 hover:grayscale-0">
-            {["QUANTUM", "CYBER_DYNE", "VOID_TECH", "NEXUS_OS", "SPECTER"].map(
+            {["Next.js", "Node.js", "PostgreSQL", "Prisma", "TypeScript", "AES-256-GCM"].map(
               (name) => (
                 <div
                   key={name}
-                  className="flex h-8 w-32 items-center justify-center text-xl font-black text-on-surface"
+                  className="flex h-8 items-center justify-center px-md text-lg font-black text-on-surface"
                 >
                   {name}
                 </div>
@@ -170,16 +237,18 @@ export default function LandingPage() {
                 iconWrap: "bg-primary/10",
                 iconColor: "text-primary",
                 title: "AES-256 Encryption",
-                body: "All secrets are encrypted client-side before they ever touch our servers. Zero-knowledge by design.",
+                body: "Every secret is encrypted at rest with AES-256-GCM under a per-organization key, decrypted only after your role and permissions are verified for that exact request.",
                 cta: "Technical details",
+                href: "/docs/security",
               },
               {
                 icon: "admin_panel_settings",
                 iconWrap: "bg-tertiary/10",
                 iconColor: "text-tertiary",
                 title: "RBAC & Audit Logs",
-                body: "Control exactly who can view or edit secrets. Full immutable audit trail for compliance (SOC2/GDPR).",
+                body: "Control exactly who can view or edit secrets, down to the project and environment. Every access and change is recorded in a full audit trail you can export.",
                 cta: "Compliance guide",
+                href: "/trust",
               },
               {
                 icon: "hub",
@@ -271,7 +340,7 @@ export default function LandingPage() {
                 ))}
               </ul>
               <Link
-                href="/signup"
+                href="/docs/cli"
                 className="inline-block rounded-lg bg-primary-container px-lg py-md font-bold text-white"
               >
                 Install CLI
@@ -350,6 +419,18 @@ export default function LandingPage() {
       </main>
 
       <MarketingFooter />
+
+      <div
+        className={`copy-toast fixed bottom-lg right-lg z-[100] flex items-center gap-md rounded-xl bg-inverse-surface px-lg py-md text-inverse-on-surface shadow-xl ${
+          showCopyToast ? "show" : ""
+        }`}
+      >
+        <Icon name="check_circle" className="text-primary-fixed-dim" />
+        <div>
+          <p className="font-body-md text-body-md font-bold">Copied to Clipboard</p>
+          <p className="font-body-sm text-body-sm opacity-80">Ready to paste.</p>
+        </div>
+      </div>
     </div>
     </GuestOnly>
   );

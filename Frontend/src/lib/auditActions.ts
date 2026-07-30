@@ -67,6 +67,27 @@ export const ACTION_DISPLAY: Record<string, ActionDisplay> = {
     label: "Changed project visibility",
     iconClass: "text-primary",
   },
+  "member.leave": { icon: "logout", label: "Left the organization", iconClass: "text-error" },
+  "org.ownership_transfer": {
+    icon: "swap_horiz",
+    label: "Transferred ownership",
+    iconClass: "text-primary",
+  },
+  "project_access.request": {
+    icon: "front_hand",
+    label: "Requested project access",
+    iconClass: "text-primary",
+  },
+  "project_access.approve": {
+    icon: "check_circle",
+    label: "Approved project access request",
+    iconClass: "text-primary",
+  },
+  "project_access.reject": {
+    icon: "cancel",
+    label: "Rejected project access request",
+    iconClass: "text-error",
+  },
 };
 
 const FALLBACK_DISPLAY: ActionDisplay = {
@@ -165,6 +186,23 @@ export function describeAuditLog(log: AuditLogLike): string | null {
       const role = asString(m.role);
       const envType = asString(m.environmentType);
       return role && envType ? `${role} on ${envType} reset to default` : null;
+    }
+    case "org.ownership_transfer": {
+      const prev = asString(m.previousOwnerEmail);
+      const next = asString(m.newOwnerEmail);
+      return prev && next ? `${prev} → ${next}` : null;
+    }
+    case "member.leave": {
+      const email = asString(m.email);
+      return email ? `${email} left` : null;
+    }
+    case "project_access.request":
+    case "project_access.approve":
+    case "project_access.reject": {
+      const project = asString(m.projectName);
+      const email = asString(m.requesterEmail);
+      if (!project) return null;
+      return email ? `${project} for ${email}` : project;
     }
     default:
       return null;

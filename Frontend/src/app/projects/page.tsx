@@ -59,6 +59,17 @@ function ProjectsPageContent() {
   const [projectDescription, setProjectDescription] = useState("");
   const [creatingProject, setCreatingProject] = useState(false);
 
+  const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
+  const onRequestAccess = async (projectId: string) => {
+    if (!org) return;
+    try {
+      await api.requestProjectAccess(org.id, projectId);
+      setRequestedIds((prev) => new Set(prev).add(projectId));
+    } catch {
+      /* the button just stays clickable to retry */
+    }
+  };
+
   useEffect(() => {
     if (!org) {
       setAuditLoading(false);
@@ -294,33 +305,63 @@ function ProjectsPageContent() {
                     No projects match your search.
                   </p>
                 )}
-                {filteredProjects.map((project) => (
-                  <Link
-                    key={project.id}
-                    href={`/projects/${project.id}`}
-                    className="github-card flex min-h-[180px] flex-col justify-between rounded-lg p-md"
-                  >
-                    <div>
-                      <div className="mb-sm flex items-start justify-between">
-                        <h3 className="font-h3 text-h3 text-on-surface">{project.name}</h3>
-                        <span className="rounded bg-surface-container-highest px-xs py-[2px] font-code-sm text-code-sm text-on-surface-variant">
-                          {project.slug}
-                        </span>
+                {filteredProjects.map((project) =>
+                  project.hasAccess === false ? (
+                    <div
+                      key={project.id}
+                      className="github-card flex min-h-[180px] flex-col justify-between rounded-lg p-md opacity-80"
+                    >
+                      <div>
+                        <div className="mb-sm flex items-start justify-between">
+                          <h3 className="flex items-center gap-xs font-h3 text-h3 text-on-surface">
+                            <Icon name="lock" className="text-secondary" style={{ fontSize: 18 }} />
+                            {project.name}
+                          </h3>
+                          <span className="rounded bg-surface-container-highest px-xs py-[2px] font-code-sm text-code-sm text-on-surface-variant">
+                            {project.slug}
+                          </span>
+                        </div>
+                        <p className="mb-md font-body-sm text-body-sm text-secondary">
+                          You don&apos;t have access to this project yet.
+                        </p>
                       </div>
-                      <p className="mb-md line-clamp-2 font-body-sm text-body-sm text-secondary">
-                        {project.description || "No description yet."}
-                      </p>
-                      <div className="flex items-center gap-xs font-body-sm text-body-sm text-secondary">
-                        <Icon name="dns" style={{ fontSize: 16 }} />
-                        {project.environmentCount}{" "}
-                        environment{project.environmentCount === 1 ? "" : "s"}
+                      <button
+                        type="button"
+                        disabled={requestedIds.has(project.id)}
+                        onClick={() => onRequestAccess(project.id)}
+                        className="rounded-lg border border-primary/40 px-md py-sm font-label-md text-label-md text-primary transition-colors hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {requestedIds.has(project.id) ? "Access Requested" : "Request Access"}
+                      </button>
+                    </div>
+                  ) : (
+                    <Link
+                      key={project.id}
+                      href={`/projects/${project.id}`}
+                      className="github-card flex min-h-[180px] flex-col justify-between rounded-lg p-md"
+                    >
+                      <div>
+                        <div className="mb-sm flex items-start justify-between">
+                          <h3 className="font-h3 text-h3 text-on-surface">{project.name}</h3>
+                          <span className="rounded bg-surface-container-highest px-xs py-[2px] font-code-sm text-code-sm text-on-surface-variant">
+                            {project.slug}
+                          </span>
+                        </div>
+                        <p className="mb-md line-clamp-2 font-body-sm text-body-sm text-secondary">
+                          {project.description || "No description yet."}
+                        </p>
+                        <div className="flex items-center gap-xs font-body-sm text-body-sm text-secondary">
+                          <Icon name="dns" style={{ fontSize: 16 }} />
+                          {project.environmentCount}{" "}
+                          environment{project.environmentCount === 1 ? "" : "s"}
+                        </div>
                       </div>
-                    </div>
-                    <div className="border-t border-outline-variant pt-sm font-body-sm text-body-sm text-secondary">
-                      Created {new Date(project.createdAt).toLocaleDateString()}
-                    </div>
-                  </Link>
-                ))}
+                      <div className="border-t border-outline-variant pt-sm font-body-sm text-body-sm text-secondary">
+                        Created {new Date(project.createdAt).toLocaleDateString()}
+                      </div>
+                    </Link>
+                  )
+                )}
 
                 <button
                   type="button"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -8,6 +9,7 @@ import {
   ApiError,
   EnvironmentAccessLevel,
   EnvironmentType,
+  MemberSummary,
   OrgRole,
   PermissionMatrix,
 } from "@/lib/api";
@@ -21,9 +23,137 @@ const ENV_COLUMNS: { type: EnvironmentType; label: string }[] = [
 
 const ROLE_ROWS: OrgRole[] = ["OWNER", "ADMIN", "DEVELOPER", "VIEWER"];
 
+function TransferOwnershipSection({ orgId }: { orgId: string }) {
+  const router = useRouter();
+  const { refreshMe } = useAuth();
+  const [members, setMembers] = useState<MemberSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const [transferring, setTransferring] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listMembers(orgId)
+      .then((list) => {
+        if (!cancelled) setMembers(list.filter((m) => m.role !== "OWNER"));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
+
+  const selectedMember = members.find((m) => m.membershipId === selectedId);
+  const canTransfer =
+    !!selectedMember && confirmEmail.toLowerCase() === selectedMember.user.email.toLowerCase();
+
+  const onTransfer = async () => {
+    if (!selectedMember) return;
+    if (
+      !window.confirm(
+        `Make ${selectedMember.user.name} the Owner? You will be demoted to Admin immediately.`
+      )
+    ) {
+      return;
+    }
+    setTransferring(true);
+    setError(null);
+    try {
+      await api.transferOwnership(orgId, selectedMember.membershipId);
+      await refreshMe();
+      router.push("/team/members");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to transfer ownership");
+      setTransferring(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-[#CF222E]/30 bg-[#FFEBE9] p-md dark:border-red-500/30 dark:bg-red-500/10">
+      <h4 className="flex items-center gap-sm font-body-md text-body-md font-bold text-[#CF222E] dark:text-red-400">
+        <Icon name="swap_horiz" />
+        Transfer Ownership
+      </h4>
+      <p className="mt-xs font-body-sm text-body-sm text-[#CF222E]/80 dark:text-red-400/80">
+        Make someone else the Owner of this organization. You&apos;ll be demoted to Admin
+        immediately — this cannot be undone by yourself alone.
+      </p>
+
+      {loading ? (
+        <div className="mt-md flex justify-center py-md text-[#CF222E]/60 dark:text-red-400/60">
+          <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 20 }} />
+        </div>
+      ) : members.length === 0 ? (
+        <p className="mt-md font-body-sm text-body-sm text-[#CF222E]/80 dark:text-red-400/80">
+          No other members to transfer ownership to yet.
+        </p>
+      ) : (
+        <>
+          <label className="mt-md block max-w-sm">
+            <span className="mb-xs block font-label-md text-label-md text-[#CF222E] dark:text-red-400">
+              New owner
+            </span>
+            <select
+              value={selectedId}
+              onChange={(e) => {
+                setSelectedId(e.target.value);
+                setConfirmEmail("");
+              }}
+              className="w-full rounded-lg border border-[#CF222E]/40 bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-[#CF222E] focus:ring-2 focus:ring-[#CF222E]/20"
+            >
+              <option value="">Choose a member</option>
+              {members.map((m) => (
+                <option key={m.membershipId} value={m.membershipId}>
+                  {m.user.name} ({m.user.email}) — {m.role}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {selectedMember && (
+            <label className="mt-md block max-w-sm">
+              <span className="mb-xs block font-label-md text-label-md text-[#CF222E] dark:text-red-400">
+                Type <span className="font-mono font-bold">{selectedMember.user.email}</span> to
+                confirm
+              </span>
+              <input
+                value={confirmEmail}
+                onChange={(e) => setConfirmEmail(e.target.value)}
+                className="w-full rounded-lg border border-[#CF222E]/40 bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-[#CF222E] focus:ring-2 focus:ring-[#CF222E]/20"
+              />
+            </label>
+          )}
+
+          {error && (
+            <p className="mt-sm font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="button"
+            disabled={!canTransfer || transferring}
+            onClick={onTransfer}
+            className="mt-md rounded-lg border border-[#CF222E] bg-transparent px-md py-sm font-body-sm text-body-sm font-bold text-[#CF222E] transition-colors hover:bg-[#CF222E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/50 dark:text-red-400"
+          >
+            {transferring ? "Transferring..." : "Transfer Ownership"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PermissionsSection() {
   const { activeOrg: org } = useAuth();
   const isAdmin = org?.role === "OWNER" || org?.role === "ADMIN";
+  const isOwner = org?.role === "OWNER";
 
   const [permissionMatrix, setPermissionMatrix] = useState<PermissionMatrix | null>(null);
   const [permissionsLoading, setPermissionsLoading] = useState(true);
@@ -217,24 +347,7 @@ export function PermissionsSection() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-[#CF222E]/30 bg-[#FFEBE9] p-md dark:border-red-500/30 dark:bg-red-500/10">
-        <h4 className="flex items-center gap-sm font-body-md text-body-md font-bold text-[#CF222E] dark:text-red-400">
-          <Icon name="gpp_maybe" />
-          Sensitive Operations
-        </h4>
-        <p className="mt-xs font-body-sm text-body-sm text-[#CF222E]/80 dark:text-red-400/80">
-          Changing &apos;Owner&apos; status requires Multi-Factor Authentication and a
-          24-hour verification window.
-        </p>
-        <button
-          type="button"
-          disabled
-          title="Coming soon"
-          className="mt-md cursor-not-allowed rounded-lg border border-[#CF222E] bg-transparent px-md py-sm font-body-sm text-body-sm font-bold text-[#CF222E] opacity-60 dark:border-red-500/50 dark:text-red-400"
-        >
-          Request Role Ownership Change
-        </button>
-      </div>
+      {isOwner && <TransferOwnershipSection orgId={org.id} />}
     </div>
   );
 }

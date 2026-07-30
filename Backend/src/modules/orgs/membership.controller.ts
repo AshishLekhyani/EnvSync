@@ -4,6 +4,7 @@ import { getAccessibleProjectIds } from "../rbac/projectAccess.service";
 import {
   AddMemberInput,
   SetCanViewAllProjectsInput,
+  TransferOwnershipInput,
   UpdateMemberRoleInput,
 } from "./membership.validators";
 
@@ -80,4 +81,29 @@ export const setCanViewAllProjects = asyncHandler(async (req, res) => {
     req.ip
   );
   res.status(200).json(membership);
+});
+
+export const leaveOrganization = asyncHandler(async (req, res) => {
+  await membershipService.leaveOrganization(req.params.orgId, req.user!.id, req.ip);
+  res.status(204).send();
+});
+
+export const leaveProject = asyncHandler(async (req, res) => {
+  await membershipService.leaveProject(
+    req.params.orgId,
+    req.params.projectId,
+    req.user!.id,
+    req.ip
+  );
+  res.status(204).send();
+});
+
+export const transferOwnership = asyncHandler(async (req, res) => {
+  await membershipService.transferOwnership(
+    req.params.orgId,
+    (req.body as TransferOwnershipInput).membershipId,
+    req.user!.id,
+    req.ip
+  );
+  res.status(204).send();
 });

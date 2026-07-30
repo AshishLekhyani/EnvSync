@@ -52,6 +52,10 @@ export function TopNav({
   const profileRef = useRef<HTMLDivElement>(null);
   useOutsideClick(profileRef, () => setProfileOpen(false));
 
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpRef = useRef<HTMLDivElement>(null);
+  useOutsideClick(helpRef, () => setHelpOpen(false));
+
   const [approvalPending, setApprovalPending] = useState<string | null>(null);
   const [approvalResult, setApprovalResult] = useState<Record<string, string>>({});
 
@@ -85,17 +89,28 @@ export function TopNav({
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  const onInviteDecision = async (n: NotificationSummary, decision: "approve" | "reject") => {
+  const onApprovalDecision = async (n: NotificationSummary, decision: "approve" | "reject") => {
     const orgId = n.metadata?.orgId as string | undefined;
-    const inviteId = n.metadata?.inviteId as string | undefined;
-    if (!orgId || !inviteId) return;
+    if (!orgId) return;
 
     setApprovalPending(n.id);
     try {
-      if (decision === "approve") {
-        await api.approveInvite(orgId, inviteId);
-      } else {
-        await api.rejectInvite(orgId, inviteId);
+      if (n.type === "invite.approval_requested") {
+        const inviteId = n.metadata?.inviteId as string | undefined;
+        if (!inviteId) return;
+        if (decision === "approve") {
+          await api.approveInvite(orgId, inviteId);
+        } else {
+          await api.rejectInvite(orgId, inviteId);
+        }
+      } else if (n.type === "project_access.requested") {
+        const requestId = n.metadata?.requestId as string | undefined;
+        if (!requestId) return;
+        if (decision === "approve") {
+          await api.approveAccessRequest(orgId, requestId);
+        } else {
+          await api.rejectAccessRequest(orgId, requestId);
+        }
       }
       setApprovalResult((prev) => ({ ...prev, [n.id]: decision }));
       await onMarkRead(n.id);
@@ -224,7 +239,9 @@ export function TopNav({
                   </p>
                 ) : (
                   notifications.map((n) => {
-                    const isApprovalRequest = n.type === "invite.approval_requested";
+                    const isApprovalRequest =
+                      n.type === "invite.approval_requested" ||
+                      n.type === "project_access.requested";
                     const decided = approvalResult[n.id];
 
                     if (isApprovalRequest && (!n.read || decided)) {
@@ -254,7 +271,7 @@ export function TopNav({
                               <button
                                 type="button"
                                 disabled={approvalPending === n.id}
-                                onClick={() => onInviteDecision(n, "approve")}
+                                onClick={() => onApprovalDecision(n, "approve")}
                                 className="rounded-lg bg-primary-container px-sm py-1 font-label-md text-[11px] text-on-primary disabled:opacity-50"
                               >
                                 Approve
@@ -262,7 +279,7 @@ export function TopNav({
                               <button
                                 type="button"
                                 disabled={approvalPending === n.id}
-                                onClick={() => onInviteDecision(n, "reject")}
+                                onClick={() => onApprovalDecision(n, "reject")}
                                 className="rounded-lg border border-outline-variant px-sm py-1 font-label-md text-[11px] text-on-surface disabled:opacity-50"
                               >
                                 Reject
@@ -296,15 +313,38 @@ export function TopNav({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          disabled
-          title="Coming soon"
-          className="cursor-not-allowed rounded-lg p-base text-secondary opacity-50"
-          aria-label="Help"
-        >
-          <Icon name="help_outline" />
-        </button>
+        <div className="relative" ref={helpRef}>
+          <button
+            type="button"
+            onClick={() => setHelpOpen((v) => !v)}
+            className="rounded-lg p-base text-secondary transition-colors hover:bg-surface-container hover:text-primary"
+            aria-label="Help"
+          >
+            <Icon name="help_outline" />
+          </button>
+
+          {helpOpen && (
+            <div className="absolute right-0 top-full z-50 mt-sm w-56 rounded-xl border border-outline-variant bg-surface shadow-lg">
+              <div className="p-xs">
+                <Link
+                  href="/docs"
+                  onClick={() => setHelpOpen(false)}
+                  className="flex items-center gap-md rounded-lg px-md py-sm font-body-sm text-body-sm text-on-surface transition-colors hover:bg-surface-container-low"
+                >
+                  <Icon name="menu_book" style={{ fontSize: 18 }} />
+                  Documentation
+                </Link>
+                <a
+                  href="mailto:support@envsync.io"
+                  className="flex items-center gap-md rounded-lg px-md py-sm font-body-sm text-body-sm text-on-surface transition-colors hover:bg-surface-container-low"
+                >
+                  <Icon name="contact_support" style={{ fontSize: 18 }} />
+                  Contact Support
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
         {user && (
           <div className="relative" ref={profileRef}>
             <button

@@ -138,6 +138,7 @@ export interface Project {
   environmentCount: number;
   createdAt: string;
   updatedAt: string;
+  hasAccess?: boolean;
 }
 
 export interface EnvironmentSummary {
@@ -253,6 +254,7 @@ export interface InviteCreated extends InviteSummary {
 }
 
 export interface PublicInvite {
+  orgId: string;
   orgName: string;
   orgSlug: string;
   role: OrgRole;
@@ -269,6 +271,13 @@ export interface AutoApproveRule {
   id: string;
   inviter: { id: string; name: string; email: string } | null;
   createdByName: string;
+  createdAt: string;
+}
+
+export interface ProjectAccessRequestSummary {
+  id: string;
+  project: { id: string; name: string };
+  requestedBy: { id: string; name: string; email: string };
   createdAt: string;
 }
 
@@ -445,13 +454,53 @@ export const api = {
       }
     ),
 
+  leaveOrganization: (orgId: string) =>
+    request<void>(`/orgs/${orgId}/leave`, { method: "POST" }),
+
+  leaveProject: (orgId: string, projectId: string) =>
+    request<void>(`/orgs/${orgId}/projects/${projectId}/leave`, { method: "POST" }),
+
+  transferOwnership: (orgId: string, membershipId: string) =>
+    request<void>(`/orgs/${orgId}/transfer-ownership`, {
+      method: "POST",
+      body: JSON.stringify({ membershipId }),
+    }),
+
+  requestProjectAccess: (orgId: string, projectId: string) =>
+    request<{ id: string }>(`/orgs/${orgId}/projects/${projectId}/access-requests`, {
+      method: "POST",
+    }),
+
+  listAccessRequests: (orgId: string) =>
+    request<ProjectAccessRequestSummary[]>(`/orgs/${orgId}/project-access-requests`),
+
+  approveAccessRequest: (orgId: string, requestId: string) =>
+    request<void>(`/orgs/${orgId}/project-access-requests/${requestId}/approve`, {
+      method: "POST",
+    }),
+
+  rejectAccessRequest: (orgId: string, requestId: string) =>
+    request<void>(`/orgs/${orgId}/project-access-requests/${requestId}/reject`, {
+      method: "POST",
+    }),
+
   listAuditLogs: (
     orgId: string,
-    params?: { projectId?: string; action?: string; limit?: number }
+    params?: {
+      projectId?: string;
+      action?: string;
+      actorId?: string;
+      startDate?: string;
+      endDate?: string;
+      limit?: number;
+    }
   ) => {
     const qs = new URLSearchParams();
     if (params?.projectId) qs.set("projectId", params.projectId);
     if (params?.action) qs.set("action", params.action);
+    if (params?.actorId) qs.set("actorId", params.actorId);
+    if (params?.startDate) qs.set("startDate", params.startDate);
+    if (params?.endDate) qs.set("endDate", params.endDate);
     if (params?.limit) qs.set("limit", String(params.limit));
     const suffix = qs.toString() ? `?${qs}` : "";
     return request<AuditLogEntry[]>(`/orgs/${orgId}/audit-logs${suffix}`);

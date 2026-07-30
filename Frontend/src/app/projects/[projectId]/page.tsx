@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
@@ -39,8 +39,10 @@ const ALL_ENV_TYPES: EnvironmentType[] = [
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const router = useRouter();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, activeOrg: org } = useAuth();
+  const [leaving, setLeaving] = useState(false);
 
   const projectQuery = useQuery({
     queryKey: queryKeys.project(projectId),
@@ -87,6 +89,20 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const onLeaveProject = async () => {
+    if (!org || !window.confirm("Leave this project? You'll lose access to it immediately.")) {
+      return;
+    }
+    setLeaving(true);
+    try {
+      await api.leaveProject(org.id, projectId);
+      router.push("/projects");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to leave project");
+      setLeaving(false);
+    }
+  };
+
   return (
     <AppShell searchPlaceholder="Search environments...">
       <div className="mx-auto max-w-container-max pb-xl">
@@ -119,16 +135,29 @@ export default function ProjectDetailPage() {
                   {project.description || "No description yet."}
                 </p>
               </div>
-              {availableTypes.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowNewEnv((v) => !v)}
-                  className="flex items-center gap-xs rounded border border-primary bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary-container transition-all hover:brightness-110"
-                >
-                  <Icon name="add" style={{ fontSize: 18 }} />
-                  New Environment
-                </button>
-              )}
+              <div className="flex items-center gap-sm">
+                {org && org.role !== "OWNER" && (
+                  <button
+                    type="button"
+                    disabled={leaving}
+                    onClick={onLeaveProject}
+                    className="flex items-center gap-xs rounded border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container disabled:opacity-60"
+                  >
+                    <Icon name="logout" style={{ fontSize: 18 }} />
+                    {leaving ? "Leaving..." : "Leave Project"}
+                  </button>
+                )}
+                {availableTypes.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewEnv((v) => !v)}
+                    className="flex items-center gap-xs rounded border border-primary bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary-container transition-all hover:brightness-110"
+                  >
+                    <Icon name="add" style={{ fontSize: 18 }} />
+                    New Environment
+                  </button>
+                )}
+              </div>
             </div>
 
             {error && (

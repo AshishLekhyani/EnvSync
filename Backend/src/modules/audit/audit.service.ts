@@ -34,7 +34,12 @@ export type AuditAction =
   | "invite.auto_approve_set"
   | "member.project_access_grant"
   | "member.project_access_revoke"
-  | "member.view_all_set";
+  | "member.view_all_set"
+  | "member.leave"
+  | "org.ownership_transfer"
+  | "project_access.request"
+  | "project_access.approve"
+  | "project_access.reject";
 
 interface WriteAuditLogInput {
   orgId: string;
@@ -68,6 +73,9 @@ export function writeAuditLog(
 interface ListAuditLogsFilters {
   projectId?: string;
   action?: string;
+  actorId?: string;
+  startDate?: string;
+  endDate?: string;
   limit?: number;
 }
 
@@ -94,11 +102,21 @@ export function listAuditLogs(
   filters: ListAuditLogsFilters,
   accessibleProjectIds: "all" | string[]
 ) {
+  const createdAt: { gte?: Date; lte?: Date } = {};
+  if (filters.startDate) createdAt.gte = new Date(filters.startDate);
+  if (filters.endDate) {
+    const end = new Date(filters.endDate);
+    end.setHours(23, 59, 59, 999);
+    createdAt.lte = end;
+  }
+
   return prisma.auditLog.findMany({
     where: {
       orgId,
       projectId: resolveProjectFilter(filters.projectId, accessibleProjectIds),
       action: filters.action,
+      actorId: filters.actorId,
+      ...(createdAt.gte || createdAt.lte ? { createdAt } : {}),
     },
     include: {
       actor: { select: { id: true, name: true, email: true } },

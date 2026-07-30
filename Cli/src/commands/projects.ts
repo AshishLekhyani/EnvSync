@@ -20,7 +20,9 @@ export async function runProjects(): Promise<void> {
 
     console.log(`${org.name}  (${org.id})`);
     for (const project of projects) {
-      console.log(`  ${project.name}  ${project.id}`);
+      const locked = project.hasAccess === false;
+      const suffix = locked ? "  [no access -- request it in the web app]" : "";
+      console.log(`  ${project.name}  ${project.id}${suffix}`);
     }
   }
 }

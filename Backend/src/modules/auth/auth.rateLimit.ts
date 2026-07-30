@@ -22,10 +22,12 @@ export const loginRateLimiter = rateLimit({
 
 export const signupRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  // Project-scoped invites (Phase 11) make "several teammates signing up from
-  // the same office IP within an hour" a realistic legitimate scenario, not
-  // just abuse — bumped up from 8 to give that room while still bounding bots.
-  max: 20,
+  // Project-scoped invites (Phase 11), plus self-service org/project leave,
+  // ownership transfer, and project access requests (Phase 13) all make
+  // "a whole team signing up and reorganizing from the same office IP within
+  // an hour" a realistic legitimate scenario, not just abuse — bumped up
+  // from 20 to give that real room while still bounding bots.
+  max: 40,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => ipKeyGenerator(req.ip ?? ""),

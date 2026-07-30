@@ -52,7 +52,7 @@ export default function SecurityDocsPage() {
 
         <section>
           <h2 className="mb-sm font-h3 text-h3 text-on-surface">Access control</h2>
-          <p className="font-body-md text-body-md text-secondary">
+          <p className="mb-sm font-body-md text-body-md text-secondary">
             Every request — whether authenticated by a browser session or a CLI service
             token — passes through the same role-based access control path. See{" "}
             <a href="/docs/permissions" className="text-primary hover:underline">
@@ -61,6 +61,14 @@ export default function SecurityDocsPage() {
             for the full model. Service tokens are hard-scoped to the org they were issued in:
             a token minted for one organization is rejected outright against any other
             organization, even if its creator belongs to both.
+          </p>
+          <p className="font-body-md text-body-md text-secondary">
+            A service token is also identity-inheriting, not independently scoped: it can only
+            ever do what its creator can do, checked fresh on every call. If a member doesn&apos;t
+            have access to a given project — because they were never granted it, or because
+            they only have org-wide visibility without project access — a CLI command against
+            that project&apos;s environments is rejected the same way it would be in the browser,
+            not just hidden from a menu.
           </p>
         </section>
 

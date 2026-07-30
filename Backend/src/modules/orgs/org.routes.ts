@@ -8,6 +8,7 @@ import { createOrgSchema, updateOrgSchema } from "./org.validators";
 import {
   addMemberSchema,
   setCanViewAllProjectsSchema,
+  transferOwnershipSchema,
   updateMemberRoleSchema,
 } from "./membership.validators";
 
@@ -77,4 +78,20 @@ orgRouter.patch(
   requireOrgRole("OWNER", orgIdFromParam()),
   validate({ body: setCanViewAllProjectsSchema }),
   membershipController.setCanViewAllProjects
+);
+orgRouter.post(
+  "/:orgId/leave",
+  requireOrgRole("VIEWER", orgIdFromParam()),
+  membershipController.leaveOrganization
+);
+orgRouter.post(
+  "/:orgId/projects/:projectId/leave",
+  requireOrgRole("VIEWER", orgIdFromParam()),
+  membershipController.leaveProject
+);
+orgRouter.post(
+  "/:orgId/transfer-ownership",
+  requireOrgRole("OWNER", orgIdFromParam()),
+  validate({ body: transferOwnershipSchema }),
+  membershipController.transferOwnership
 );

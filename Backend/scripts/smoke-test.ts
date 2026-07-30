@@ -987,10 +987,22 @@ async function main() {
     headers: authHeaders(restrictedAccessToken),
   });
   const restrictedProjectsBeforeGrant = await res.json();
-  if (res.status !== 200 || restrictedProjectsBeforeGrant.length !== 0) {
-    fail("org-only developer should see zero projects before any grant", restrictedProjectsBeforeGrant);
+  // As of Phase 13, a Developer browses the full org project list (can see
+  // it exists and request access) but hasAccess is false until granted --
+  // real access is still zero, just visibility isn't. The strict
+  // zero-visibility default now belongs to Viewer only (tested later).
+  if (
+    res.status !== 200 ||
+    !(restrictedProjectsBeforeGrant as { id: string; hasAccess?: boolean }[]).every(
+      (p) => p.id !== projectId || p.hasAccess === false
+    )
+  ) {
+    fail(
+      "org-only developer should browse the project list with hasAccess:false before any grant",
+      restrictedProjectsBeforeGrant
+    );
   }
-  ok("org-only developer sees zero projects (project-level access defaults to none)");
+  ok("org-only developer browses the project list (hasAccess:false) before any real grant (Phase 13 browse-all)");
 
   res = await fetch(`${BASE}/projects/${projectId}`, {
     headers: authHeaders(restrictedAccessToken),
@@ -1011,14 +1023,13 @@ async function main() {
     headers: authHeaders(restrictedAccessToken),
   });
   const restrictedProjectsAfterGrant = await res.json();
-  if (
-    res.status !== 200 ||
-    restrictedProjectsAfterGrant.length !== 1 ||
-    restrictedProjectsAfterGrant[0].id !== projectId
-  ) {
-    fail("developer should see exactly the granted project after grant", restrictedProjectsAfterGrant);
+  const grantedProjectRow = (restrictedProjectsAfterGrant as { id: string; hasAccess?: boolean }[]).find(
+    (p) => p.id === projectId
+  );
+  if (res.status !== 200 || grantedProjectRow?.hasAccess !== true) {
+    fail("developer should have hasAccess:true on the project they were granted", restrictedProjectsAfterGrant);
   }
-  ok("after grant, developer sees exactly the one project they were granted");
+  ok("after grant, the developer's project list reports hasAccess:true for the granted project");
 
   res = await fetch(`${BASE}/projects/${projectId}`, {
     headers: authHeaders(restrictedAccessToken),
@@ -1065,10 +1076,13 @@ async function main() {
     headers: authHeaders(restrictedAccessToken),
   });
   const restrictedProjectsAfterRevoke = await res.json();
-  if (res.status !== 200 || restrictedProjectsAfterRevoke.length !== 0) {
-    fail("developer should see zero projects again after revoke", restrictedProjectsAfterRevoke);
+  const revokedProjectRow = (restrictedProjectsAfterRevoke as { id: string; hasAccess?: boolean }[]).find(
+    (p) => p.id === projectId
+  );
+  if (res.status !== 200 || revokedProjectRow?.hasAccess !== false) {
+    fail("developer should have hasAccess:false again after revoke", restrictedProjectsAfterRevoke);
   }
-  ok("after revoke, developer sees zero projects again");
+  ok("after revoke, the developer's project list reports hasAccess:false again (real access actually gone)");
 
   res = await fetch(`${BASE}/orgs/${orgId}/members/${restrictedMembership.id}/view-all`, {
     method: "PATCH",
@@ -1107,10 +1121,13 @@ async function main() {
     headers: authHeaders(restrictedAccessToken),
   });
   const restrictedProjectsAfterClear = await res.json();
-  if (res.status !== 200 || restrictedProjectsAfterClear.length !== 0) {
-    fail("developer should see zero projects again after the view-all override is cleared", restrictedProjectsAfterClear);
+  const clearedProjectRow = (restrictedProjectsAfterClear as { id: string; hasAccess?: boolean }[]).find(
+    (p) => p.id === projectId
+  );
+  if (res.status !== 200 || clearedProjectRow?.hasAccess !== false) {
+    fail("developer should have hasAccess:false again after the view-all override is cleared", restrictedProjectsAfterClear);
   }
-  ok("after clearing view-all, the developer is restricted again");
+  ok("after clearing view-all, the developer is restricted again (hasAccess:false)");
 
   res = await fetch(`${BASE}/orgs/${orgId}/members/${restrictedMembership.id}`, {
     method: "PATCH",
@@ -1843,6 +1860,278 @@ async function main() {
   if (res.status !== 200) fail("the org itself should still exist after a non-owner member deletes their account", await res.text());
   ok("the org survives and the departed member's row is gone (non-owner account deletion doesn't touch the org)");
 
+  // --- Phase 13: invite orgId, self-leave, ownership transfer, project discovery + access requests, audit filters ---
+
+  res = await fetch(`${BASE}/invites/${createdInvite.token}`);
+  const inviteWithOrgId = await res.json();
+  if (res.status !== 200 || inviteWithOrgId.orgId !== orgId) {
+    fail("getInviteByToken should now include orgId", inviteWithOrgId);
+  }
+  ok("getInviteByToken response includes orgId (fixes the missing switchOrg-after-accept bug)");
+
+  const leaverEmail = `leaver-${rand}@example.com`;
+  const leaverToken = await signupLogin("Leaver", leaverEmail);
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: leaverEmail, role: "VIEWER" }),
+  });
+  if (res.status !== 201) fail("add leaver as viewer", await res.text());
+
+  res = await fetch(`${BASE}/orgs/${orgId}/leave`, {
+    method: "POST",
+    headers: authHeaders(leaverToken),
+  });
+  if (res.status !== 204) fail("non-owner leaving an org should succeed (204)", await res.text());
+  ok("a non-owner can leave an organization on their own (204)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(ownerAccessToken) });
+  const membersAfterLeave = await res.json();
+  if ((membersAfterLeave as { user: { email: string } }[]).some((m) => m.user.email === leaverEmail)) {
+    fail("the member who left should no longer appear in the member list", membersAfterLeave);
+  }
+  ok("the departed member's row is gone from the org after leaving");
+
+  const soloLeaveEmail = `solo-leave-${rand}@example.com`;
+  const soloLeaveToken = await signupLogin("Solo Leaver", soloLeaveEmail);
+  res = await fetch(`${BASE}/orgs`, {
+    method: "POST",
+    headers: authHeaders(soloLeaveToken),
+    body: JSON.stringify({ name: `Solo Leave Org ${rand}`, slug: `solo-leave-org-${rand}` }),
+  });
+  const soloLeaveOrg = await res.json();
+  if (res.status !== 201) fail("create solo-owned org for leave test", soloLeaveOrg);
+
+  res = await fetch(`${BASE}/orgs/${soloLeaveOrg.id}/leave`, {
+    method: "POST",
+    headers: authHeaders(soloLeaveToken),
+  });
+  if (res.status !== 204) fail("sole owner leaving their solo-member org should succeed (204)", await res.text());
+  res = await fetch(`${BASE}/orgs/${soloLeaveOrg.id}`, { headers: authHeaders(ownerAccessToken) });
+  if (res.status !== 404) fail("the solo-owned org should be gone after its sole owner leaves", await res.text());
+  ok("a sole owner leaving their own solo-member org cascade-deletes it");
+
+  const blockedLeaveOwnerEmail = `blocked-leave-owner-${rand}@example.com`;
+  const blockedLeaveOwnerToken = await signupLogin("Blocked Leave Owner", blockedLeaveOwnerEmail);
+  res = await fetch(`${BASE}/orgs`, {
+    method: "POST",
+    headers: authHeaders(blockedLeaveOwnerToken),
+    body: JSON.stringify({ name: `Blocked Leave Org ${rand}`, slug: `blocked-leave-org-${rand}` }),
+  });
+  const blockedLeaveOrg = await res.json();
+  if (res.status !== 201) fail("create org for blocked-leave test", blockedLeaveOrg);
+
+  const blockedLeavePeerEmail = `blocked-leave-peer-${rand}@example.com`;
+  const blockedLeavePeerToken = await signupLogin("Blocked Leave Peer", blockedLeavePeerEmail);
+  res = await fetch(`${BASE}/orgs/${blockedLeaveOrg.id}/members`, {
+    method: "POST",
+    headers: authHeaders(blockedLeaveOwnerToken),
+    body: JSON.stringify({ email: blockedLeavePeerEmail, role: "VIEWER" }),
+  });
+  const blockedLeavePeerMembership = await res.json();
+  if (res.status !== 201) fail("add peer to blocked-leave org", blockedLeavePeerMembership);
+
+  res = await fetch(`${BASE}/orgs/${blockedLeaveOrg.id}/leave`, {
+    method: "POST",
+    headers: authHeaders(blockedLeaveOwnerToken),
+  });
+  if (res.status !== 409) fail("sole owner leaving an org with other members should be blocked (409)", await res.text());
+  ok("leaving is blocked while the sole owner's org still has other members (409)");
+
+  res = await fetch(`${BASE}/orgs/${blockedLeaveOrg.id}/projects`, {
+    method: "POST",
+    headers: authHeaders(blockedLeaveOwnerToken),
+    body: JSON.stringify({ name: "Leave Test Project", slug: `leave-test-project-${rand}` }),
+  });
+  const leaveTestProject = await res.json();
+  if (res.status !== 201) fail("create project for leave-project test", leaveTestProject);
+
+  res = await fetch(
+    `${BASE}/orgs/${blockedLeaveOrg.id}/members/${blockedLeavePeerMembership.id}/projects/${leaveTestProject.id}`,
+    { method: "POST", headers: authHeaders(blockedLeaveOwnerToken) }
+  );
+  if (res.status !== 200 && res.status !== 204) fail("grant peer access to leave-test project", await res.text());
+
+  res = await fetch(`${BASE}/orgs/${blockedLeaveOrg.id}/projects/${leaveTestProject.id}/leave`, {
+    method: "POST",
+    headers: authHeaders(blockedLeavePeerToken),
+  });
+  if (res.status !== 204) fail("leaving a project one has access to should succeed (204)", await res.text());
+  ok("a member can leave a specific project's access on their own (204)");
+
+  res = await fetch(`${BASE}/projects/${leaveTestProject.id}`, {
+    headers: authHeaders(blockedLeavePeerToken),
+  });
+  if (res.status !== 404) fail("after leaving a project, it should 404 (access actually revoked)", await res.text());
+  ok("after leaving a project, the member truly loses access to it (404, not just a UI change)");
+
+  // --- Ownership transfer ---
+
+  res = await fetch(`${BASE}/orgs/${orgId}/transfer-ownership`, {
+    method: "POST",
+    headers: authHeaders(viewerAccessToken),
+    body: JSON.stringify({ membershipId: hierAdminMembership.id }),
+  });
+  if (res.status !== 403) fail("a non-owner attempting to transfer ownership should be 403", await res.text());
+  ok("only the Owner can transfer ownership (403 for a non-owner)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/transfer-ownership`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ membershipId: hierAdminMembership.id }),
+  });
+  if (res.status !== 204) fail("owner transferring ownership should succeed (204)", await res.text());
+  ok("owner transfers ownership to another member (204)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(hierAdminToken) });
+  const membersAfterTransfer = await res.json();
+  const newOwnerRow = (membersAfterTransfer as { user: { email: string }; role: string }[]).find(
+    (m) => m.user.email === hierAdminEmail
+  );
+  const oldOwnerRow = (membersAfterTransfer as { user: { email: string }; role: string }[]).find(
+    (m) => m.user.email === ownerEmail
+  );
+  if (newOwnerRow?.role !== "OWNER" || oldOwnerRow?.role !== "ADMIN") {
+    fail("ownership transfer should swap roles atomically", { newOwnerRow, oldOwnerRow });
+  }
+  ok("ownership transfer swaps roles atomically: new owner is OWNER, previous owner demoted to ADMIN");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/transfer-ownership`, {
+    method: "POST",
+    headers: authHeaders(hierAdminToken),
+    body: JSON.stringify({ membershipId: hierAdminMembership.id }),
+  });
+  if (res.status !== 400) fail("transferring ownership to yourself should be 400", await res.text());
+  ok("transferring ownership to yourself is rejected (400)");
+
+  // Transfer back so the rest of the script's ownerAccessToken keeps working as OWNER.
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(ownerAccessToken) });
+  const membersForTransferBack = await res.json();
+  const ownerMembershipRow = (
+    membersForTransferBack as { membershipId: string; user: { email: string } }[]
+  ).find((m) => m.user.email === ownerEmail);
+  res = await fetch(`${BASE}/orgs/${orgId}/transfer-ownership`, {
+    method: "POST",
+    headers: authHeaders(hierAdminToken),
+    body: JSON.stringify({ membershipId: ownerMembershipRow!.membershipId }),
+  });
+  if (res.status !== 204) fail("transfer ownership back to the original owner", await res.text());
+
+  // --- Project discovery (browse-all) + access requests ---
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, { headers: authHeaders(hierDevToken) });
+  const devBrowseList = await res.json();
+  if (res.status !== 200 || !(devBrowseList as { id: string }[]).some((p) => p.id === projectId)) {
+    fail("a Developer should browse the full org project list, including ones they lack access to", devBrowseList);
+  }
+  const browsedProject = (devBrowseList as { id: string; hasAccess?: boolean }[]).find(
+    (p) => p.id === projectId
+  );
+  if (browsedProject?.hasAccess !== false) {
+    fail("a browsable-but-ungranted project should report hasAccess:false", browsedProject);
+  }
+  ok("a Developer without explicit access sees the full project list, with hasAccess:false on ungranted ones");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, { headers: authHeaders(viewerAccessToken) });
+  const viewerBrowseList = await res.json();
+  if (
+    res.status !== 200 ||
+    (viewerBrowseList as { hasAccess?: boolean }[]).some((p) => p.hasAccess === false)
+  ) {
+    fail(
+      "a Viewer should never see a browse-only (hasAccess:false) project -- only explicitly granted ones",
+      viewerBrowseList
+    );
+  }
+  ok("a Viewer's project visibility stays strict (no browse-all), matching the original Phase 11 default");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects/${projectId}/access-requests`, {
+    method: "POST",
+    headers: authHeaders(viewerAccessToken),
+  });
+  if (res.status !== 403) fail("a Viewer requesting project access should be 403", await res.text());
+  ok("a Viewer cannot request project access (403, canBrowseAllProjects gate)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects/${projectId}/access-requests`, {
+    method: "POST",
+    headers: authHeaders(hierDevToken),
+  });
+  const accessRequest = await res.json();
+  if (res.status !== 201) fail("Developer requesting project access should succeed (201)", accessRequest);
+  ok("a Developer can request access to a project they can browse but don't have (201)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/project-access-requests`, {
+    headers: authHeaders(ownerAccessToken),
+  });
+  const pendingRequests = await res.json();
+  if (
+    res.status !== 200 ||
+    !(pendingRequests as { id: string }[]).some((r) => r.id === accessRequest.id)
+  ) {
+    fail("owner should see the pending access request", pendingRequests);
+  }
+  ok("Admin+ can list pending project access requests");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/project-access-requests/${accessRequest.id}/approve`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("owner approving an access request should succeed (204)", await res.text());
+  ok("owner approves a pending project access request (204)");
+
+  res = await fetch(`${BASE}/projects/${projectId}`, { headers: authHeaders(hierDevToken) });
+  if (res.status !== 200) fail("after approval, the developer should have real access to the project (200)", await res.text());
+  ok("approving an access request actually grants access (200, not just a status flip)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/project-access-requests/${accessRequest.id}/approve`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 409) fail("approving an already-decided request should be 409", await res.text());
+  ok("re-deciding an already-decided access request is rejected (409)");
+
+  // --- Audit log filters ---
+
+  // The script's original owner JWT was minted near the very start of this
+  // (now very long) run and access tokens are short-lived -- log in fresh
+  // rather than risk an unrelated 401 from an expired token this late in.
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: ownerEmail, password }),
+  });
+  const ownerRelogin = await res.json();
+  if (res.status !== 200) fail("owner re-login for audit filter tests", ownerRelogin);
+  const ownerFreshToken: string = ownerRelogin.accessToken;
+
+  res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(ownerFreshToken) });
+  const ownerMe = await res.json();
+  if (res.status !== 200 || !ownerMe.id) fail("get fresh owner id for actorId filter test", ownerMe);
+
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?actorId=${ownerMe.id}&limit=200`, {
+    headers: authHeaders(ownerFreshToken),
+  });
+  const actorFilteredLogs = await res.json();
+  if (
+    res.status !== 200 ||
+    (actorFilteredLogs as { actor: { id: string } | null }[]).some(
+      (l) => l.actor && l.actor.id !== ownerMe.id
+    )
+  ) {
+    fail("actorId filter should return only that actor's entries", actorFilteredLogs);
+  }
+  ok("audit log actorId filter returns only the requested actor's entries");
+
+  const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?startDate=${futureDate}`, {
+    headers: authHeaders(ownerFreshToken),
+  });
+  const futureFilteredLogs = await res.json();
+  if (res.status !== 200 || (futureFilteredLogs as unknown[]).length !== 0) {
+    fail("startDate in the future should return zero entries", futureFilteredLogs);
+  }
+  ok("audit log startDate filter correctly bounds results (future date returns nothing)");
+
   const hammerEmail = `hammer-${rand}@example.com`;
   res = await fetch(`${BASE}/auth/signup`, {
     method: "POST",
@@ -1880,7 +2169,10 @@ async function main() {
   ok("a different account sharing the same IP is unaffected (email+IP keying confirmed, no NAT lockout)");
 
   let signupRateLimited = false;
-  for (let i = 0; i < 20; i++) {
+  // Bounded generously above the limiter's max, not tied to it exactly --
+  // this loop's only job is to prove *some* 429 eventually fires, however
+  // many legitimate signups this script has already made by this point.
+  for (let i = 0; i < 50; i++) {
     res = await fetch(`${BASE}/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1898,7 +2190,7 @@ async function main() {
     }
     if (res.status !== 201) fail(`unexpected status during signup hammer (attempt ${i})`, await res.text());
   }
-  if (!signupRateLimited) fail("expected signup rate limiter to trigger 429 within 20 signups from one IP");
+  if (!signupRateLimited) fail("expected signup rate limiter to trigger 429 within 50 signups from one IP");
   ok("repeated signups from one IP trigger 429 (signup abuse protection)");
 
   console.log(`\nAll smoke tests passed. orgId=${orgId} projectId=${projectId}`);

@@ -195,6 +195,7 @@ export async function getInviteByToken(rawToken: string) {
   }
 
   return {
+    orgId: invite.orgId,
     orgName: invite.org.name,
     orgSlug: invite.org.slug,
     role: invite.role,
@@ -300,6 +301,7 @@ export async function acceptInvite(
 
   return {
     membershipId: membership.id,
+    orgId: invite.orgId,
     role: membership.role,
     user: membership.user,
   };

@@ -56,17 +56,25 @@ export async function createProject(
   });
 }
 
-export async function listProjects(orgId: string, accessibleProjectIds: "all" | string[]) {
+export async function listProjects(
+  orgId: string,
+  accessibleProjectIds: "all" | string[],
+  browseAll = false
+) {
+  const canSeeAll = accessibleProjectIds === "all";
+
   const projects = await prisma.project.findMany({
-    where:
-      accessibleProjectIds === "all"
-        ? { orgId }
-        : { orgId, id: { in: accessibleProjectIds } },
+    where: canSeeAll || browseAll ? { orgId } : { orgId, id: { in: accessibleProjectIds } },
     orderBy: { createdAt: "asc" },
     include: withEnvironmentCount,
   });
 
-  return projects.map(toProjectResponse);
+  const accessibleSet = canSeeAll ? null : new Set(accessibleProjectIds);
+
+  return projects.map((project) => ({
+    ...toProjectResponse(project),
+    hasAccess: accessibleSet ? accessibleSet.has(project.id) : true,
+  }));
 }
 
 export async function getProject(projectId: string) {

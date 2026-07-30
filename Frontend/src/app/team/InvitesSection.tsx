@@ -9,6 +9,96 @@ import { queryKeys } from "@/lib/query-keys";
 import { assignableRoles } from "@/lib/roles";
 import { api, ApiError, InviteCreated, InviteSummary, MemberSummary, OrgRole } from "@/lib/api";
 
+function PendingAccessRequests({ orgId }: { orgId: string }) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+
+  const requestsQuery = useQuery({
+    queryKey: queryKeys.orgAccessRequests(orgId),
+    queryFn: () => api.listAccessRequests(orgId),
+  });
+  const requests = requestsQuery.data ?? [];
+
+  const onDecision = async (requestId: string, decision: "approve" | "reject") => {
+    setDecidingId(requestId);
+    setError(null);
+    try {
+      if (decision === "approve") {
+        await api.approveAccessRequest(orgId, requestId);
+      } else {
+        await api.rejectAccessRequest(orgId, requestId);
+      }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orgAccessRequests(orgId) });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update request");
+    } finally {
+      setDecidingId(null);
+    }
+  };
+
+  if (!requestsQuery.isPending && requests.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
+      <div className="border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
+        <h3 className="font-label-md text-label-md font-bold text-on-surface">
+          Pending Access Requests
+          <span className="ml-sm rounded bg-outline-variant px-base py-[2px] text-[10px] text-on-surface-variant">
+            {requests.length}
+          </span>
+        </h3>
+      </div>
+      <div className="flex flex-col divide-y divide-[#D0D7DE] dark:divide-outline-variant">
+        {error && (
+          <p className="p-md font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
+            {error}
+          </p>
+        )}
+        {requestsQuery.isPending ? (
+          <div className="flex justify-center py-lg text-secondary">
+            <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 20 }} />
+          </div>
+        ) : (
+          requests.map((r) => (
+            <div key={r.id} className="flex items-center justify-between gap-md px-md py-sm">
+              <div>
+                <p className="font-body-sm text-body-sm text-on-surface">
+                  <span className="font-bold">{r.requestedBy.name}</span> wants access to{" "}
+                  <span className="font-bold">{r.project.name}</span>
+                </p>
+                <p className="font-body-sm text-[11px] text-on-surface-variant">
+                  {r.requestedBy.email} · {new Date(r.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex flex-shrink-0 gap-sm">
+                <button
+                  type="button"
+                  disabled={decidingId === r.id}
+                  onClick={() => onDecision(r.id, "approve")}
+                  className="rounded-lg bg-primary-container px-sm py-1 font-label-md text-[11px] text-on-primary disabled:opacity-50"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={decidingId === r.id}
+                  onClick={() => onDecision(r.id, "reject")}
+                  className="rounded-lg border border-outline-variant px-sm py-1 font-label-md text-[11px] text-on-surface disabled:opacity-50"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AutoApproveSettings({ orgId }: { orgId: string }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -477,6 +567,8 @@ export function InvitesSection() {
           </div>
         </form>
       )}
+
+      {canManageApprovals && <PendingAccessRequests orgId={org.id} />}
 
       {canManageApprovals && <AutoApproveSettings orgId={org.id} />}
 

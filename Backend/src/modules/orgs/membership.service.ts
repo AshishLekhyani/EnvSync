@@ -1,6 +1,6 @@
 import { OrgMembership, OrgRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
-import { ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
 import { ROLE_WEIGHT } from "../rbac/roles";
 import { hasProjectAccess } from "../rbac/projectAccess.service";
 import { writeAuditLog } from "../audit/audit.service";
@@ -370,4 +370,151 @@ export async function removeMember(
   });
 
   notifyUserAccessChanged(membership.userId, orgId);
+}
+
+export async function leaveOrganization(orgId: string, userId: string, ipAddress?: string) {
+  const membership = await prisma.orgMembership.findUnique({
+    where: { userId_orgId: { userId, orgId } },
+    include: { user: { select: { email: true } } },
+  });
+
+  if (!membership) {
+    throw new NotFoundError("Membership not found");
+  }
+
+  if (membership.role === "OWNER") {
+    const otherMembers = await prisma.orgMembership.count({
+      where: { orgId, userId: { not: userId } },
+    });
+
+    if (otherMembers > 0) {
+      throw new ConflictError(
+        "You're the sole owner of this organization. Transfer ownership to someone else or delete the organization before leaving."
+      );
+    }
+
+    const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    await prisma.$transaction(async (tx) => {
+      await writeAuditLog(tx, {
+        orgId,
+        actorId: userId,
+        action: "org.delete",
+        targetType: "Organization",
+        targetId: orgId,
+        metadata: { name: org.name, reason: "sole_owner_left" },
+        ipAddress,
+      });
+      await tx.organization.delete({ where: { id: orgId } });
+    });
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await writeAuditLog(tx, {
+      orgId,
+      actorId: userId,
+      action: "member.leave",
+      targetType: "OrgMembership",
+      targetId: membership.id,
+      metadata: { email: membership.user.email, role: membership.role },
+      ipAddress,
+    });
+
+    await tx.orgMembership.delete({ where: { id: membership.id } });
+  });
+}
+
+export async function transferOwnership(
+  orgId: string,
+  targetMembershipId: string,
+  actorId: string,
+  ipAddress?: string
+) {
+  const [actorMembership, targetMembership] = await Promise.all([
+    prisma.orgMembership.findUnique({
+      where: { userId_orgId: { userId: actorId, orgId } },
+      include: { user: { select: { email: true } } },
+    }),
+    prisma.orgMembership.findUnique({
+      where: { id: targetMembershipId },
+      include: { user: { select: { email: true } } },
+    }),
+  ]);
+
+  if (!actorMembership) {
+    throw new NotFoundError("Membership not found");
+  }
+  if (!targetMembership || targetMembership.orgId !== orgId) {
+    throw new NotFoundError("Target member not found");
+  }
+  if (targetMembership.userId === actorId) {
+    throw new BadRequestError("You're already the owner");
+  }
+
+  const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.orgMembership.update({
+      where: { id: actorMembership.id },
+      data: { role: "ADMIN" },
+    });
+    await tx.orgMembership.update({
+      where: { id: targetMembership.id },
+      data: { role: "OWNER" },
+    });
+
+    await writeAuditLog(tx, {
+      orgId,
+      actorId,
+      action: "org.ownership_transfer",
+      targetType: "OrgMembership",
+      targetId: targetMembership.id,
+      metadata: {
+        previousOwnerEmail: actorMembership.user.email,
+        newOwnerEmail: targetMembership.user.email,
+      },
+      ipAddress,
+    });
+
+    await tx.notification.create({
+      data: {
+        orgId,
+        recipientId: targetMembership.userId,
+        type: "org.ownership_transferred",
+        message: `You are now the Owner of ${org.name}`,
+        targetType: "Organization",
+        targetId: orgId,
+        metadata: { orgId },
+      },
+    });
+  });
+
+  notifyUserAccessChanged(actorMembership.userId, orgId);
+  notifyUserAccessChanged(targetMembership.userId, orgId);
+}
+
+export async function leaveProject(
+  orgId: string,
+  projectId: string,
+  userId: string,
+  ipAddress?: string
+) {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project || project.orgId !== orgId) {
+    throw new NotFoundError("Project not found");
+  }
+
+  await prisma.projectMembership.deleteMany({
+    where: { userId, projectId },
+  });
+
+  await writeAuditLog(prisma, {
+    orgId,
+    actorId: userId,
+    action: "member.project_access_revoke",
+    targetType: "ProjectMembership",
+    projectId,
+    metadata: { targetUserId: userId, projectId, projectName: project.name, reason: "left_voluntarily" },
+    ipAddress,
+  });
 }

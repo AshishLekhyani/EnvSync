@@ -48,6 +48,25 @@ export async function apiRequest<T>(
   return data as T;
 }
 
+let warnedInsecure = false;
+
 export function resolveApiUrl(): string {
-  return process.env.ENVSYNC_API_URL ?? DEFAULT_API_URL;
+  const url = process.env.ENVSYNC_API_URL ?? DEFAULT_API_URL;
+
+  if (!warnedInsecure) {
+    try {
+      const parsed = new URL(url);
+      const isLocal = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+      if (parsed.protocol !== "https:" && !isLocal) {
+        console.error(
+          `Warning: ENVSYNC_API_URL (${url}) is not HTTPS. Your token and secrets would be sent in the clear.`
+        );
+        warnedInsecure = true;
+      }
+    } catch {
+      /* malformed URL -- the request itself will fail with a clear error */
+    }
+  }
+
+  return url;
 }

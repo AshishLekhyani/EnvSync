@@ -174,6 +174,9 @@ export function OrganizationTab() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+
   const [showCreateOrg, setShowCreateOrg] = useState(false);
 
   const onOrgCreated = async (newOrg: { id: string }) => {
@@ -244,6 +247,26 @@ export function OrganizationTab() {
     }
   };
 
+  const onLeave = async () => {
+    if (!window.confirm(`Leave ${org.name}? You'll lose access immediately.`)) {
+      return;
+    }
+    setLeaving(true);
+    setLeaveError(null);
+    try {
+      await api.leaveOrganization(org.id);
+      const remaining = organizations.filter((o) => o.id !== org.id);
+      await refreshMe();
+      if (remaining[0]) {
+        switchOrg(remaining[0].id);
+      }
+      router.push("/projects");
+    } catch (err) {
+      setLeaveError(err instanceof ApiError ? err.message : "Failed to leave organization");
+      setLeaving(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-lg">
       <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
@@ -311,6 +334,31 @@ export function OrganizationTab() {
       {isOwner && <ProjectVisibilitySection orgId={org.id} />}
 
       {isOwner && <DataExportSection orgId={org.id} orgSlug={org.slug} />}
+
+      {!isOwner && (
+        <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-md">
+          <h4 className="flex items-center gap-sm font-body-md text-body-md font-bold text-on-surface">
+            <Icon name="logout" />
+            Leave Organization
+          </h4>
+          <p className="mt-xs font-body-sm text-body-sm text-on-surface-variant">
+            You&apos;ll lose access to {org.name} and everything in it immediately.
+          </p>
+          {leaveError && (
+            <p className="mt-sm font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
+              {leaveError}
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={leaving}
+            onClick={onLeave}
+            className="mt-md rounded-lg border border-outline-variant px-md py-sm font-body-sm text-body-sm font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {leaving ? "Leaving..." : `Leave ${org.name}`}
+          </button>
+        </div>
+      )}
 
       {isOwner && (
         <div className="rounded-xl border border-[#CF222E]/30 bg-[#FFEBE9] p-md dark:border-red-500/30 dark:bg-red-500/10">
