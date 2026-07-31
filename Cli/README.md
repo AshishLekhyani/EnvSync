@@ -21,9 +21,13 @@ npm install -g @ashishlekhyani/envsync-cli
    envsync projects
    envsync environments --project <projectId>
    ```
-4. Pull secrets into a local `.env` file:
+4. Link this folder so you don't have to pass `--project`/`--environment` on every command:
    ```
-   envsync pull --project <projectId> --environment <environmentId>
+   envsync link --project <projectId> --environment <environmentId>
+   ```
+5. Pull secrets into a local `.env` file:
+   ```
+   envsync pull
    ```
 
 ## Commands
@@ -33,11 +37,14 @@ npm install -g @ashishlekhyani/envsync-cli
 | `envsync login [token]` | Authenticate with a service token. Reads the token from stdin if omitted (`echo $TOKEN \| envsync login`), avoiding shell history. Writes credentials to `~/.envsync/credentials.json` (mode `0600`). |
 | `envsync logout` | Removes local credentials. Does not revoke the token server-side — revoke it from Settings if it may have been compromised. |
 | `envsync projects` | Lists every project you have access to, with its ID. |
-| `envsync environments --project <id>` | Lists every environment for a project, with its ID. |
-| `envsync pull --project <id> --environment <id> [--out <path>]` | Reveals and writes every secret in the environment to a `.env` file (default `./.env`). Overwrites the destination file completely. |
-| `envsync push --project <id> --environment <id> [--out <path>]` | Reads a local `.env` file and upserts its keys to the server — creates new keys, updates existing ones. Never deletes remote-only keys. |
-| `envsync run --project <id> --environment <id> -- <cmd> [args...]` | Runs a command with secrets injected directly into its environment variables. Nothing is written to disk. |
-| `envsync status --project <id> --environment <id> [--out <path>]` | Compares your local `.env` against the server without revealing any values — metadata only, safe to run often. |
+| `envsync environments [--project <id>]` | Lists every environment for a project, with its ID. |
+| `envsync link --project <id> --environment <id>` | Remembers a project/environment for the current folder (writes `.envsync.json` there), so the commands below can omit `--project`/`--environment` entirely. |
+| `envsync pull [--project <id> --environment <id>] [--out <path>]` | Reveals and writes every secret in the environment to a `.env` file (default `./.env`). Overwrites the destination file completely. |
+| `envsync push [--project <id> --environment <id>] [--out <path>]` | Reads a local `.env` file and upserts its keys to the server — creates new keys, updates existing ones. Never deletes remote-only keys. |
+| `envsync run [--project <id> --environment <id>] -- <cmd> [args...]` | Runs a command with secrets injected directly into its environment variables. Nothing is written to disk. |
+| `envsync status [--project <id> --environment <id>] [--out <path>]` | Compares your local `.env` against the server without revealing any values — metadata only, safe to run often. |
+
+`--project`/`--environment` are only required if you haven't run `envsync link` in the current folder — explicit flags always take priority over a linked value.
 
 ## Environment variables
 

@@ -12,7 +12,7 @@ export const createOrg = asyncHandler(async (req, res) => {
 });
 
 export const listOrgs = asyncHandler(async (req, res) => {
-  const orgs = await orgService.listOrganizationsForUser(req.user!.id);
+  const orgs = await orgService.listOrganizationsForUser(req.user!.id, req.apiTokenOrgId);
   res.status(200).json(orgs);
 });
 

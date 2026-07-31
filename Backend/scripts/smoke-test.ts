@@ -2589,6 +2589,21 @@ async function main() {
   }
   ok("GET /auth/me via an API token is restricted to the token's own org (cross-org membership leak closed)");
 
+  res = await fetch(`${BASE}/orgs`, { headers: authHeaders(auditRawToken) });
+  const tokenOrgs = await res.json();
+  if (
+    res.status !== 200 ||
+    !Array.isArray(tokenOrgs) ||
+    tokenOrgs.length !== 1 ||
+    tokenOrgs[0].id !== orgId
+  ) {
+    fail(
+      "GET /orgs with an API token should only list the token's own org, not every org the user belongs to",
+      tokenOrgs
+    );
+  }
+  ok("GET /orgs via an API token is restricted to the token's own org (cross-org membership leak closed)");
+
   // --- Notifications are org-scoped for API-token auth ---
 
   const notifScopeDevEmail = `notifscope-dev-${rand}@example.com`;

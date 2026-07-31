@@ -43,7 +43,7 @@ export default function DockerIntegrationPage() {
       <IntegrationSnippet
         filename="Dockerfile"
         buildCode={(projectId, environmentId) => `FROM node:20-slim
-RUN npm install -g envsync-cli
+RUN npm install -g @ashishlekhyani/envsync-cli
 COPY . .
 ENTRYPOINT ["envsync", "run", "--project", "${projectId}", "--environment", "${environmentId}", "--", "node", "server.js"]`}
       />

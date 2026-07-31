@@ -47,7 +47,7 @@ export default function GithubActionsIntegrationPage() {
       <IntegrationSnippet
         filename=".github/workflows/deploy.yml"
         buildCode={(projectId, environmentId) => `- name: Pull secrets from EnvSync
-  run: npx envsync-cli pull --project ${projectId} --environment ${environmentId}
+  run: npx @ashishlekhyani/envsync-cli pull --project ${projectId} --environment ${environmentId}
   env:
     ENVSYNC_TOKEN: \${{ secrets.ENVSYNC_TOKEN }}`}
       />

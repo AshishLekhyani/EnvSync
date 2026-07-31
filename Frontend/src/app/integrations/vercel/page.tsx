@@ -41,7 +41,7 @@ export default function VercelIntegrationPage() {
         filename="package.json"
         buildCode={(projectId, environmentId) => `{
   "scripts": {
-    "build": "npx envsync-cli run --project ${projectId} --environment ${environmentId} -- next build"
+    "build": "npx @ashishlekhyani/envsync-cli run --project ${projectId} --environment ${environmentId} -- next build"
   }
 }`}
       />

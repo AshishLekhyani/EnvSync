@@ -43,9 +43,9 @@ export async function createOrganization(
   return org;
 }
 
-export async function listOrganizationsForUser(userId: string) {
+export async function listOrganizationsForUser(userId: string, restrictToOrgId?: string) {
   const memberships = await prisma.orgMembership.findMany({
-    where: { userId },
+    where: { userId, ...(restrictToOrgId ? { orgId: restrictToOrgId } : {}) },
     include: { org: true },
   });
 

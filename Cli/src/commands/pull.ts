@@ -3,6 +3,7 @@ import path from "node:path";
 import { apiRequest } from "../apiClient";
 import { resolveEnvironment } from "../environment";
 import { parseProjectEnvFlags } from "../flags";
+import { recordPull } from "../link";
 import { requireSession } from "../session";
 import { SecretMetadata, SecretWithValue } from "../types";
 
@@ -36,5 +37,6 @@ export async function runPull(args: string[]): Promise<void> {
   ];
 
   fs.writeFileSync(outPath, lines.join("\n") + "\n");
+  recordPull(projectId, environmentId);
   console.log(`Pulled ${revealed.length} secret(s) into ${outPath}`);
 }

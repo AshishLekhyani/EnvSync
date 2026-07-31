@@ -40,15 +40,22 @@ export async function runRun(argv: string[]): Promise<void> {
 
   const child = spawn(command, commandArgs, { env, stdio: "inherit" });
 
-  process.on("SIGINT", () => child.kill("SIGINT"));
-  process.on("SIGTERM", () => child.kill("SIGTERM"));
+  const onSigint = () => child.kill("SIGINT");
+  const onSigterm = () => child.kill("SIGTERM");
+  process.on("SIGINT", onSigint);
+  process.on("SIGTERM", onSigterm);
 
-  child.on("error", (err) => {
-    console.error(`Failed to run "${command}": ${err.message}`);
-    process.exitCode = 1;
-  });
-
-  child.on("exit", (code) => {
-    process.exitCode = code ?? 0;
-  });
+  try {
+    const code = await new Promise<number>((resolve) => {
+      child.on("error", (err) => {
+        console.error(`Failed to run "${command}": ${err.message}`);
+        resolve(1);
+      });
+      child.on("exit", (code) => resolve(code ?? 0));
+    });
+    process.exitCode = code;
+  } finally {
+    process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
+  }
 }

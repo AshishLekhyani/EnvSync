@@ -1,6 +1,10 @@
 import { Credentials, readCredentials } from "./credentials";
 import { resolveApiUrl } from "./apiClient";
 
+export function hasSession(): boolean {
+  return !!process.env.ENVSYNC_TOKEN || !!readCredentials();
+}
+
 export function requireSession(): Credentials {
   const envToken = process.env.ENVSYNC_TOKEN;
   if (envToken) {

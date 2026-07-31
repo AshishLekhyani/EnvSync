@@ -106,7 +106,7 @@ export function CliTab() {
               <h2 className="font-h3 text-h3 text-on-surface">1. Install CLI</h2>
             </div>
             <span className="rounded bg-tertiary-container px-sm py-1 font-label-md text-label-md text-on-tertiary-container text-xs">
-              v1.0.0
+              v1.0.3
             </span>
           </div>
           <div className="space-y-md p-md">
@@ -121,7 +121,7 @@ export function CliTab() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => copyText("npm install -g envsync-cli")}
+                  onClick={() => copyText("npm install -g @ashishlekhyani/envsync-cli")}
                   className="flex items-center gap-xs font-label-md text-xs text-on-primary-fixed-variant transition-colors hover:text-primary-container"
                 >
                   <Icon name="content_copy" className="text-sm" />
@@ -131,7 +131,7 @@ export function CliTab() {
               <div className="code-block-body p-md">
                 <code className="font-code-md text-code-md text-[#E6EDF3]">
                   <span className="text-[#FF7B72]">npm</span> install -g
-                  envsync-cli
+                  @ashishlekhyani/envsync-cli
                 </code>
               </div>
             </div>
@@ -304,6 +304,32 @@ export function CliTab() {
                     <code className="font-code-md text-code-md text-[#E6EDF3]">
                       <span className="text-[#FF7B72]">envsync</span> login{" "}
                       <span className="text-[#79C0FF]">&lt;your-token&gt;</span>
+                    </code>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-sm">
+                <h4 className="font-body-md text-body-md font-bold text-on-surface">
+                  Link This Folder
+                </h4>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  Remember this project/environment here so you don&apos;t have to
+                  pass{" "}
+                  <span className="rounded bg-surface-container px-1 py-0.5 font-code-sm text-code-sm">
+                    --project
+                  </span>{" "}
+                  /{" "}
+                  <span className="rounded bg-surface-container px-1 py-0.5 font-code-sm text-code-sm">
+                    --environment
+                  </span>{" "}
+                  on every command.
+                </p>
+                <div className="overflow-hidden rounded-lg border border-[#30363D]">
+                  <div className="code-block-body p-md">
+                    <code className="font-code-md text-code-md text-[#E6EDF3]">
+                      <span className="text-[#FF7B72]">envsync</span> link
+                      --project <span className="text-[#79C0FF]">&lt;id&gt;</span>{" "}
+                      --environment <span className="text-[#79C0FF]">&lt;id&gt;</span>
                     </code>
                   </div>
                 </div>

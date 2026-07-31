@@ -39,7 +39,7 @@ export default function AwsIntegrationPage() {
 
       <IntegrationSnippet
         filename="deploy.sh"
-        buildCode={(projectId, environmentId) => `envsync pull --project ${projectId} --environment ${environmentId} --out .env
+        buildCode={(projectId, environmentId) => `npx @ashishlekhyani/envsync-cli pull --project ${projectId} --environment ${environmentId} --out .env
 aws secretsmanager put-secret-value \\
   --secret-id my-app/${environmentId} \\
   --secret-string file://.env`}
