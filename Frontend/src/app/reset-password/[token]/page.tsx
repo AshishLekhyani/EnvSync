@@ -13,14 +13,19 @@ function ResetPasswordForm() {
   const router = useRouter();
 
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setSubmitting(true);
     setError(null);
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+    setSubmitting(true);
 
     try {
       await api.resetPassword(token, password);
@@ -66,6 +71,21 @@ function ResetPasswordForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 8 characters"
+              className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:border-primary focus:ring-2 focus:ring-primary-container"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-xs block font-label-md text-label-md text-on-surface">
+              Confirm new password
+            </span>
+            <input
+              required
+              minLength={8}
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter your password"
               className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:border-primary focus:ring-2 focus:ring-primary-container"
             />
           </label>

@@ -1,16 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError } from "@/lib/api";
 
-export default function VerifyEmailPage() {
+function VerifyEmailInner() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invite = searchParams.get("invite");
   const { verifyAndLogin } = useAuth();
 
   const [status, setStatus] = useState<"pending" | "success" | "error">("pending");
@@ -24,7 +26,8 @@ export default function VerifyEmailPage() {
     verifyAndLogin(token)
       .then(() => {
         setStatus("success");
-        window.setTimeout(() => router.push("/projects"), 1500);
+        const destination = invite ? `/invite/${invite}` : "/projects";
+        window.setTimeout(() => router.push(destination), 1500);
       })
       .catch((err) => {
         setStatus("error");
@@ -75,5 +78,13 @@ export default function VerifyEmailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={null}>
+      <VerifyEmailInner />
+    </Suspense>
   );
 }

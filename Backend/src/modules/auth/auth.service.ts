@@ -63,21 +63,29 @@ function toPublicUser(user: {
   };
 }
 
-async function createAndSendSignupVerification(email: string, name: string, passwordHash: string) {
+async function createAndSendSignupVerification(
+  email: string,
+  name: string,
+  passwordHash: string,
+  inviteToken?: string | null
+) {
   const rawToken = VERIFY_TOKEN_PREFIX + crypto.randomBytes(32).toString("base64url");
   const tokenHash = sha256Hex(rawToken);
   const expiresAt = new Date(Date.now() + VERIFY_TOKEN_EXPIRY_MS);
 
   await prisma.pendingSignup.upsert({
     where: { email },
-    create: { email, name, passwordHash, tokenHash, expiresAt },
-    update: { name, passwordHash, tokenHash, expiresAt },
+    create: { email, name, passwordHash, tokenHash, expiresAt, inviteToken },
+    update: { name, passwordHash, tokenHash, expiresAt, inviteToken },
   });
 
+  const link = `${env.CORS_ORIGIN}/verify-email/${rawToken}${inviteToken ? `?invite=${inviteToken}` : ""}`;
+
   if (isEmailConfigured()) {
-    const link = `${env.CORS_ORIGIN}/verify-email/${rawToken}`;
-    await sendEmail({ to: email, ...verificationEmail(link) });
-    return { sent: true, verifyToken: null as string | null };
+    const { sent } = await sendEmail({ to: email, ...verificationEmail(link) });
+    if (sent) {
+      return { sent: true, verifyToken: null as string | null };
+    }
   }
 
   return { sent: false, verifyToken: rawToken };
@@ -108,7 +116,7 @@ export async function signup(input: SignupInput) {
   }
 
   const passwordHash = await hashPassword(input.password);
-  return createAndSendSignupVerification(input.email, input.name, passwordHash);
+  return createAndSendSignupVerification(input.email, input.name, passwordHash, input.invite);
 }
 
 export async function resendSignupVerification(email: string) {
@@ -118,7 +126,12 @@ export async function resendSignupVerification(email: string) {
     return { sent: false, verifyToken: null as string | null };
   }
 
-  return createAndSendSignupVerification(pending.email, pending.name, pending.passwordHash);
+  return createAndSendSignupVerification(
+    pending.email,
+    pending.name,
+    pending.passwordHash,
+    pending.inviteToken
+  );
 }
 
 export async function verifySignup(rawToken: string) {
@@ -342,8 +355,10 @@ export async function requestPasswordReset(input: ForgotPasswordInput) {
 
   if (isEmailConfigured()) {
     const link = `${env.CORS_ORIGIN}/reset-password/${rawToken}`;
-    await sendEmail({ to: user.email, ...passwordResetEmail(link) });
-    return { resetToken: null };
+    const { sent } = await sendEmail({ to: user.email, ...passwordResetEmail(link) });
+    if (sent) {
+      return { resetToken: null };
+    }
   }
 
   return { resetToken: rawToken };

@@ -3,9 +3,8 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { LoadingScreen } from "./LoadingScreen";
 
-function GuestOnlyInner({ children }: { children: React.ReactNode }) {
+function RedirectIfLoggedIn() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -18,17 +17,16 @@ function GuestOnlyInner({ children }: { children: React.ReactNode }) {
     }
   }, [loading, user, router, target]);
 
-  if (!loading && user) {
-    return <LoadingScreen />;
-  }
-
-  return <>{children}</>;
+  return null;
 }
 
 export function GuestOnly({ children }: { children: React.ReactNode }) {
   return (
-    <Suspense fallback={<LoadingScreen />}>
-      <GuestOnlyInner>{children}</GuestOnlyInner>
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <RedirectIfLoggedIn />
+      </Suspense>
+      {children}
+    </>
   );
 }

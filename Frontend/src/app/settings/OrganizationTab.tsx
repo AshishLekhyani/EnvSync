@@ -433,6 +433,7 @@ export function OrganizationTab() {
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  maxLength={100}
                   className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
                 />
               </label>

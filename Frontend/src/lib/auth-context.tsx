@@ -34,7 +34,8 @@ interface AuthContextValue {
   signup: (
     name: string,
     email: string,
-    password: string
+    password: string,
+    invite?: string
   ) => Promise<{ sent: boolean; verifyToken: string | null }>;
   verifyAndLogin: (token: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -158,9 +159,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [loadMe]
   );
 
-  const signup = useCallback(async (name: string, email: string, password: string) => {
-    return api.signup({ name, email, password });
-  }, []);
+  const signup = useCallback(
+    async (name: string, email: string, password: string, invite?: string) => {
+      return api.signup({ name, email, password, invite });
+    },
+    []
+  );
 
   const verifyAndLogin = useCallback(
     async (token: string) => {

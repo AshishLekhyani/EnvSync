@@ -52,6 +52,7 @@ export function ProfileTab() {
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSaved, setPasswordSaved] = useState(false);
@@ -125,13 +126,18 @@ export function ProfileTab() {
 
   const onChangePassword = async (e: FormEvent) => {
     e.preventDefault();
-    setChangingPassword(true);
     setPasswordError(null);
     setPasswordSaved(false);
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError("New passwords don't match.");
+      return;
+    }
+    setChangingPassword(true);
     try {
       await api.changePassword({ currentPassword, newPassword });
       setCurrentPassword("");
       setNewPassword("");
+      setConfirmNewPassword("");
       setPasswordSaved(true);
       window.setTimeout(() => setPasswordSaved(false), 3000);
     } catch (err) {
@@ -198,6 +204,7 @@ export function ProfileTab() {
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                maxLength={100}
                 className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
               />
             </label>
@@ -257,6 +264,19 @@ export function ProfileTab() {
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-xs block font-label-md text-label-md text-on-surface">
+                  Confirm new password
+                </span>
+                <input
+                  required
+                  minLength={8}
+                  type="password"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
                   className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
                 />
               </label>

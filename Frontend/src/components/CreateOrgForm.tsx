@@ -24,11 +24,17 @@ export function CreateOrgForm({
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const slug = slugify(name);
+    if (!slug) {
+      setError("Organization name must contain at least one letter or number.");
+      return;
+    }
+
     setCreating(true);
     setError(null);
 
     try {
-      const org = await api.createOrg({ name, slug: slugify(name) });
+      const org = await api.createOrg({ name, slug });
       setName("");
       await onCreated(org);
     } catch (err) {
@@ -50,6 +56,7 @@ export function CreateOrgForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Acme Inc"
+          maxLength={100}
           className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
         />
       </label>

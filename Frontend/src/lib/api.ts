@@ -290,7 +290,7 @@ export interface ProjectAccessRequestSummary {
 }
 
 export const api = {
-  signup: (input: { name: string; email: string; password: string }) =>
+  signup: (input: { name: string; email: string; password: string; invite?: string }) =>
     request<{ sent: boolean; verifyToken: string | null }>("/auth/signup", {
       method: "POST",
       body: JSON.stringify(input),

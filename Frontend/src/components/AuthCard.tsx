@@ -7,6 +7,8 @@ import { Icon } from "@/components/Icon";
 import { API_URL, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
+const SLOW_SUBMIT_THRESHOLD_MS = 3500;
+
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   oauth_not_configured: "Single sign-on isn't configured on this server yet.",
   oauth_denied: "Sign-in was cancelled.",
@@ -29,6 +31,7 @@ export function AuthCard({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [awaitingVerification, setAwaitingVerification] = useState<{
@@ -36,6 +39,7 @@ export function AuthCard({
     verifyToken: string | null;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [slowSubmit, setSlowSubmit] = useState(false);
   const isLogin = mode === "login";
 
   useEffect(() => {
@@ -44,12 +48,21 @@ export function AuthCard({
     }
   }, [oauthError]);
 
+  useEffect(() => {
+    if (!submitting) {
+      setSlowSubmit(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setSlowSubmit(true), SLOW_SUBMIT_THRESHOLD_MS);
+    return () => window.clearTimeout(timer);
+  }, [submitting]);
+
   const postAuthPath = invite ? `/invite/${invite}` : "/projects";
   const googleHref = `${API_URL}/auth/google${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`;
 
   const verifyLink =
     awaitingVerification?.verifyToken && typeof window !== "undefined"
-      ? `${window.location.origin}/verify-email/${awaitingVerification.verifyToken}`
+      ? `${window.location.origin}/verify-email/${awaitingVerification.verifyToken}${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`
       : null;
 
   const copyLink = async () => {
@@ -68,12 +81,18 @@ export function AuthCard({
     setError(null);
     setSubmitting(true);
 
+    if (!isLogin && password !== confirmPassword) {
+      setError("Passwords don't match.");
+      setSubmitting(false);
+      return;
+    }
+
     try {
       if (isLogin) {
         await login(email, password);
         router.push(postAuthPath);
       } else {
-        const result = await signup(name, email, password);
+        const result = await signup(name, email, password, invite ?? undefined);
         setAwaitingVerification({ email, verifyToken: result.verifyToken });
         setSubmitting(false);
       }
@@ -200,6 +219,7 @@ export function AuthCard({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ashish Kumar"
+              maxLength={100}
               className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:border-primary focus:ring-2 focus:ring-primary-container"
             />
           </label>
@@ -244,6 +264,32 @@ export function AuthCard({
           </div>
         </label>
 
+        {!isLogin && (
+          <label className="block">
+            <span className="mb-xs block font-label-md text-label-md text-on-surface">
+              Confirm password
+            </span>
+            <input
+              required
+              type={showPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter your password"
+              minLength={8}
+              className={`w-full rounded-lg border px-md py-sm font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:ring-2 ${
+                confirmPassword && confirmPassword !== password
+                  ? "border-[#CF222E] focus:border-[#CF222E] focus:ring-[#CF222E]/20"
+                  : "border-outline-variant focus:border-primary focus:ring-primary-container"
+              }`}
+            />
+            {confirmPassword && confirmPassword !== password && (
+              <span className="mt-xs block font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
+                Passwords don&apos;t match.
+              </span>
+            )}
+          </label>
+        )}
+
         {isLogin && (
           <div className="flex items-center justify-end">
             <Link
@@ -261,11 +307,19 @@ export function AuthCard({
           className="w-full rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90 active:scale-[0.99] disabled:opacity-60"
         >
           {submitting
-            ? "Please wait..."
+            ? slowSubmit
+              ? "Waking up the server..."
+              : "Please wait..."
             : isLogin
               ? "Sign in"
               : "Create account"}
         </button>
+        {slowSubmit && (
+          <p className="text-center font-body-sm text-body-sm text-secondary">
+            This app runs on a free-tier server that sleeps when idle — first request after a
+            while can take up to a minute.
+          </p>
+        )}
       </form>
 
       <p className="mt-lg text-center font-body-sm text-body-sm text-secondary">

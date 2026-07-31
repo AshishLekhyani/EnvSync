@@ -125,13 +125,18 @@ function ProjectsPageContent() {
   const onCreateProject = async (e: FormEvent) => {
     e.preventDefault();
     if (!org) return;
+    const slug = slugify(projectName);
+    if (!slug) {
+      setError("Project name must contain at least one letter or number.");
+      return;
+    }
     setCreatingProject(true);
     setError(null);
 
     try {
       const project = await api.createProject(org.id, {
         name: projectName,
-        slug: slugify(projectName),
+        slug,
         description: projectDescription || undefined,
       });
       queryClient.setQueryData<Project[]>(
@@ -261,6 +266,7 @@ function ProjectsPageContent() {
                     value={projectName}
                     onChange={(e) => setProjectName(e.target.value)}
                     placeholder="Core API"
+                    maxLength={100}
                     className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
                   />
                 </label>
@@ -272,6 +278,7 @@ function ProjectsPageContent() {
                     value={projectDescription}
                     onChange={(e) => setProjectDescription(e.target.value)}
                     placeholder="What does this project do?"
+                    maxLength={500}
                     className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
                   />
                 </label>

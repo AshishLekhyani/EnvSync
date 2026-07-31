@@ -2,15 +2,17 @@ import { z } from "zod";
 
 const keyRegex = /^[A-Z][A-Z0-9_]*$/;
 
+const valueSchema = z.string().min(1).max(65536);
+
 export const createSecretSchema = z.object({
   key: z.string().min(1).max(200).regex(keyRegex, "Key must be UPPER_SNAKE_CASE"),
-  value: z.string().min(1),
+  value: valueSchema,
   expiresAt: z.string().datetime().nullable().optional(),
 });
 export type CreateSecretInput = z.infer<typeof createSecretSchema>;
 
 export const updateSecretSchema = z.object({
-  value: z.string().min(1),
+  value: valueSchema,
 });
 export type UpdateSecretInput = z.infer<typeof updateSecretSchema>;
 
@@ -29,7 +31,7 @@ export const bulkUpsertSecretsSchema = z.object({
     .array(
       z.object({
         key: z.string().min(1).max(200).regex(keyRegex, "Key must be UPPER_SNAKE_CASE"),
-        value: z.string().min(1),
+        value: valueSchema,
       })
     )
     .min(1)

@@ -366,6 +366,7 @@ model PendingSignup {
   email        String   @unique
   name         String
   passwordHash String
+  inviteToken  String?
   tokenHash    String   @unique
   createdAt    DateTime @default(now())
   expiresAt    DateTime

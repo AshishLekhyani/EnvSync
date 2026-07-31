@@ -19,6 +19,11 @@ import { getActionDisplay } from "@/lib/auditActions";
 
 const MASKED = "••••••••••••••••••••••••";
 
+function sanitizeSecretKey(value: string) {
+  const cleaned = value.toUpperCase().replace(/[^A-Z0-9_]/g, "");
+  return cleaned.replace(/^[0-9_]+/, "");
+}
+
 function expiryBadge(expiresAt: string | null) {
   if (!expiresAt) {
     return { label: "—", className: "text-secondary" };
@@ -435,10 +440,14 @@ export default function EnvironmentSecretsPage() {
                     <input
                       required
                       value={newKey}
-                      onChange={(e) => setNewKey(e.target.value.toUpperCase())}
+                      onChange={(e) => setNewKey(sanitizeSecretKey(e.target.value))}
                       placeholder="DATABASE_URL"
+                      maxLength={200}
                       className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-code-md text-code-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
                     />
+                    <span className="mt-xs block font-body-sm text-[11px] text-on-surface-variant">
+                      Letters, numbers, underscores — must start with a letter
+                    </span>
                   </label>
                   <label className="block flex-1">
                     <span className="mb-xs block font-label-md text-label-md text-on-surface">
@@ -450,6 +459,7 @@ export default function EnvironmentSecretsPage() {
                       value={newValue}
                       onChange={(e) => setNewValue(e.target.value)}
                       placeholder="secret value"
+                      maxLength={65536}
                       className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-code-md text-code-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
                     />
                   </label>
