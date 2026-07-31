@@ -1,9 +1,17 @@
 {
-  "name": "envsync-cli",
+  "name": "@ashishlekhyani/envsync-cli",
   "version": "1.0.0",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "EnvSync command-line interface",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AshishLekhyani/EnvSync.git",
+    "directory": "Cli"
+  },
   "keywords": [
     "envsync",
     "secrets",

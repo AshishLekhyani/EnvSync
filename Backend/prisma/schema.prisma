@@ -37,6 +37,7 @@ model User {
   invitesAccepted         OrgInvite[]     @relation("InviteAcceptor")
   invitesApproved         OrgInvite[]     @relation("InviteApprover")
   passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
   projectAccess           ProjectMembership[] @relation("ProjectMember")
   projectAccessGranted    ProjectMembership[] @relation("ProjectAccessGrantor")
   autoApproveRulesAsInviter InviteAutoApproveRule[] @relation("AutoApproveInviter")
@@ -349,6 +350,19 @@ model InviteAutoApproveRule {
 }
 
 model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model EmailVerificationToken {
   id        String    @id @default(cuid())
   userId    String
   tokenHash String    @unique

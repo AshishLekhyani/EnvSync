@@ -26,11 +26,17 @@ import {
 import { notifyUserSessionsRevoked } from "./sse";
 import { writeAuditLog } from "../audit/audit.service";
 import { isValidAvatarDataUrl } from "../../common/imageValidation";
+import { env } from "../../config/env";
+import { isEmailConfigured, sendEmail } from "../email/email.service";
+import { passwordResetEmail, verificationEmail } from "../email/templates";
 
 const DEFAULT_NOTIFICATION_PREFS = { approvalRequests: true, accessChanges: true };
 
 const RESET_TOKEN_PREFIX = "reset_";
 const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000;
+
+const VERIFY_TOKEN_PREFIX = "verify_";
+const VERIFY_TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 export interface SessionMeta {
   userAgent?: string;
@@ -44,6 +50,7 @@ function toPublicUser(user: {
   authProvider: string;
   avatarUrl?: string | null;
   notificationPrefs?: unknown;
+  emailVerifiedAt?: Date | null;
 }) {
   return {
     id: user.id,
@@ -52,7 +59,30 @@ function toPublicUser(user: {
     authProvider: user.authProvider,
     avatarUrl: user.avatarUrl ?? null,
     notificationPrefs: (user.notificationPrefs as typeof DEFAULT_NOTIFICATION_PREFS | null) ?? DEFAULT_NOTIFICATION_PREFS,
+    emailVerifiedAt: user.emailVerifiedAt ?? null,
   };
+}
+
+async function createAndSendVerification(userId: string, email: string) {
+  const rawToken = VERIFY_TOKEN_PREFIX + crypto.randomBytes(32).toString("base64url");
+  const tokenHash = sha256Hex(rawToken);
+
+  await prisma.emailVerificationToken.create({
+    data: {
+      userId,
+      tokenHash,
+      expiresAt: new Date(Date.now() + VERIFY_TOKEN_EXPIRY_MS),
+    },
+  });
+
+  if (isEmailConfigured()) {
+    const link = `${env.CORS_ORIGIN}/verify-email/${rawToken}`;
+    sendEmail({ to: email, ...verificationEmail(link) }).catch((err) => {
+      console.error("Failed to send verification email", err);
+    });
+  }
+
+  return rawToken;
 }
 
 export async function issueSession(userId: string, email: string, meta: SessionMeta) {
@@ -92,7 +122,47 @@ export async function signup(input: SignupInput) {
     },
   });
 
+  await createAndSendVerification(user.id, user.email);
+
   return toPublicUser(user);
+}
+
+export async function resendVerificationEmail(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  if (!user) {
+    throw new UnauthorizedError();
+  }
+
+  if (user.emailVerifiedAt) {
+    throw new ConflictError("This email is already verified");
+  }
+
+  const rawToken = await createAndSendVerification(user.id, user.email);
+  const sent = isEmailConfigured();
+
+  return { sent, verifyToken: sent ? null : rawToken };
+}
+
+export async function verifyEmail(rawToken: string) {
+  const tokenHash = sha256Hex(rawToken);
+
+  const verifyToken = await prisma.emailVerificationToken.findUnique({ where: { tokenHash } });
+
+  if (!verifyToken || verifyToken.usedAt || verifyToken.expiresAt < new Date()) {
+    throw new UnauthorizedError("This verification link is invalid or has expired");
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: verifyToken.userId },
+      data: { emailVerifiedAt: new Date() },
+    }),
+    prisma.emailVerificationToken.update({
+      where: { id: verifyToken.id },
+      data: { usedAt: new Date() },
+    }),
+  ]);
 }
 
 export async function login(input: LoginInput, meta: SessionMeta) {
@@ -281,6 +351,12 @@ export async function requestPasswordReset(input: ForgotPasswordInput) {
       expiresAt: new Date(Date.now() + RESET_TOKEN_EXPIRY_MS),
     },
   });
+
+  if (isEmailConfigured()) {
+    const link = `${env.CORS_ORIGIN}/reset-password/${rawToken}`;
+    await sendEmail({ to: user.email, ...passwordResetEmail(link) });
+    return { resetToken: null };
+  }
 
   return { resetToken: rawToken };
 }

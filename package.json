@@ -15,8 +15,8 @@
     "dev:api": "npm run dev -w envsync-api",
     "build:api": "npm run build -w envsync-api",
     "start:api": "npm run start -w envsync-api",
-    "dev:cli": "npm run dev -w envsync-cli",
-    "build:cli": "npm run build -w envsync-cli"
+    "dev:cli": "npm run dev -w @ashishlekhyani/envsync-cli",
+    "build:cli": "npm run build -w @ashishlekhyani/envsync-cli"
   },
   "engines": {
     "node": ">=18"

@@ -11,6 +11,7 @@ import {
   ResetPasswordInput,
   SignupInput,
   UpdateProfileInput,
+  VerifyEmailInput,
 } from "./auth.validators";
 import { REFRESH_TOKEN_MAX_AGE_MS } from "./tokens";
 import { registerConnection, unregisterConnection } from "./sse";
@@ -158,4 +159,14 @@ export const deleteAccount = asyncHandler(async (req, res) => {
   await authService.deleteAccount(req.user!.id, req.body as DeleteAccountInput);
   res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
   res.status(204).send();
+});
+
+export const verifyEmail = asyncHandler(async (req, res) => {
+  await authService.verifyEmail((req.body as VerifyEmailInput).token);
+  res.status(204).send();
+});
+
+export const resendVerification = asyncHandler(async (req, res) => {
+  const result = await authService.resendVerificationEmail(req.user!.id);
+  res.status(200).json(result);
 });

@@ -3,6 +3,7 @@ import { findOrCreateGithubUser } from "../src/modules/auth/github.service";
 import { findOrCreateGoogleUser } from "../src/modules/auth/google.service";
 import { changePassword as changePasswordDirect } from "../src/modules/auth/auth.service";
 import { BadRequestError, ConflictError } from "../src/common/errors/AppError";
+import { isEmailConfigured } from "../src/modules/email/email.service";
 import { prisma } from "../src/db/prisma";
 
 const BASE = "http://localhost:4000/api";
@@ -30,6 +31,12 @@ function fail(label: string, detail?: unknown): never {
 }
 
 async function main() {
+  if (isEmailConfigured()) {
+    fail(
+      "SMTP is configured — this suite needs dev-mode token links to verify the full reset/invite/verification flow end-to-end. Comment out SMTP_HOST/SMTP_USER/SMTP_PASS/EMAIL_FROM in Backend/.env, restart the dev server, and re-run. Real delivery is a separate manual check (see DEPLOYMENT.md)."
+    );
+  }
+
   const rand = Math.random().toString(36).slice(2, 8);
   const ownerEmail = `owner-${rand}@example.com`;
   const viewerEmail = `viewer-${rand}@example.com`;
@@ -1543,6 +1550,82 @@ async function main() {
   if (res.status !== 401) fail("an expired reset token should be 401", await res.text());
   ok("an expired reset token is rejected (401)");
 
+  // --- Email verification ---
+
+  const verifyTestEmail = `verify-${rand}@example.com`;
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Verify Test", email: verifyTestEmail, password }),
+  });
+  if (res.status !== 201) fail("signup for verification test", await res.text());
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: verifyTestEmail, password }),
+  });
+  const verifyLogin = await res.json();
+  if (res.status !== 200) fail("login for verification test", verifyLogin);
+  const verifyAccessToken: string = verifyLogin.accessToken;
+
+  res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(verifyAccessToken) });
+  const meAfterSignup = await res.json();
+  if (meAfterSignup.emailVerifiedAt !== null) {
+    fail("a freshly signed-up user should not be verified yet", meAfterSignup);
+  }
+  ok("a freshly signed-up user starts unverified");
+
+  res = await fetch(`${BASE}/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: "verify_garbage-token-value" }),
+  });
+  if (res.status !== 401) fail("verify-email with a garbage token should be 401", await res.text());
+  ok("verify-email rejects an invalid token (401)");
+
+  res = await fetch(`${BASE}/auth/resend-verification`, {
+    method: "POST",
+    headers: authHeaders(verifyAccessToken),
+  });
+  const resendResult = await res.json();
+  if (res.status !== 200 || typeof resendResult.verifyToken !== "string") {
+    fail("resend-verification should return a dev-mode token when SMTP is unconfigured", resendResult);
+  }
+  ok("resend-verification returns a dev-mode token when SMTP is unconfigured");
+
+  res = await fetch(`${BASE}/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: resendResult.verifyToken }),
+  });
+  if (res.status !== 204) fail("verify-email with a valid token should be 204", await res.text());
+  ok("verify-email succeeds with a valid token (204)");
+
+  res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(verifyAccessToken) });
+  const meAfterVerify = await res.json();
+  if (typeof meAfterVerify.emailVerifiedAt !== "string") {
+    fail("emailVerifiedAt should be set after verification", meAfterVerify);
+  }
+  ok("emailVerifiedAt is set after verification");
+
+  res = await fetch(`${BASE}/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: resendResult.verifyToken }),
+  });
+  if (res.status !== 401) fail("reusing an already-used verify token should be 401", await res.text());
+  ok("an already-used verify token is rejected (401)");
+
+  res = await fetch(`${BASE}/auth/resend-verification`, {
+    method: "POST",
+    headers: authHeaders(verifyAccessToken),
+  });
+  if (res.status !== 409) {
+    fail("resend-verification for an already-verified account should be 409", await res.text());
+  }
+  ok("resend-verification is rejected once already verified (409)");
+
   // --- Phase 12: role-assignment hierarchy, invite approval workflow, auto-approve, account deletion ---
 
   async function signupLogin(name: string, email: string): Promise<string> {
@@ -1733,18 +1816,30 @@ async function main() {
     headers: authHeaders(ownerAccessToken),
   });
   const approvedInvite = await res.json();
-  if (res.status !== 200 || approvedInvite.approvalStatus !== "APPROVED") {
-    fail("approve invite", approvedInvite);
+  if (
+    res.status !== 200 ||
+    approvedInvite.approvalStatus !== "APPROVED" ||
+    typeof approvedInvite.token !== "string" ||
+    approvedInvite.token === approveFlowInvite.token
+  ) {
+    fail("approve invite should return a freshly-rotated token (the pre-approval one never worked)", approvedInvite);
   }
-  ok("owner approves a pending invite (approvalStatus -> APPROVED)");
+  ok("owner approves a pending invite (approvalStatus -> APPROVED, token rotated)");
+
+  res = await fetch(`${BASE}/invites/${approveFlowInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 404) fail("accepting with the stale pre-approval token should 404", await res.text());
+  ok("the original pre-approval invite token no longer works after approval");
 
   const approveFlowToken = await signupLogin("Approve Flow Invitee", approveFlowEmail);
-  res = await fetch(`${BASE}/invites/${approveFlowInvite.token}/accept`, {
+  res = await fetch(`${BASE}/invites/${approvedInvite.token}/accept`, {
     method: "POST",
     headers: authHeaders(approveFlowToken),
   });
-  if (res.status !== 200) fail("accepting an approved invite should succeed", await res.text());
-  ok("an approved invite can be accepted normally");
+  if (res.status !== 200) fail("accepting an approved invite with its fresh token should succeed", await res.text());
+  ok("an approved invite can be accepted with its freshly-issued token");
 
   // Audit metadata precision: org.update should now record before/after names.
   res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?action=org.update&limit=5`, {
@@ -2644,6 +2739,13 @@ async function main() {
   });
   if (res.status !== 403) fail("API token should not be able to delete the account", await res.text());
   ok("API token cannot delete the account (403, session auth required)");
+
+  res = await fetch(`${BASE}/auth/resend-verification`, {
+    method: "POST",
+    headers: authHeaders(auditRawToken),
+  });
+  if (res.status !== 403) fail("API token should not be able to resend a verification email", await res.text());
+  ok("API token cannot resend a verification email (403, session auth required)");
 
   // --- GET /auth/me stays reachable for a token (CLI login needs it) but its org list is scoped ---
 

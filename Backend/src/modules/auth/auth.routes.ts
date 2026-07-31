@@ -8,8 +8,10 @@ import {
   forgotPasswordRateLimiter,
   loginRateLimiter,
   refreshRateLimiter,
+  resendVerificationRateLimiter,
   resetPasswordRateLimiter,
   signupRateLimiter,
+  verifyEmailRateLimiter,
 } from "./auth.rateLimit";
 import {
   changePasswordSchema,
@@ -19,6 +21,7 @@ import {
   resetPasswordSchema,
   signupSchema,
   updateProfileSchema,
+  verifyEmailSchema,
 } from "./auth.validators";
 
 export const authRouter = Router();
@@ -79,6 +82,19 @@ authRouter.delete(
   authController.revokeSession
 );
 authRouter.get("/events", authController.events);
+authRouter.post(
+  "/verify-email",
+  verifyEmailRateLimiter,
+  validate({ body: verifyEmailSchema }),
+  authController.verifyEmail
+);
+authRouter.post(
+  "/resend-verification",
+  requireAuth,
+  requireSessionAuth,
+  resendVerificationRateLimiter,
+  authController.resendVerification
+);
 authRouter.get("/github", githubController.start);
 authRouter.get("/github/callback", githubController.callback);
 authRouter.get("/google", googleController.start);

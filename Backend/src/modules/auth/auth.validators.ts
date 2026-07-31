@@ -46,3 +46,8 @@ export const deleteAccountSchema = z.object({
   confirmEmail: z.string().email(),
 });
 export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1),
+});
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;

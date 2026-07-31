@@ -112,6 +112,7 @@ export interface PublicUser {
   authProvider: AuthProvider;
   avatarUrl: string | null;
   notificationPrefs: NotificationPrefs;
+  emailVerifiedAt: string | null;
 }
 
 export interface OrgSummary {
@@ -339,6 +340,17 @@ export const api = {
     request<void>("/auth/me", {
       method: "DELETE",
       body: JSON.stringify({ confirmEmail }),
+    }),
+
+  verifyEmail: (token: string) =>
+    request<void>("/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  resendVerificationEmail: () =>
+    request<{ sent: boolean; verifyToken: string | null }>("/auth/resend-verification", {
+      method: "POST",
     }),
 
   listOrgs: () => request<OrgSummary[]>("/orgs"),
@@ -608,7 +620,7 @@ export const api = {
     request<MemberSummary>(`/invites/${token}/accept`, { method: "POST" }),
 
   approveInvite: (orgId: string, inviteId: string) =>
-    request<InviteSummary>(`/orgs/${orgId}/invites/${inviteId}/approve`, { method: "POST" }),
+    request<InviteCreated>(`/orgs/${orgId}/invites/${inviteId}/approve`, { method: "POST" }),
 
   rejectInvite: (orgId: string, inviteId: string) =>
     request<InviteSummary>(`/orgs/${orgId}/invites/${inviteId}/reject`, { method: "POST" }),

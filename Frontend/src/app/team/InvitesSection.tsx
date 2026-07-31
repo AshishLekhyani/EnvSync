@@ -267,6 +267,7 @@ export function InvitesSection() {
   const [projectId, setProjectId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [justCreated, setJustCreated] = useState<InviteCreated | null>(null);
+  const [justApproved, setJustApproved] = useState<InviteCreated | null>(null);
   const [directAddSuccess, setDirectAddSuccess] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
 
@@ -350,11 +351,14 @@ export function InvitesSection() {
     setDecidingId(inviteId);
     setError(null);
     try {
-      const updated =
-        decision === "approve"
-          ? await api.approveInvite(org.id, inviteId)
-          : await api.rejectInvite(org.id, inviteId);
-      setInvites((prev) => prev.map((i) => (i.id === inviteId ? updated : i)));
+      if (decision === "approve") {
+        const updated = await api.approveInvite(org.id, inviteId);
+        setInvites((prev) => prev.map((i) => (i.id === inviteId ? updated : i)));
+        setJustApproved(updated);
+      } else {
+        const updated = await api.rejectInvite(org.id, inviteId);
+        setInvites((prev) => prev.map((i) => (i.id === inviteId ? updated : i)));
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to update invite");
     } finally {
@@ -603,6 +607,36 @@ export function InvitesSection() {
             </button>
           </div>
         </form>
+      )}
+
+      {justApproved && (
+        <div className="github-card flex flex-col gap-md rounded-lg p-md">
+          <h2 className="font-h3 text-h3 text-on-surface">Invite Approved</h2>
+          <p className="font-body-sm text-body-sm text-secondary">
+            {justApproved.email} was emailed a link if email is configured. Here it is too, in
+            case you want to share it directly — it won&apos;t be shown again.
+          </p>
+          <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
+            <span className="truncate pr-md font-code-md text-code-md text-on-surface">
+              {typeof window !== "undefined" ? window.location.origin : ""}/invite/
+              {justApproved.token}
+            </span>
+            <button
+              type="button"
+              onClick={() => copyText(`${window.location.origin}/invite/${justApproved.token}`)}
+              className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
+            >
+              <Icon name="content_copy" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setJustApproved(null)}
+            className="self-start font-label-md text-label-md text-xs text-primary hover:underline"
+          >
+            Done
+          </button>
+        </div>
       )}
 
       {canManageApprovals && <PendingAccessRequests orgId={org.id} />}

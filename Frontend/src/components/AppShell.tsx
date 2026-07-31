@@ -10,6 +10,7 @@ import { AuditSidebar } from "./sidebars/AuditSidebar";
 import { IntegrationsSidebar } from "./sidebars/IntegrationsSidebar";
 import { TopNav } from "./TopNav";
 import { Icon } from "./Icon";
+import { VerifyEmailBanner } from "./VerifyEmailBanner";
 import { useAuth } from "@/lib/auth-context";
 
 function MobileNavItem({
@@ -139,6 +140,7 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-[#F6F8FA] dark:bg-background font-body-md text-body-md text-on-surface antialiased">
+      <VerifyEmailBanner />
       <TopNav
         searchPlaceholder={searchPlaceholder}
         showSearch={showSearch}

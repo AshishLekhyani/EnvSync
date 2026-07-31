@@ -7,6 +7,9 @@ import { assertCanAssignRole, Actor } from "../orgs/membership.service";
 import { writeAuditLog } from "../audit/audit.service";
 import { shouldNotify } from "../notifications/notification.service";
 import { notifyUserNotificationCreated } from "../auth/sse";
+import { env } from "../../config/env";
+import { isEmailConfigured, sendEmail } from "../email/email.service";
+import { inviteEmail } from "../email/templates";
 import { CreateInviteInput, SetBlanketAutoApproveInput } from "./invite.validators";
 
 export const INVITE_PREFIX = "invite_";
@@ -38,6 +41,18 @@ function toSummary(invite: InviteRow) {
     expiresAt: invite.expiresAt,
     acceptedAt: invite.acceptedAt,
   };
+}
+
+async function sendInviteEmail(orgId: string, email: string, role: OrgRole, rawToken: string) {
+  if (!isEmailConfigured()) return;
+
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } });
+  if (!org) return;
+
+  const link = `${env.CORS_ORIGIN}/invite/${rawToken}`;
+  sendEmail({ to: email, ...inviteEmail(org.name, role, link) }).catch((err) => {
+    console.error("Failed to send invite email", err);
+  });
 }
 
 async function notifyApprovers(
@@ -176,6 +191,8 @@ export async function createInvite(
       select: { id: true, name: true },
     });
     await notifyApprovers(orgId, created, inviter);
+  } else {
+    await sendInviteEmail(orgId, created.email, created.role, rawToken);
   }
 
   return { ...toSummary(created), token: rawToken };
@@ -356,15 +373,24 @@ export async function approveInvite(
 ) {
   const invite = await getPendingInvite(orgId, inviteId);
 
+  // The original creation-time token was never usable (acceptInvite blocks on
+  // PENDING) and its raw value was never persisted, only its hash — so a fresh
+  // token is minted here rather than trying to "unlock" the old one.
+  const rawToken = generateRawToken();
+  const tokenHash = sha256Hex(rawToken);
+
   const updated = await prisma.orgInvite.update({
     where: { id: inviteId },
     data: {
       approvalStatus: "APPROVED",
       approvedById: actor.id,
       approvedAt: new Date(),
+      tokenHash,
       expiresAt: new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000),
     },
   });
+
+  await sendInviteEmail(orgId, updated.email, updated.role, rawToken);
 
   await writeAuditLog(prisma, {
     orgId,
@@ -376,7 +402,7 @@ export async function approveInvite(
     ipAddress,
   });
 
-  return toSummary(updated);
+  return { ...toSummary(updated), token: rawToken };
 }
 
 export async function rejectInvite(

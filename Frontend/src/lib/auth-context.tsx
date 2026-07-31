@@ -64,8 +64,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (meQuery.data) {
-      const { id, email, name, authProvider, avatarUrl, notificationPrefs } = meQuery.data;
-      setUser({ id, email, name, authProvider, avatarUrl, notificationPrefs });
+      const { id, email, name, authProvider, avatarUrl, notificationPrefs, emailVerifiedAt } = meQuery.data;
+      setUser({ id, email, name, authProvider, avatarUrl, notificationPrefs, emailVerifiedAt });
     }
   }, [meQuery.data]);
 
@@ -97,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authProvider: me.authProvider,
       avatarUrl: me.avatarUrl,
       notificationPrefs: me.notificationPrefs,
+      emailVerifiedAt: me.emailVerifiedAt,
     });
     queryClient.setQueryData<MeResponse>(queryKeys.me(), me);
   }, [queryClient]);
