@@ -17,9 +17,7 @@ export function OrgSwitcher() {
   const ref = useRef<HTMLDivElement>(null);
 
   useOutsideClick(ref, () => {
-    // The create-org modal is portaled to document.body, outside this
-    // wrapper's DOM subtree — while it's open, its own backdrop/Escape
-    // handling owns closing, not this outside-click listener.
+    // The create-org modal is portaled outside this subtree; its own backdrop/Escape owns closing.
     if (creating) return;
     setOpen(false);
   });

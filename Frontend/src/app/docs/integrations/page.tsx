@@ -6,21 +6,25 @@ export const metadata = { title: "Integrations — EnvSync Docs" };
 const PLATFORMS = [
   {
     name: "GitHub Actions",
+    href: "/integrations/github-actions",
     icon: "hub",
     desc: "Pull secrets as a workflow step before build or deploy, authenticated with a service token stored as a repo secret.",
   },
   {
     name: "Docker",
+    href: "/integrations/docker",
     icon: "deployed_code",
     desc: "Use the CLI as your container entrypoint (envsync run) so secrets are injected at container start, never baked into the image.",
   },
   {
     name: "Vercel",
+    href: "/integrations/vercel",
     icon: "bolt",
     desc: "Wrap your build command in envsync run so EnvSync stays the single source of truth instead of duplicating secrets into Vercel's own store.",
   },
   {
     name: "AWS Secrets Manager",
+    href: "/integrations/aws",
     icon: "lock",
     desc: "Sync a pulled .env into AWS Secrets Manager as a deploy-pipeline step, for teams standardizing on AWS at runtime.",
   },
@@ -41,10 +45,10 @@ export default function IntegrationsDocsPage() {
 
       <div className="mb-xl flex flex-col divide-y divide-outline-variant rounded-xl border border-outline-variant bg-white dark:bg-surface-container-lowest">
         {PLATFORMS.map((p) => (
-          <div key={p.name} className="p-md">
-            <p className="mb-xs font-body-md text-body-md font-bold text-on-surface">{p.name}</p>
+          <Link key={p.name} href={p.href} className="block p-md transition-colors hover:bg-surface-container">
+            <p className="mb-xs font-body-md text-body-md font-bold text-primary hover:underline">{p.name}</p>
             <p className="font-body-sm text-body-sm text-on-surface-variant">{p.desc}</p>
-          </div>
+          </Link>
         ))}
       </div>
 

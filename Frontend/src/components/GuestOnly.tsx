@@ -33,8 +33,6 @@ function GuestOnlyInner({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Renders children only for logged-out visitors; redirects an already-authenticated
- * user to /invite/:token (if an invite is in progress) or /projects otherwise. */
 export function GuestOnly({ children }: { children: React.ReactNode }) {
   return (
     <Suspense fallback={<Spinner />}>

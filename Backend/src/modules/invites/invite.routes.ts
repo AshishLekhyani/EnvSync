@@ -9,10 +9,6 @@ import { createInviteSchema, setBlanketAutoApproveSchema } from "./invite.valida
 export const orgInvitesRouter = Router({ mergeParams: true });
 orgInvitesRouter.use(requireAuth);
 
-// VIEWER-floor here on purpose: any member can attempt to create an invite,
-// but assertCanAssignRole (inside the service) is what actually enforces the
-// role hierarchy — a Viewer has nothing assignable and gets 403 there, a
-// Developer is restricted to VIEWER-only and routed into the approval flow.
 orgInvitesRouter.post(
   "/",
   requireOrgRole("VIEWER", orgIdFromParam()),

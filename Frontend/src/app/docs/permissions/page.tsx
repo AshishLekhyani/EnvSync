@@ -57,7 +57,7 @@ export default function PermissionsDocsPage() {
         </p>
       </section>
 
-      <section>
+      <section className="mb-lg">
         <h2 className="mb-sm font-h3 text-h3 text-on-surface">Service tokens inherit identity</h2>
         <p className="font-body-md text-body-md text-secondary">
           A CLI service token isn&apos;t independently scoped — it can only ever do what its
@@ -65,6 +65,39 @@ export default function PermissionsDocsPage() {
           hard-locked to the single organization it was issued for. Token creation itself is
           gated to Admins and above, as a governance control on who can mint long-lived
           credentials, not because a token could otherwise exceed its creator&apos;s access.
+        </p>
+      </section>
+
+      <section className="mb-lg">
+        <h2 className="mb-sm font-h3 text-h3 text-on-surface">Project-level access</h2>
+        <p className="mb-sm font-body-md text-body-md text-secondary">
+          The role×environment-tier matrix above governs depth of access inside a project you
+          can already see. A separate, independent gate controls which projects you can see at
+          all: the Owner always sees every project; everyone else needs an explicit grant on a
+          project (from Team → Members) or the org-wide &quot;view all projects&quot; override
+          (Settings → Organization, Owner-only).
+        </p>
+        <p className="font-body-md text-body-md text-secondary">
+          Admins and Developers without access to a given project can still browse the full
+          project list and request access to one — an Owner or an Admin who already has access
+          to that project can approve or reject the request. Viewers never browse: without an
+          explicit grant, a project simply doesn&apos;t appear for them.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="mb-sm font-h3 text-h3 text-on-surface">Inviting and changing roles</h2>
+        <p className="mb-sm font-body-md text-body-md text-secondary">
+          Assigning a role — by invite or by changing an existing member&apos;s role — is capped
+          strictly below your own: an Admin can reach Developer or Viewer but never another Admin
+          or Owner, a Developer can only ever reach Viewer, and a Viewer can&apos;t assign any
+          role at all. Only the Owner can assign any role, including Owner (via a direct, immediate
+          ownership transfer on the Team page).
+        </p>
+        <p className="font-body-md text-body-md text-secondary">
+          An invite created by a Developer needs Admin approval before it&apos;s usable, unless
+          an Admin has set up an auto-approve rule for that Developer or for the org as a whole
+          (Team → Invites). Invites created by an Admin or Owner are usable immediately.
         </p>
       </section>
     </DocsShell>

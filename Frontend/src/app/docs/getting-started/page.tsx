@@ -106,6 +106,20 @@ export default function GettingStartedDocsPage() {
             for every command.
           </p>
         </section>
+
+        <section>
+          <h2 className="mb-sm font-h3 text-h3 text-on-surface">8. Invite your team</h2>
+          <p className="font-body-md text-body-md text-secondary">
+            From Team → Invites, generate a shareable invite link scoped to a role and,
+            optionally, a specific project. Invites created by a Developer need Admin approval
+            before they&apos;re usable — see{" "}
+            <Link href="/docs/permissions" className="text-primary hover:underline">
+              Roles &amp; Permissions
+            </Link>{" "}
+            for the full hierarchy. Anyone can leave an organization or a project on their own
+            from Settings, no admin required.
+          </p>
+        </section>
       </div>
     </DocsShell>
   );

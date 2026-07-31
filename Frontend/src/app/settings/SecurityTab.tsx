@@ -80,10 +80,6 @@ export function SecurityTab() {
     try {
       await api.deleteAccount(confirmEmail);
       await logout();
-      // AppShell's own auth guard also redirects to /login the instant
-      // `user` clears, and wins that race against any other destination
-      // (the existing TopNav logout button already follows this same
-      // convention) — pushing here too just avoids a visible flash/retry.
       router.push("/login");
     } catch (err) {
       setDeleteAccountError(

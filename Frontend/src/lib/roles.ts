@@ -9,8 +9,7 @@ const ROLE_WEIGHT: Record<OrgRole, number> = {
 
 const ALL_ROLES: OrgRole[] = ["OWNER", "ADMIN", "DEVELOPER", "VIEWER"];
 
-// Mirrors the backend's assertCanAssignRole: an Owner can assign any role;
-// everyone else can only assign a role strictly below their own.
+// Mirrors the backend's assertCanAssignRole — keep in sync.
 export function assignableRoles(actorRole: OrgRole): OrgRole[] {
   if (actorRole === "OWNER") {
     return ALL_ROLES.filter((r) => r !== "OWNER");

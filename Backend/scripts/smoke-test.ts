@@ -2132,6 +2132,144 @@ async function main() {
   }
   ok("audit log startDate filter correctly bounds results (future date returns nothing)");
 
+  // --- Profile photo ---
+
+  const validAvatarDataUrl =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ avatarUrl: validAvatarDataUrl }),
+  });
+  const avatarSetBody = await res.json();
+  if (res.status !== 200 || avatarSetBody.avatarUrl !== validAvatarDataUrl) {
+    fail("set a valid profile photo", avatarSetBody);
+  }
+  ok("profile photo uploads and round-trips on the PATCH response");
+
+  res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(ownerAccessToken) });
+  const meAfterAvatar = await res.json();
+  if (meAfterAvatar.avatarUrl !== validAvatarDataUrl) fail("GET /auth/me reflects the uploaded photo", meAfterAvatar);
+  ok("GET /auth/me reflects the uploaded photo");
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ avatarUrl: null }),
+  });
+  const avatarClearedBody = await res.json();
+  if (res.status !== 200 || avatarClearedBody.avatarUrl !== null) fail("remove profile photo", avatarClearedBody);
+  ok("profile photo can be removed");
+
+  const spoofedAvatar = `data:image/png;base64,${Buffer.from("not a real image").toString("base64")}`;
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ avatarUrl: spoofedAvatar }),
+  });
+  if (res.status !== 400) fail("a data URL with mismatched magic bytes should be rejected", await res.text());
+  ok("profile photo with mismatched magic bytes is rejected (400)");
+
+  const oversizedAvatar = `data:image/png;base64,${"A".repeat(70000)}`;
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ avatarUrl: oversizedAvatar }),
+  });
+  if (res.status !== 400) fail("an oversized profile photo should be rejected", await res.text());
+  ok("oversized profile photo is rejected (400)");
+
+  // --- Notification preferences ---
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ notificationPrefs: { approvalRequests: false, accessChanges: true } }),
+  });
+  const prefsOffBody = await res.json();
+  if (res.status !== 200 || prefsOffBody.notificationPrefs.approvalRequests !== false) {
+    fail("disable approvalRequests notification preference", prefsOffBody);
+  }
+  ok("owner disables the approvalRequests notification preference");
+
+  const prefsDevEmail = `prefsdev-${rand}@example.com`;
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Prefs Dev", email: prefsDevEmail, password }),
+  });
+  if (res.status !== 201) fail("signup prefs-dev", await res.text());
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: prefsDevEmail, password }),
+  });
+  const prefsDevLogin = await res.json();
+  if (res.status !== 200) fail("login prefs-dev", prefsDevLogin);
+  const prefsDevToken: string = prefsDevLogin.accessToken;
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: prefsDevEmail, role: "DEVELOPER" }),
+  });
+  if (res.status !== 201) fail("add prefs-dev as DEVELOPER", await res.text());
+  ok("added prefs-dev member as DEVELOPER");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects/${projectId}/access-requests`, {
+    method: "POST",
+    headers: authHeaders(prefsDevToken),
+  });
+  const prefsOffRequest = await res.json();
+  if (res.status !== 201) fail("prefs-dev requests project access (prefs-off case)", prefsOffRequest);
+  ok("prefs-dev requests access to a project it doesn't have");
+
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(ownerAccessToken) });
+  const notifsAfterOff = await res.json();
+  if (
+    res.status !== 200 ||
+    (notifsAfterOff as { targetId: string | null }[]).some((n) => n.targetId === prefsOffRequest.id)
+  ) {
+    fail(
+      "owner should NOT receive a project_access.requested notification while approvalRequests prefs are off",
+      notifsAfterOff
+    );
+  }
+  ok("notification preference suppresses project-access-request notifications when disabled");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/project-access-requests/${prefsOffRequest.id}/reject`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("reject the prefs-off access request", await res.text());
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "PATCH",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ notificationPrefs: { approvalRequests: true, accessChanges: true } }),
+  });
+  if (res.status !== 200) fail("re-enable approvalRequests notification preference", await res.text());
+  ok("owner re-enables the approvalRequests notification preference");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects/${projectId}/access-requests`, {
+    method: "POST",
+    headers: authHeaders(prefsDevToken),
+  });
+  const prefsOnRequest = await res.json();
+  if (res.status !== 201) fail("prefs-dev requests project access again (prefs-on case)", prefsOnRequest);
+
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(ownerAccessToken) });
+  const notifsAfterOn = await res.json();
+  if (
+    res.status !== 200 ||
+    !(notifsAfterOn as { targetId: string | null }[]).some((n) => n.targetId === prefsOnRequest.id)
+  ) {
+    fail("owner should receive a project_access.requested notification once prefs are back on", notifsAfterOn);
+  }
+  ok("notification preference re-enabled correctly resumes project-access-request notifications");
+
   const hammerEmail = `hammer-${rand}@example.com`;
   res = await fetch(`${BASE}/auth/signup`, {
     method: "POST",

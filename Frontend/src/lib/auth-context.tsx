@@ -64,8 +64,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (meQuery.data) {
-      const { id, email, name, authProvider } = meQuery.data;
-      setUser({ id, email, name, authProvider });
+      const { id, email, name, authProvider, avatarUrl, notificationPrefs } = meQuery.data;
+      setUser({ id, email, name, authProvider, avatarUrl, notificationPrefs });
     }
   }, [meQuery.data]);
 
@@ -90,7 +90,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadMe = useCallback(async () => {
     const me = await api.me();
-    setUser({ id: me.id, email: me.email, name: me.name, authProvider: me.authProvider });
+    setUser({
+      id: me.id,
+      email: me.email,
+      name: me.name,
+      authProvider: me.authProvider,
+      avatarUrl: me.avatarUrl,
+      notificationPrefs: me.notificationPrefs,
+    });
     queryClient.setQueryData<MeResponse>(queryKeys.me(), me);
   }, [queryClient]);
 
@@ -156,21 +163,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await queryClient.invalidateQueries({ queryKey: queryKeys.me() });
   }, [queryClient]);
 
-  // Lets the plain api.ts module force a logout when a silent token refresh
-  // fails (expired access token or a revoked session) mid-request.
   useEffect(() => {
     setSessionExpiredHandler(forceLogout);
     return () => setSessionExpiredHandler(null);
   }, [forceLogout]);
 
-  // Real-time push: when this account's session is revoked from another
-  // tab/device (or by an admin), the backend notifies over SSE. We don't know
-  // whether it was THIS tab's session, so we just verify via a silent refresh —
-  // harmless if it was a different session, forces logout if it was this one.
-  //
-  // The same connection also carries "access-changed" events (project access
-  // granted/revoked, role changed, view-all toggled, removed from an org) so
-  // an already-open tab reflects it immediately instead of needing a reload.
   useEffect(() => {
     if (!user) return;
 

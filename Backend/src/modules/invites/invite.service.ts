@@ -5,6 +5,7 @@ import { sha256Hex } from "../../common/hash";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
 import { assertCanAssignRole, Actor } from "../orgs/membership.service";
 import { writeAuditLog } from "../audit/audit.service";
+import { shouldNotify } from "../notifications/notification.service";
 import { CreateInviteInput, SetBlanketAutoApproveInput } from "./invite.validators";
 
 export const INVITE_PREFIX = "invite_";
@@ -68,6 +69,12 @@ async function notifyApprovers(
     recipientIds = admins.map((a) => a.userId);
   }
 
+  if (recipientIds.length === 0) return;
+
+  const notifiable = await Promise.all(
+    recipientIds.map(async (id) => ((await shouldNotify(id, "approvalRequests")) ? id : null))
+  );
+  recipientIds = notifiable.filter((id): id is string => id !== null);
   if (recipientIds.length === 0) return;
 
   await prisma.notification.createMany({

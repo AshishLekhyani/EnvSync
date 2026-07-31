@@ -22,11 +22,6 @@ export const loginRateLimiter = rateLimit({
 
 export const signupRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  // Project-scoped invites (Phase 11), plus self-service org/project leave,
-  // ownership transfer, and project access requests (Phase 13) all make
-  // "a whole team signing up and reorganizing from the same office IP within
-  // an hour" a realistic legitimate scenario, not just abuse — bumped up
-  // from 20 to give that real room while still bounding bots.
   max: 40,
   standardHeaders: true,
   legacyHeaders: false,
@@ -52,9 +47,6 @@ export const forgotPasswordRateLimiter = rateLimit({
   handler: rateLimitHandler,
 });
 
-// Separate from forgotPasswordRateLimiter: submitting a reset token means guessing a 256-bit
-// value, which a generous limit doesn't meaningfully aid — unlike forgot-password's account
-// enumeration/spam risk, which is why that one stays tight.
 export const resetPasswordRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,

@@ -325,7 +325,7 @@ export function MembersSection({ search }: { search: string }) {
                     }
                   >
                     <div className="flex items-center gap-md">
-                      <Avatar name={m.user.name} seed={m.user.email} className="h-10 w-10" />
+                      <Avatar name={m.user.name} seed={m.user.email} avatarUrl={m.user.avatarUrl} className="h-10 w-10" />
                       <div>
                         <div className="flex items-center gap-sm">
                           <span className="font-body-md text-body-md font-bold text-on-surface">

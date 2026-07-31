@@ -255,7 +255,7 @@ export default function LandingPage() {
                 iconWrap: "bg-on-surface-variant/10",
                 iconColor: "text-on-surface-variant",
                 title: "Native Integrations",
-                body: "One-click sync with GitHub Actions, Vercel, AWS Secrets Manager, and Docker containers.",
+                body: "Ready-to-paste setup snippets for GitHub Actions, Vercel, AWS Secrets Manager, and Docker containers, built from your real project and environment IDs.",
                 cta: "Explore integrations",
                 href: "/integrations",
               },

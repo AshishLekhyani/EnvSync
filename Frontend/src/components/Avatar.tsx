@@ -28,12 +28,25 @@ export function initials(name: string) {
 export function Avatar({
   name,
   seed,
+  avatarUrl,
   className = "h-8 w-8 text-sm",
 }: {
   name: string;
   seed?: string;
+  avatarUrl?: string | null;
   className?: string;
 }) {
+  if (avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={avatarUrl}
+        alt=""
+        className={`flex-shrink-0 rounded-full border border-outline-variant object-cover ${className}`}
+      />
+    );
+  }
+
   const colorClass = COLORS[hash(seed ?? name) % COLORS.length];
 
   return (

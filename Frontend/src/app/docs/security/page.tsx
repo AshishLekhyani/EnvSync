@@ -95,6 +95,16 @@ export default function SecurityDocsPage() {
         </section>
 
         <section>
+          <h2 className="mb-sm font-h3 text-h3 text-on-surface">Profile photos</h2>
+          <p className="font-body-md text-body-md text-secondary">
+            A profile photo is validated server-side before it&apos;s stored — its actual bytes
+            are checked against the image format it claims to be, not just trusted from the
+            upload&apos;s declared type, and it&apos;s size-capped well under the API&apos;s
+            request-body limit.
+          </p>
+        </section>
+
+        <section>
           <h2 className="mb-sm font-h3 text-h3 text-on-surface">Real-time session control</h2>
           <p className="font-body-md text-body-md text-secondary">
             Revoking a session — from Settings, or automatically on a password change — takes

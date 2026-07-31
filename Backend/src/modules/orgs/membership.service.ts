@@ -5,6 +5,7 @@ import { ROLE_WEIGHT } from "../rbac/roles";
 import { hasProjectAccess } from "../rbac/projectAccess.service";
 import { writeAuditLog } from "../audit/audit.service";
 import { notifyUserAccessChanged } from "../auth/sse";
+import { shouldNotify } from "../notifications/notification.service";
 import { AddMemberInput, UpdateMemberRoleInput } from "./membership.validators";
 
 export interface Actor {
@@ -12,10 +13,6 @@ export interface Actor {
   role: OrgRole;
 }
 
-// An Owner can assign any role. Everyone else can only assign a role
-// strictly below their own — an Admin can invite/promote Developers and
-// Viewers but never another Admin or Owner, a Developer can only ever reach
-// Viewer, and a Viewer (nothing is below it) can never assign a role at all.
 export function assertCanAssignRole(actorRole: OrgRole, targetRole: OrgRole) {
   if (actorRole === "OWNER") return;
   if (ROLE_WEIGHT[targetRole] >= ROLE_WEIGHT[actorRole]) {
@@ -41,7 +38,7 @@ export async function listMembers(orgId: string, accessibleProjectIds: "all" | s
             },
           ],
         },
-    include: { user: { select: { id: true, name: true, email: true } } },
+    include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
   });
 
   if (!canSeeAll) {
@@ -452,6 +449,7 @@ export async function transferOwnership(
   }
 
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+  const notifyNewOwner = await shouldNotify(targetMembership.userId, "accessChanges");
 
   await prisma.$transaction(async (tx) => {
     await tx.orgMembership.update({
@@ -476,17 +474,19 @@ export async function transferOwnership(
       ipAddress,
     });
 
-    await tx.notification.create({
-      data: {
-        orgId,
-        recipientId: targetMembership.userId,
-        type: "org.ownership_transferred",
-        message: `You are now the Owner of ${org.name}`,
-        targetType: "Organization",
-        targetId: orgId,
-        metadata: { orgId },
-      },
-    });
+    if (notifyNewOwner) {
+      await tx.notification.create({
+        data: {
+          orgId,
+          recipientId: targetMembership.userId,
+          type: "org.ownership_transferred",
+          message: `You are now the Owner of ${org.name}`,
+          targetType: "Organization",
+          targetId: orgId,
+          metadata: { orgId },
+        },
+      });
+    }
   });
 
   notifyUserAccessChanged(actorMembership.userId, orgId);

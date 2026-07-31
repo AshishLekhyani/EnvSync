@@ -6,6 +6,52 @@ export const metadata = { title: "Changelog — EnvSync" };
 
 const ENTRIES = [
   {
+    version: "v0.14",
+    date: "July 2026",
+    title: "Integration guides, profile photos, security pass",
+    items: [
+      "Integrations restructured into a real setup guide per platform (GitHub Actions, Docker, Vercel, AWS), replacing a sidebar that just duplicated the page next to it.",
+      "Added profile photos and notification preferences to Settings.",
+      "Docs refreshed to cover project-level access control and the invite approval hierarchy.",
+      "CLI can now authenticate from an ENVSYNC_TOKEN environment variable, for CI use without a persistent login step.",
+      "Full dependency and endpoint security review across all three workspaces.",
+    ],
+  },
+  {
+    version: "v0.13",
+    date: "July 2026",
+    title: "Self-service leave, ownership transfer, project discovery",
+    items: [
+      "Any member can now leave an organization or project on their own, instead of requiring an Admin to remove them.",
+      "Owners can transfer ownership directly, replacing the old disabled \"Request Role Ownership Change\" stub.",
+      "Admins and Developers can browse the full project list and request access to projects they don't have; Viewer's access stays strictly grant-only.",
+      "Audit Logs gained actor and date-range filters.",
+      "Landing page's environment tabs, reveal, and copy became genuinely interactive; corrected inaccurate \"zero-knowledge encryption\" and \"SOC2/GDPR\" claims.",
+      "CLI verified end-to-end against a live backend, including that a token without project access is rejected the same way the browser would be.",
+    ],
+  },
+  {
+    version: "v0.12",
+    date: "July 2026",
+    title: "Invite approval hierarchy, account deletion, live access push",
+    items: [
+      "Role assignment — for invites and role changes alike — is now capped strictly below your own role; only the Owner can assign any role.",
+      "Developer-created invites require Admin approval, with optional auto-approve rules.",
+      "Added account deletion, blocked while you're the sole owner of an organization with other members.",
+      "Project access changes now push live to an already-open session instead of waiting for a reload.",
+      "Audit log entries carry real detail (names, before/after values) instead of a generic fallback label.",
+    ],
+  },
+  {
+    version: "v0.11",
+    date: "July 2026",
+    title: "Project-level access control",
+    items: [
+      "Access to a project is now explicitly granted per member, not implied by org membership.",
+      "Docs and Support links added to every section sidebar; sidebar rows expand on click, navigate on double-click.",
+    ],
+  },
+  {
     version: "v0.10",
     date: "July 2026",
     title: "Contextual sidebar, real Docs, and password reset",

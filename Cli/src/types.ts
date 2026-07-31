@@ -24,9 +24,6 @@ export interface ProjectSummary {
   name: string;
   slug: string;
   description: string | null;
-  // Absent (older API) means access; false means visible-but-not-yet-granted
-  // (Admin/Developer can browse the full org project list and request
-  // access, but can't pull/push/run against one until it's granted).
   hasAccess?: boolean;
 }
 

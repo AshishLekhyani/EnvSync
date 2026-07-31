@@ -14,7 +14,14 @@ export const loginSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>;
 
 export const updateProfileSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(100).optional(),
+  avatarUrl: z.string().max(65000).nullable().optional(),
+  notificationPrefs: z
+    .object({
+      approvalRequests: z.boolean(),
+      accessChanges: z.boolean(),
+    })
+    .optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 

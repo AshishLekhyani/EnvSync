@@ -18,6 +18,8 @@ model User {
   email           String       @unique
   passwordHash    String?
   name            String
+  avatarUrl       String?      @db.Text
+  notificationPrefs Json?
   authProvider    AuthProvider @default(PASSWORD)
   providerId      String?
   emailVerifiedAt DateTime?

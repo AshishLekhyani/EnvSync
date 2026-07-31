@@ -5,13 +5,6 @@ export function canViewAllProjects(role: OrgRole, membership: OrgMembership): bo
   return role === "OWNER" || membership.canViewAllProjects;
 }
 
-// Admin/Developer members without explicit access to a project can still see
-// that it exists (browse the full org project list) and request access to
-// it — distinct from actually having access. Viewer's default stays strict:
-// zero visibility beyond explicit grants, matching the original Phase 11
-// design exactly. This never loosens real access (requireProjectAccess,
-// requireEnvironmentAccess, member/audit-log filtering all keep using
-// getAccessibleProjectIds/hasProjectAccess above, untouched).
 export function canBrowseAllProjects(role: OrgRole): boolean {
   return role === "ADMIN" || role === "DEVELOPER";
 }

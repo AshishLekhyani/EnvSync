@@ -4,6 +4,7 @@ import { ConflictError, ForbiddenError, NotFoundError } from "../../common/error
 import { canBrowseAllProjects, hasProjectAccess } from "../rbac/projectAccess.service";
 import { writeAuditLog } from "../audit/audit.service";
 import { notifyUserAccessChanged } from "../auth/sse";
+import { shouldNotify } from "../notifications/notification.service";
 import { Actor } from "../orgs/membership.service";
 
 async function resolveApprovers(orgId: string, projectId: string): Promise<string[]> {
@@ -62,7 +63,12 @@ export async function createAccessRequest(
     ipAddress,
   });
 
-  const approverIds = await resolveApprovers(orgId, projectId);
+  let approverIds = await resolveApprovers(orgId, projectId);
+  const notifiable = await Promise.all(
+    approverIds.map(async (id) => ((await shouldNotify(id, "approvalRequests")) ? id : null))
+  );
+  approverIds = notifiable.filter((id): id is string => id !== null);
+
   if (approverIds.length > 0) {
     const requester = await prisma.user.findUniqueOrThrow({
       where: { id: actor.id },

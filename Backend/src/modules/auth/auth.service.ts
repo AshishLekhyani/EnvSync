@@ -25,6 +25,9 @@ import {
 } from "./auth.validators";
 import { notifyUserSessionsRevoked } from "./sse";
 import { writeAuditLog } from "../audit/audit.service";
+import { isValidAvatarDataUrl } from "../../common/imageValidation";
+
+const DEFAULT_NOTIFICATION_PREFS = { approvalRequests: true, accessChanges: true };
 
 const RESET_TOKEN_PREFIX = "reset_";
 const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000;
@@ -39,12 +42,16 @@ function toPublicUser(user: {
   email: string;
   name: string;
   authProvider: string;
+  avatarUrl?: string | null;
+  notificationPrefs?: unknown;
 }) {
   return {
     id: user.id,
     email: user.email,
     name: user.name,
     authProvider: user.authProvider,
+    avatarUrl: user.avatarUrl ?? null,
+    notificationPrefs: (user.notificationPrefs as typeof DEFAULT_NOTIFICATION_PREFS | null) ?? DEFAULT_NOTIFICATION_PREFS,
   };
 }
 
@@ -173,9 +180,17 @@ export async function revokeSession(userId: string, sessionId: string) {
 }
 
 export async function updateProfile(userId: string, input: UpdateProfileInput) {
+  if (input.avatarUrl != null && !isValidAvatarDataUrl(input.avatarUrl)) {
+    throw new BadRequestError("Invalid image");
+  }
+
   const user = await prisma.user.update({
     where: { id: userId },
-    data: { name: input.name },
+    data: {
+      name: input.name,
+      avatarUrl: input.avatarUrl,
+      notificationPrefs: input.notificationPrefs,
+    },
   });
 
   return toPublicUser(user);

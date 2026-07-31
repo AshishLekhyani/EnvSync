@@ -1,6 +1,18 @@
 import { prisma } from "../../db/prisma";
 import { NotFoundError } from "../../common/errors/AppError";
 
+export type NotificationCategory = "approvalRequests" | "accessChanges";
+
+export async function shouldNotify(userId: string, category: NotificationCategory): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { notificationPrefs: true },
+  });
+
+  const prefs = user?.notificationPrefs as Record<string, boolean> | null;
+  return prefs?.[category] ?? true;
+}
+
 export function listNotifications(userId: string) {
   return prisma.notification.findMany({
     where: { recipientId: userId },

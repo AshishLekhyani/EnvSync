@@ -8,8 +8,6 @@ export function setAccessToken(token: string | null) {
 
 let sessionExpiredHandler: (() => void) | null = null;
 
-// Called once by AuthProvider so this plain module can force a logout when
-// a silent token refresh fails (expired or revoked session) without importing React here.
 export function setSessionExpiredHandler(handler: (() => void) | null) {
   sessionExpiredHandler = handler;
 }
@@ -25,9 +23,7 @@ export class ApiError extends Error {
   }
 }
 
-// Paths where a 401 means "these credentials/token are wrong," not "the access
-// token expired" — retrying after a refresh would never help and /auth/refresh
-// itself must never trigger another refresh (infinite recursion).
+// /auth/refresh must never trigger another refresh attempt (infinite recursion).
 const NO_REFRESH_RETRY_PATHS = new Set(["/auth/refresh", "/auth/login", "/auth/signup"]);
 
 let refreshInFlight: Promise<boolean> | null = null;
@@ -54,8 +50,6 @@ async function refreshAccessToken(): Promise<boolean> {
   return refreshInFlight;
 }
 
-// Also used by the SSE listener in auth-context to proactively verify a session
-// is still valid the moment another tab/device revokes it.
 export async function trySilentRefresh(): Promise<boolean> {
   return refreshAccessToken();
 }
@@ -106,11 +100,18 @@ export type EnvironmentType = "DEVELOPMENT" | "TESTING" | "STAGING" | "PRODUCTIO
 
 export type AuthProvider = "PASSWORD" | "GITHUB" | "GOOGLE";
 
+export interface NotificationPrefs {
+  approvalRequests: boolean;
+  accessChanges: boolean;
+}
+
 export interface PublicUser {
   id: string;
   email: string;
   name: string;
   authProvider: AuthProvider;
+  avatarUrl: string | null;
+  notificationPrefs: NotificationPrefs;
 }
 
 export interface OrgSummary {
@@ -164,9 +165,7 @@ export interface SecretMetadata {
 export interface MemberSummary {
   membershipId: string;
   role: OrgRole;
-  user: { id: string; name: string; email: string };
-  // Present only when the requester can view all projects (Owner, or an
-  // explicit view-all override) — absent for a project-scoped requester.
+  user: { id: string; name: string; email: string; avatarUrl?: string | null };
   canViewAllProjects?: boolean;
   projectAccess?: { id: string; name: string }[];
 }
@@ -300,7 +299,11 @@ export const api = {
 
   me: () => request<MeResponse>("/auth/me"),
 
-  updateProfile: (input: { name: string }) =>
+  updateProfile: (input: {
+    name?: string;
+    avatarUrl?: string | null;
+    notificationPrefs?: NotificationPrefs;
+  }) =>
     request<PublicUser>("/auth/me", {
       method: "PATCH",
       body: JSON.stringify(input),

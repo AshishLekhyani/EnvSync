@@ -88,9 +88,7 @@ function resolveProjectFilter(
   }
 
   if (requestedProjectId) {
-    // Explicitly requesting a project outside the caller's access must return
-    // nothing, not silently fall back to their whole accessible set — a
-    // sentinel that can never match a real cuid keeps this a single query.
+    // Sentinel that can never match a real cuid, so an inaccessible project yields no rows.
     return accessibleProjectIds.includes(requestedProjectId) ? requestedProjectId : "__no_access__";
   }
 

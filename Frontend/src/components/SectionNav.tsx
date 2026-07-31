@@ -11,11 +11,10 @@ export interface SectionNavItem {
   icon: string;
 }
 
-function isActive(pathname: string, href: string) {
+export function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Shared desktop-sidebar + mobile-horizontal-strip nav list, active state derived from the URL. */
 export function SectionNav({ items }: { items: SectionNavItem[] }) {
   const pathname = usePathname();
 

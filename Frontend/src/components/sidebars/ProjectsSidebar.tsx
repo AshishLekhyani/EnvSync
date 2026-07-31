@@ -186,8 +186,6 @@ export function ProjectsSidebar() {
     params.projectId ?? null
   );
 
-  // Landing directly on a project's page still shows it expanded by default,
-  // without overriding a manual expand/collapse of a *different* row.
   useEffect(() => {
     if (params.projectId) setExpandedProjectId(params.projectId);
   }, [params.projectId]);

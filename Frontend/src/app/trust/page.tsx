@@ -18,7 +18,7 @@ const PILLARS = [
   {
     icon: "admin_panel_settings",
     title: "Access control",
-    body: "A four-role hierarchy (Owner/Admin/Developer/Viewer) with a configurable per-environment permission matrix. Service tokens inherit their creator's live permissions and are hard-scoped to a single organization — a leaked CI token can't reach any other org.",
+    body: "A four-role hierarchy (Owner/Admin/Developer/Viewer) with a configurable per-environment permission matrix, plus a separate layer controlling which projects a member can see at all — explicit per-project grants, not implied by org membership. Service tokens inherit their creator's live permissions and are hard-scoped to a single organization — a leaked CI token can't reach any other org.",
   },
   {
     icon: "history",

@@ -1,18 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Icon } from "../Icon";
 import { SidebarFooterLinks } from "./SidebarFooterLinks";
+import { isActive } from "../SectionNav";
 import { useAuth } from "@/lib/auth-context";
 import { queryKeys } from "@/lib/query-keys";
 import { api } from "@/lib/api";
 
-const PLATFORMS = [
-  { href: "#github-actions", label: "GitHub Actions", icon: "hub" },
-  { href: "#docker", label: "Docker", icon: "deployed_code" },
-  { href: "#vercel", label: "Vercel", icon: "bolt" },
-  { href: "#aws", label: "AWS Secrets Manager", icon: "lock" },
+const NAV_ITEMS = [
+  { href: "/integrations", label: "Overview", icon: "apps" },
+  { href: "/integrations/github-actions", label: "GitHub Actions", icon: "hub" },
+  { href: "/integrations/docker", label: "Docker", icon: "deployed_code" },
+  { href: "/integrations/vercel", label: "Vercel", icon: "bolt" },
+  { href: "/integrations/aws", label: "AWS Secrets Manager", icon: "lock" },
 ];
 
 function SetupStatus() {
@@ -60,29 +63,39 @@ function SetupStatus() {
   );
 }
 
+function itemIsActive(pathname: string, href: string) {
+  return href === "/integrations" ? pathname === href : isActive(pathname, href);
+}
+
 export function IntegrationsSidebar() {
+  const pathname = usePathname();
+
   return (
     <>
       <aside className="fixed bottom-0 left-0 top-16 z-40 hidden w-64 flex-col gap-md border-r border-outline-variant bg-surface-container-low p-md md:flex">
         <SetupStatus />
 
         <div className="flex flex-col gap-xs">
-          <p className="px-md font-body-sm text-[10px] uppercase tracking-wider text-on-surface-variant">
-            Platforms
-          </p>
-          {PLATFORMS.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-md rounded-lg px-md py-sm text-on-surface-variant transition-colors hover:bg-surface-container-high"
-            >
-              <Icon name={item.icon} />
-              <span className="font-label-md text-label-md">{item.label}</span>
-            </a>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const active = itemIsActive(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={
+                  active
+                    ? "flex items-center gap-md rounded-lg bg-primary-container px-md py-sm text-on-primary-container shadow-sm"
+                    : "flex items-center gap-md rounded-lg px-md py-sm text-on-surface-variant transition-colors hover:bg-surface-container-high"
+                }
+              >
+                <Icon name={item.icon} />
+                <span className="font-label-md text-label-md">{item.label}</span>
+              </Link>
+            );
+          })}
         </div>
 
-        <div className="flex flex-col gap-xs">
+        <div className="flex flex-col gap-xs border-t border-outline-variant pt-md">
           <Link
             href="/docs/cli"
             className="flex items-center gap-md rounded-lg px-md py-sm text-on-surface-variant transition-colors hover:bg-surface-container-high"
@@ -105,16 +118,23 @@ export function IntegrationsSidebar() {
       </aside>
 
       <nav className="flex gap-xs overflow-x-auto border-b border-outline-variant bg-surface px-md py-sm md:hidden">
-        {PLATFORMS.map((item) => (
-          <a
-            key={item.href}
-            href={item.href}
-            className="flex flex-shrink-0 items-center gap-xs rounded-lg px-md py-sm text-on-surface-variant"
-          >
-            <Icon name={item.icon} style={{ fontSize: 18 }} />
-            <span className="font-label-md text-label-md">{item.label}</span>
-          </a>
-        ))}
+        {NAV_ITEMS.map((item) => {
+          const active = itemIsActive(pathname, item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={
+                active
+                  ? "flex shrink-0 items-center gap-xs rounded-lg bg-primary-container px-md py-sm text-on-primary-container"
+                  : "flex shrink-0 items-center gap-xs rounded-lg px-md py-sm text-on-surface-variant"
+              }
+            >
+              <Icon name={item.icon} style={{ fontSize: 18 }} />
+              <span className="font-label-md text-label-md">{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
     </>
   );

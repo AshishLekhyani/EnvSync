@@ -353,13 +353,13 @@ export function TopNav({
               aria-label="Account menu"
               className="rounded-full transition-opacity hover:opacity-80"
             >
-              <Avatar name={user.name} seed={user.email} />
+              <Avatar name={user.name} seed={user.email} avatarUrl={user.avatarUrl} />
             </button>
 
             {profileOpen && (
               <div className="absolute right-0 top-full z-50 mt-sm w-64 rounded-xl border border-outline-variant bg-surface shadow-lg">
                 <div className="flex items-center gap-md border-b border-outline-variant p-md">
-                  <Avatar name={user.name} seed={user.email} className="h-10 w-10" />
+                  <Avatar name={user.name} seed={user.email} avatarUrl={user.avatarUrl} className="h-10 w-10" />
                   <div className="min-w-0">
                     <div className="truncate font-body-md text-body-md font-bold text-on-surface">
                       {user.name}
