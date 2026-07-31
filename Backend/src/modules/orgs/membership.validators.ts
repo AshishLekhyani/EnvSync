@@ -1,6 +1,11 @@
 import { OrgRole } from "@prisma/client";
 import { z } from "zod";
 
+export const checkEmailQuerySchema = z.object({
+  email: z.string().email(),
+});
+export type CheckEmailQuery = z.infer<typeof checkEmailQuerySchema>;
+
 export const addMemberSchema = z.object({
   email: z.string().email(),
   role: z.nativeEnum(OrgRole).default("VIEWER"),

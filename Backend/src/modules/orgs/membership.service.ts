@@ -228,6 +228,11 @@ export async function setCanViewAllProjects(
   return updated;
 }
 
+export async function checkEmailExists(email: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  return !!user;
+}
+
 export async function addMember(
   orgId: string,
   input: AddMemberInput,

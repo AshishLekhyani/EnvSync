@@ -10,7 +10,6 @@ import { OrgSwitcher } from "./OrgSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
 import { useOutsideClick } from "@/lib/useOutsideClick";
-import { useLeaveOrganization } from "@/lib/useLeaveOrganization";
 import { queryKeys } from "@/lib/query-keys";
 import { api, ApiError, NotificationSummary } from "@/lib/api";
 
@@ -44,7 +43,6 @@ export function TopNav({
   const router = useRouter();
   const { user, activeOrg, logout } = useAuth();
   const queryClient = useQueryClient();
-  const { leave: leaveOrg, leaving: leavingOrg, canLeave: canLeaveOrg } = useLeaveOrganization();
 
   const [searchValue, setSearchValue] = useState("");
   const notifQuery = useQuery({
@@ -152,18 +150,6 @@ export function TopNav({
         </Link>
         <span className="hidden h-6 w-px bg-outline-variant md:block" />
         <OrgSwitcher />
-        {canLeaveOrg && (
-          <button
-            type="button"
-            disabled={leavingOrg}
-            onClick={leaveOrg}
-            title={`Leave ${activeOrg?.name ?? "organization"}`}
-            aria-label="Leave organization"
-            className="rounded-lg p-xs text-secondary transition-colors hover:bg-surface-container hover:text-error disabled:opacity-50"
-          >
-            <Icon name="logout" style={{ fontSize: 18 }} />
-          </button>
-        )}
         <nav className="hidden h-full items-center gap-lg pt-2 md:flex">
           {NAV.map((item) => {
             if (item.requiresOrg && !activeOrg) {

@@ -262,6 +262,7 @@ export function InvitesSection() {
   const [showForm, setShowForm] = useState(false);
   const [directAddMode, setDirectAddMode] = useState(false);
   const [email, setEmail] = useState("");
+  const [emailCheck, setEmailCheck] = useState<"idle" | "checking" | "found" | "not-found">("idle");
   const [role, setRole] = useState<OrgRole>("VIEWER");
   const [projectId, setProjectId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -307,6 +308,23 @@ export function InvitesSection() {
     };
   }, [org]);
 
+  useEffect(() => {
+    if (!org || !directAddMode || !email.includes("@")) {
+      setEmailCheck("idle");
+      return;
+    }
+
+    setEmailCheck("checking");
+    const timer = window.setTimeout(() => {
+      api
+        .checkEmailExists(org.id, email)
+        .then((result) => setEmailCheck(result.exists ? "found" : "not-found"))
+        .catch(() => setEmailCheck("idle"));
+    }, 400);
+
+    return () => window.clearTimeout(timer);
+  }, [org, directAddMode, email]);
+
   const copyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -324,6 +342,7 @@ export function InvitesSection() {
     setDirectAddSuccess(null);
     setEmail("");
     setProjectId("");
+    setEmailCheck("idle");
   };
 
   const onDecision = async (inviteId: string, decision: "approve" | "reject") => {
@@ -505,6 +524,24 @@ export function InvitesSection() {
                 placeholder="teammate@example.com"
                 className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
               />
+              {directAddMode && emailCheck === "checking" && (
+                <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-on-surface-variant">
+                  <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 12 }} />
+                  Checking...
+                </span>
+              )}
+              {directAddMode && emailCheck === "found" && (
+                <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-primary">
+                  <Icon name="check_circle" style={{ fontSize: 14 }} />
+                  Account found
+                </span>
+              )}
+              {directAddMode && emailCheck === "not-found" && (
+                <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-[#CF222E] dark:text-red-400">
+                  <Icon name="cancel" style={{ fontSize: 14 }} />
+                  No EnvSync account with this email yet
+                </span>
+              )}
             </label>
             <Select
               label="Role"
@@ -539,7 +576,7 @@ export function InvitesSection() {
           <div className="flex items-center gap-sm">
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || (directAddMode && emailCheck === "not-found")}
               className="rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
             >
               {submitting

@@ -8,10 +8,12 @@ import { CreateOrgForm } from "./CreateOrgForm";
 import { useAuth } from "@/lib/auth-context";
 import { roleBadgeClass } from "@/lib/roleBadge";
 import { useOutsideClick } from "@/lib/useOutsideClick";
+import { useLeaveOrganization } from "@/lib/useLeaveOrganization";
 
 export function OrgSwitcher() {
   const { organizations, activeOrgId, activeOrg, switchOrg, refreshMe } = useAuth();
   const router = useRouter();
+  const { leave, leaving, canLeave } = useLeaveOrganization();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -105,7 +107,7 @@ export function OrgSwitcher() {
               </button>
             ))}
           </div>
-          <div className="border-t border-outline-variant p-md">
+          <div className="flex flex-col gap-xs border-t border-outline-variant p-md">
             <button
               type="button"
               onClick={() => {
@@ -117,6 +119,22 @@ export function OrgSwitcher() {
               <Icon name="add" style={{ fontSize: 18 }} />
               <span className="hover:underline">Create Organization</span>
             </button>
+            {canLeave && (
+              <button
+                type="button"
+                disabled={leaving}
+                onClick={() => {
+                  setOpen(false);
+                  leave();
+                }}
+                className="flex w-full items-center gap-xs font-label-md text-label-md text-secondary transition-colors hover:text-error disabled:opacity-50"
+              >
+                <Icon name="logout" style={{ fontSize: 18 }} />
+                <span className="hover:underline">
+                  {leaving ? "Leaving..." : `Leave ${activeOrg.name}`}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       )}

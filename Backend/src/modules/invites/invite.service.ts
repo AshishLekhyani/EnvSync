@@ -187,7 +187,26 @@ export async function listInvites(orgId: string) {
     orderBy: { createdAt: "desc" },
   });
 
-  return invites.map(toSummary);
+  const acceptedUserIds = invites
+    .map((i) => i.acceptedById)
+    .filter((id): id is string => id !== null);
+
+  const stillMemberIds = acceptedUserIds.length
+    ? new Set(
+        (
+          await prisma.orgMembership.findMany({
+            where: { orgId, userId: { in: acceptedUserIds } },
+            select: { userId: true },
+          })
+        ).map((m) => m.userId)
+      )
+    : new Set<string>();
+
+  const visible = invites.filter(
+    (i) => !i.acceptedById || stillMemberIds.has(i.acceptedById)
+  );
+
+  return visible.map(toSummary);
 }
 
 export async function getInviteByToken(rawToken: string) {

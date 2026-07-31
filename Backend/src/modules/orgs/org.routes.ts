@@ -7,6 +7,7 @@ import * as membershipController from "./membership.controller";
 import { createOrgSchema, updateOrgSchema } from "./org.validators";
 import {
   addMemberSchema,
+  checkEmailQuerySchema,
   setCanViewAllProjectsSchema,
   transferOwnershipSchema,
   updateMemberRoleSchema,
@@ -45,6 +46,12 @@ orgRouter.get(
   "/:orgId/members",
   requireOrgRole("VIEWER", orgIdFromParam()),
   membershipController.listMembers
+);
+orgRouter.get(
+  "/:orgId/members/check-email",
+  requireOrgRole("ADMIN", orgIdFromParam()),
+  validate({ query: checkEmailQuerySchema }),
+  membershipController.checkEmailExists
 );
 orgRouter.post(
   "/:orgId/members",

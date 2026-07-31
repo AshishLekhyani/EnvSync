@@ -2521,6 +2521,84 @@ async function main() {
   }
   ok("the purge action writes its own audit entry, which survives the purge it describes");
 
+  // --- Check-email-exists endpoint ---
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members/check-email?email=${encodeURIComponent(ownerEmail)}`, {
+    headers: authHeaders(ownerAccessToken),
+  });
+  const checkExisting = await res.json();
+  if (res.status !== 200 || checkExisting.exists !== true) {
+    fail("check-email should report exists:true for a registered email", checkExisting);
+  }
+  ok("check-email reports exists:true for a registered account");
+
+  res = await fetch(
+    `${BASE}/orgs/${orgId}/members/check-email?email=${encodeURIComponent(`nobody-${rand}@example.com`)}`,
+    { headers: authHeaders(ownerAccessToken) }
+  );
+  const checkMissing = await res.json();
+  if (res.status !== 200 || checkMissing.exists !== false) {
+    fail("check-email should report exists:false for an unregistered email", checkMissing);
+  }
+  ok("check-email reports exists:false for an unregistered email");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members/check-email?email=${encodeURIComponent(ownerEmail)}`, {
+    headers: authHeaders(viewerAccessToken),
+  });
+  if (res.status !== 403) fail("check-email should require ADMIN+ (403 for viewer)", await res.text());
+  ok("check-email is rejected for a non-Admin (403)");
+
+  // --- Invites list hides an accepted invite once the invitee leaves ---
+
+  const leftInviteEmail = `leftinvite-${rand}@example.com`;
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: leftInviteEmail, role: "VIEWER" }),
+  });
+  const leftInvite = await res.json();
+  if (res.status !== 201) fail("create invite for the leaves-after-accepting test", leftInvite);
+
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Left Invite", email: leftInviteEmail, password }),
+  });
+  if (res.status !== 201) fail("signup leaves-after-accepting invitee", await res.text());
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: leftInviteEmail, password }),
+  });
+  const leftInviteLogin = await res.json();
+  const leftInviteToken: string = leftInviteLogin.accessToken;
+
+  res = await fetch(`${BASE}/invites/${leftInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(leftInviteToken),
+  });
+  if (res.status !== 200) fail("leaves-after-accepting invitee accepts the invite", await res.text());
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, { headers: authHeaders(ownerAccessToken) });
+  const invitesAfterAccept = await res.json();
+  if (!(invitesAfterAccept as { id: string }[]).some((i) => i.id === leftInvite.id)) {
+    fail("accepted invite should be visible in the list while the invitee is still a member", invitesAfterAccept);
+  }
+  ok("an accepted invite is visible in the Sent Invites list while the invitee is still a member");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/leave`, {
+    method: "POST",
+    headers: authHeaders(leftInviteToken),
+  });
+  if (res.status !== 204) fail("leaves-after-accepting invitee leaves the org", await res.text());
+
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, { headers: authHeaders(ownerAccessToken) });
+  const invitesAfterLeave = await res.json();
+  if ((invitesAfterLeave as { id: string }[]).some((i) => i.id === leftInvite.id)) {
+    fail("an invite whose invitee has left should no longer appear in the Sent Invites list", invitesAfterLeave);
+  }
+  ok("an invite disappears from the Sent Invites list once the invitee leaves the org");
+
   const hammerEmail = `hammer-${rand}@example.com`;
   res = await fetch(`${BASE}/auth/signup`, {
     method: "POST",

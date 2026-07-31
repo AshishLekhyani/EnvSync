@@ -431,6 +431,11 @@ export const api = {
 
   listMembers: (orgId: string) => request<MemberSummary[]>(`/orgs/${orgId}/members`),
 
+  checkEmailExists: (orgId: string, email: string) =>
+    request<{ exists: boolean }>(
+      `/orgs/${orgId}/members/check-email?email=${encodeURIComponent(email)}`
+    ),
+
   addMember: (orgId: string, input: { email: string; role: OrgRole; projectId?: string }) =>
     request<MemberSummary>(`/orgs/${orgId}/members`, {
       method: "POST",

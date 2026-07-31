@@ -3,6 +3,7 @@ import * as membershipService from "./membership.service";
 import { getAccessibleProjectIds } from "../rbac/projectAccess.service";
 import {
   AddMemberInput,
+  CheckEmailQuery,
   SetCanViewAllProjectsInput,
   TransferOwnershipInput,
   UpdateMemberRoleInput,
@@ -21,6 +22,12 @@ export const listMembers = asyncHandler(async (req, res) => {
     req.user!.id
   );
   res.status(200).json(members);
+});
+
+export const checkEmailExists = asyncHandler(async (req, res) => {
+  const query = req.query as unknown as CheckEmailQuery;
+  const exists = await membershipService.checkEmailExists(query.email);
+  res.status(200).json({ exists });
 });
 
 export const addMember = asyncHandler(async (req, res) => {

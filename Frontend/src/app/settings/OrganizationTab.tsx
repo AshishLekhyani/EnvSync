@@ -2,12 +2,14 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/Icon";
 import { Modal } from "@/components/Modal";
 import { CreateOrgForm } from "@/components/CreateOrgForm";
 import { useAuth } from "@/lib/auth-context";
 import { useConfirm } from "@/lib/confirm-context";
 import { useLeaveOrganization } from "@/lib/useLeaveOrganization";
+import { queryKeys } from "@/lib/query-keys";
 import { api, ApiError, MemberSummary } from "@/lib/api";
 import { downloadJson } from "@/lib/csv";
 
@@ -239,6 +241,85 @@ function AuditRetentionSection({ orgId }: { orgId: string }) {
   );
 }
 
+function ProjectsManagementSection({ orgId }: { orgId: string }) {
+  const confirm = useConfirm();
+  const queryClient = useQueryClient();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.orgProjects(orgId),
+    queryFn: () => api.listProjects(orgId),
+  });
+  const projects = projectsQuery.data ?? [];
+
+  const onDelete = async (projectId: string, projectName: string) => {
+    if (
+      !(await confirm({
+        title: "Delete Project",
+        message: `This permanently deletes ${projectName} and every environment and secret inside it. This cannot be undone.`,
+        confirmLabel: "Delete",
+        danger: true,
+      }))
+    ) {
+      return;
+    }
+    setDeletingId(projectId);
+    setError(null);
+    try {
+      await api.deleteProject(projectId);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orgProjects(orgId) });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete project");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
+      <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
+        <Icon name="folder_delete" className="text-primary" />
+        <h2 className="font-h3 text-h3 text-on-surface">Projects</h2>
+      </div>
+      <div className="flex flex-col gap-sm p-md">
+        <p className="font-body-sm text-body-sm text-on-surface-variant">
+          Delete an individual project and everything inside it. This cannot be undone.
+        </p>
+        {error && (
+          <p className="font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">{error}</p>
+        )}
+        {projectsQuery.isPending ? (
+          <div className="flex justify-center py-md text-secondary">
+            <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 20 }} />
+          </div>
+        ) : projects.length === 0 ? (
+          <p className="font-body-sm text-body-sm text-on-surface-variant">No projects yet.</p>
+        ) : (
+          <div className="flex flex-col divide-y divide-outline-variant">
+            {projects.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-md py-sm">
+                <div>
+                  <p className="font-body-sm text-body-sm font-bold text-on-surface">{p.name}</p>
+                  <p className="font-body-sm text-[11px] text-on-surface-variant">{p.slug}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={deletingId === p.id}
+                  onClick={() => onDelete(p.id, p.name)}
+                  className="flex-shrink-0 font-label-md text-label-md text-xs text-error hover:underline disabled:opacity-50"
+                >
+                  {deletingId === p.id ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function OrganizationTab() {
   const { activeOrg: org, organizations, refreshMe, switchOrg } = useAuth();
   const router = useRouter();
@@ -389,6 +470,8 @@ export function OrganizationTab() {
       </div>
 
       {isOwner && <ProjectVisibilitySection orgId={org.id} />}
+
+      {isOwner && <ProjectsManagementSection orgId={org.id} />}
 
       {isOwner && <DataExportSection orgId={org.id} orgSlug={org.slug} />}
 
