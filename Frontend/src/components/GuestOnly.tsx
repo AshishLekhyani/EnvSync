@@ -3,15 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { Icon } from "./Icon";
-
-function Spinner() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F6F8FA] dark:bg-background">
-      <Icon name="progress_activity" className="animate-spin text-primary" style={{ fontSize: 32 }} />
-    </div>
-  );
-}
+import { LoadingScreen } from "./LoadingScreen";
 
 function GuestOnlyInner({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -26,8 +18,8 @@ function GuestOnlyInner({ children }: { children: React.ReactNode }) {
     }
   }, [loading, user, router, target]);
 
-  if (loading || user) {
-    return <Spinner />;
+  if (!loading && user) {
+    return <LoadingScreen />;
   }
 
   return <>{children}</>;
@@ -35,7 +27,7 @@ function GuestOnlyInner({ children }: { children: React.ReactNode }) {
 
 export function GuestOnly({ children }: { children: React.ReactNode }) {
   return (
-    <Suspense fallback={<Spinner />}>
+    <Suspense fallback={<LoadingScreen />}>
       <GuestOnlyInner>{children}</GuestOnlyInner>
     </Suspense>
   );

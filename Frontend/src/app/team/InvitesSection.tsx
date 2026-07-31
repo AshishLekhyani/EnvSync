@@ -451,27 +451,36 @@ export function InvitesSection() {
       {showForm && justCreated && (
         <div className="github-card flex flex-col gap-md rounded-lg p-md">
           <h2 className="font-h3 text-h3 text-on-surface">Invite Created</h2>
-          <p className="font-body-sm text-body-sm text-secondary">
-            Share this link with <strong>{justCreated.email}</strong> — anyone with it can
-            join as <strong>{justCreated.role}</strong>
-            {justCreated.projectId
-              ? ` with access to ${projectNameById.get(justCreated.projectId) ?? "one project"}`
-              : ", with no project access until one is granted"}
-            . It won&apos;t be shown again.
-          </p>
-          <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
-            <span className="truncate pr-md font-code-md text-code-md text-on-surface">
-              {typeof window !== "undefined" ? window.location.origin : ""}/invite/
-              {justCreated.token}
-            </span>
-            <button
-              type="button"
-              onClick={() => copyText(`${window.location.origin}/invite/${justCreated.token}`)}
-              className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
-            >
-              <Icon name="content_copy" />
-            </button>
-          </div>
+          {justCreated.token ? (
+            <>
+              <p className="font-body-sm text-body-sm text-secondary">
+                Share this link with <strong>{justCreated.email}</strong> — anyone with it can
+                join as <strong>{justCreated.role}</strong>
+                {justCreated.projectId
+                  ? ` with access to ${projectNameById.get(justCreated.projectId) ?? "one project"}`
+                  : ", with no project access until one is granted"}
+                . It won&apos;t be shown again.
+              </p>
+              <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
+                <span className="truncate pr-md font-code-md text-code-md text-on-surface">
+                  {typeof window !== "undefined" ? window.location.origin : ""}/invite/
+                  {justCreated.token}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copyText(`${window.location.origin}/invite/${justCreated.token}`)}
+                  className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
+                >
+                  <Icon name="content_copy" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="font-body-sm text-body-sm text-secondary">
+              An invite email was sent to <strong>{justCreated.email}</strong> — the link isn&apos;t
+              shown here since it was already delivered.
+            </p>
+          )}
           <button
             type="button"
             onClick={closeForm}
@@ -612,23 +621,32 @@ export function InvitesSection() {
       {justApproved && (
         <div className="github-card flex flex-col gap-md rounded-lg p-md">
           <h2 className="font-h3 text-h3 text-on-surface">Invite Approved</h2>
-          <p className="font-body-sm text-body-sm text-secondary">
-            {justApproved.email} was emailed a link if email is configured. Here it is too, in
-            case you want to share it directly — it won&apos;t be shown again.
-          </p>
-          <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
-            <span className="truncate pr-md font-code-md text-code-md text-on-surface">
-              {typeof window !== "undefined" ? window.location.origin : ""}/invite/
-              {justApproved.token}
-            </span>
-            <button
-              type="button"
-              onClick={() => copyText(`${window.location.origin}/invite/${justApproved.token}`)}
-              className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
-            >
-              <Icon name="content_copy" />
-            </button>
-          </div>
+          {justApproved.token ? (
+            <>
+              <p className="font-body-sm text-body-sm text-secondary">
+                No email provider is configured, so here&apos;s the link for{" "}
+                <strong>{justApproved.email}</strong> — share it directly. It won&apos;t be shown
+                again.
+              </p>
+              <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
+                <span className="truncate pr-md font-code-md text-code-md text-on-surface">
+                  {typeof window !== "undefined" ? window.location.origin : ""}/invite/
+                  {justApproved.token}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copyText(`${window.location.origin}/invite/${justApproved.token}`)}
+                  className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
+                >
+                  <Icon name="content_copy" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="font-body-sm text-body-sm text-secondary">
+              An invite email was sent to <strong>{justApproved.email}</strong>.
+            </p>
+          )}
           <button
             type="button"
             onClick={() => setJustApproved(null)}

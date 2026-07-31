@@ -13,7 +13,8 @@
     "prisma:studio": "prisma studio",
     "postinstall": "prisma generate",
     "smoke-test": "tsx scripts/smoke-test.ts",
-    "backfill-project-access": "tsx scripts/backfill-project-access.ts"
+    "backfill-project-access": "tsx scripts/backfill-project-access.ts",
+    "backfill-email-verified": "tsx scripts/backfill-email-verified.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",

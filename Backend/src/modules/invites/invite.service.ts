@@ -43,16 +43,25 @@ function toSummary(invite: InviteRow) {
   };
 }
 
-async function sendInviteEmail(orgId: string, email: string, role: OrgRole, rawToken: string) {
-  if (!isEmailConfigured()) return;
+async function sendInviteEmail(
+  orgId: string,
+  email: string,
+  role: OrgRole,
+  rawToken: string
+): Promise<boolean> {
+  if (!isEmailConfigured()) return false;
 
   const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } });
-  if (!org) return;
+  if (!org) return false;
 
   const link = `${env.CORS_ORIGIN}/invite/${rawToken}`;
-  sendEmail({ to: email, ...inviteEmail(org.name, role, link) }).catch((err) => {
+  try {
+    await sendEmail({ to: email, ...inviteEmail(org.name, role, link) });
+    return true;
+  } catch (err) {
     console.error("Failed to send invite email", err);
-  });
+    return false;
+  }
 }
 
 async function notifyApprovers(
@@ -185,6 +194,8 @@ export async function createInvite(
     return invite;
   });
 
+  let emailSent = false;
+
   if (needsApproval) {
     const inviter = await prisma.user.findUniqueOrThrow({
       where: { id: actor.id },
@@ -192,10 +203,10 @@ export async function createInvite(
     });
     await notifyApprovers(orgId, created, inviter);
   } else {
-    await sendInviteEmail(orgId, created.email, created.role, rawToken);
+    emailSent = await sendInviteEmail(orgId, created.email, created.role, rawToken);
   }
 
-  return { ...toSummary(created), token: rawToken };
+  return { ...toSummary(created), token: emailSent ? null : rawToken };
 }
 
 export async function listInvites(orgId: string) {
@@ -373,9 +384,6 @@ export async function approveInvite(
 ) {
   const invite = await getPendingInvite(orgId, inviteId);
 
-  // The original creation-time token was never usable (acceptInvite blocks on
-  // PENDING) and its raw value was never persisted, only its hash — so a fresh
-  // token is minted here rather than trying to "unlock" the old one.
   const rawToken = generateRawToken();
   const tokenHash = sha256Hex(rawToken);
 
@@ -390,7 +398,7 @@ export async function approveInvite(
     },
   });
 
-  await sendInviteEmail(orgId, updated.email, updated.role, rawToken);
+  const emailSent = await sendInviteEmail(orgId, updated.email, updated.role, rawToken);
 
   await writeAuditLog(prisma, {
     orgId,
@@ -402,7 +410,7 @@ export async function approveInvite(
     ipAddress,
   });
 
-  return { ...toSummary(updated), token: rawToken };
+  return { ...toSummary(updated), token: emailSent ? null : rawToken };
 }
 
 export async function rejectInvite(

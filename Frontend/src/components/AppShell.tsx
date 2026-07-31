@@ -10,7 +10,7 @@ import { AuditSidebar } from "./sidebars/AuditSidebar";
 import { IntegrationsSidebar } from "./sidebars/IntegrationsSidebar";
 import { TopNav } from "./TopNav";
 import { Icon } from "./Icon";
-import { VerifyEmailBanner } from "./VerifyEmailBanner";
+import { LoadingScreen } from "./LoadingScreen";
 import { useAuth } from "@/lib/auth-context";
 
 function MobileNavItem({
@@ -131,16 +131,11 @@ export function AppShell({
   }, [loading, user, router]);
 
   if (loading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F6F8FA] dark:bg-background">
-        <Icon name="progress_activity" className="animate-spin text-primary" style={{ fontSize: 32 }} />
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
     <div className="min-h-screen bg-[#F6F8FA] dark:bg-background font-body-md text-body-md text-on-surface antialiased">
-      <VerifyEmailBanner />
       <TopNav
         searchPlaceholder={searchPlaceholder}
         showSearch={showSearch}

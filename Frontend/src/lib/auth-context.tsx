@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   api,
   API_URL,
+  ApiError,
   MeResponse,
   OrgSummary,
   PublicUser,
@@ -30,7 +31,12 @@ interface AuthContextValue {
   activeOrg: OrgSummary | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
+  signup: (
+    name: string,
+    email: string,
+    password: string
+  ) => Promise<{ sent: boolean; verifyToken: string | null }>;
+  verifyAndLogin: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
   switchOrg: (orgId: string) => void;
@@ -104,22 +110,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 4000;
 
     (async () => {
-      try {
-        const { accessToken, user: refreshedUser } = await api.refresh();
-        setAccessToken(accessToken);
-        if (cancelled) return;
-        setUser(refreshedUser);
-        await loadMe();
-      } catch {
-        if (!cancelled) {
-          setAccessToken(null);
-          setUser(null);
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          const { accessToken, user: refreshedUser } = await api.refresh();
+          setAccessToken(accessToken);
+          if (cancelled) return;
+          setUser(refreshedUser);
+          await loadMe();
+          break;
+        } catch (err) {
+          const isCleanUnauthorized = err instanceof ApiError && err.status === 401;
+          if (isCleanUnauthorized || attempt === MAX_ATTEMPTS) {
+            if (!cancelled) {
+              setAccessToken(null);
+              setUser(null);
+            }
+            break;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, RETRY_DELAY_MS));
         }
-      } finally {
-        if (!cancelled) setBootstrapping(false);
       }
+      if (!cancelled) setBootstrapping(false);
     })();
 
     return () => {
@@ -138,12 +153,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [loadMe]
   );
 
-  const signup = useCallback(
-    async (name: string, email: string, password: string) => {
-      await api.signup({ name, email, password });
-      await login(email, password);
+  const signup = useCallback(async (name: string, email: string, password: string) => {
+    return api.signup({ name, email, password });
+  }, []);
+
+  const verifyAndLogin = useCallback(
+    async (token: string) => {
+      const { accessToken, user: verifiedUser } = await api.verifyEmail(token);
+      setAccessToken(accessToken);
+      setUser(verifiedUser);
+      await loadMe();
     },
-    [login]
+    [loadMe]
   );
 
   const forceLogout = useCallback(() => {
@@ -230,6 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         login,
         signup,
+        verifyAndLogin,
         logout,
         refreshMe,
         switchOrg,

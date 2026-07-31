@@ -51,3 +51,8 @@ export const verifyEmailSchema = z.object({
   token: z.string().min(1),
 });
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+
+export const resendSignupVerificationSchema = z.object({
+  email: z.string().email(),
+});
+export type ResendSignupVerificationInput = z.infer<typeof resendSignupVerificationSchema>;

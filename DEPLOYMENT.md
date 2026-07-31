@@ -1,39 +1,49 @@
 # Deploying EnvSync
 
-This guide covers the recommended setup: **backend on Railway** (API + Postgres), **frontend on Vercel**. No Docker is required for this path — both platforms build directly from the GitHub repo. See "Why not Docker?" at the bottom if you're curious when it *would* matter.
+This is the actual setup this project runs on: **backend on Render** (API), **database on Neon** (Postgres), **frontend on Vercel**. No Docker is required for this path — all three platforms build directly from the GitHub repo. See "Why not Docker?" at the bottom if you're curious when it *would* matter.
 
 ## Prerequisites
 
 - The repo pushed to GitHub (public or private, either works)
-- A [Railway](https://railway.app) account
+- A [Neon](https://neon.tech) account (free Postgres)
+- A [Render](https://render.com) account
 - A [Vercel](https://vercel.com) account
 - An SMTP account for real password-reset/invite/verification emails (a personal Gmail or Outlook account works — see `Backend/.env.example` for app-password setup notes). Optional: without it, those flows fall back to showing the link directly in the UI instead of emailing it.
+- If you want Google sign-in, a Google Cloud OAuth Client (optional — the button is hidden gracefully if unset).
 
-## 1. Backend → Railway
+## 1. Database → Neon
 
-1. **New Project → Deploy from GitHub repo** → select this repo.
-2. Set the service's **root directory** to `Backend`.
-3. **Add a Postgres plugin** to the project (Railway auto-populates `DATABASE_URL` on the backend service — reference it via a variable, don't hardcode).
-4. **Build command**: `npm install && npm run build`
-   **Start command**: `npm run start`
-5. **Deploy-time migration**: add a **Deploy** (or "release") command running `npx prisma migrate deploy` before the start command — this applies migrations non-interactively, unlike `migrate dev`. Railway's "Custom Start Command" can chain both: `npx prisma migrate deploy && npm run start`.
-6. Set environment variables (Railway → Variables):
+1. **New Project** → name it → pick any region → **Create Project**.
+2. Copy the **direct** connection string (not the one with `-pooler` in the hostname — this backend is one steady long-running server, not serverless functions, so it doesn't need connection pooling, and pooling has a known rough edge with Prisma's migration engine).
+
+## 2. Backend → Render
+
+1. **New +** → **Web Service** → connect the GitHub repo.
+2. Fill in:
+   - **Root Directory**: `Backend`
+   - **Runtime**: `Node`
+   - **Build Command**: `npm install --include=dev && npm run build`
+     (`--include=dev` matters: `NODE_ENV=production` — set below — makes plain `npm install` skip devDependencies, but `typescript`/`@types/*`/`prisma` are all devDependencies the build itself needs.)
+   - **Start Command**: `npx prisma migrate deploy && npm run start`
+     (`&&`, not `;` — if migrations fail, the server should not start against a schema it doesn't match.)
+3. Environment variables:
 
    | Variable | Value |
    |---|---|
-   | `DATABASE_URL` | Reference the Postgres plugin's variable |
+   | `DATABASE_URL` | the Neon direct connection string from step 1 |
    | `JWT_ACCESS_SECRET` | `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"` |
    | `ENCRYPTION_MASTER_KEY` | `base64:` + `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
    | `NODE_ENV` | `production` |
-   | `CORS_ORIGIN` | your Vercel URL — fill this in **after** step 2 below, then redeploy |
+   | `CORS_ORIGIN` | your Vercel URL — fill this in **after** step 3 below, then redeploy |
    | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` / `EMAIL_FROM` | your SMTP provider's values |
-   | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | optional, if enabling GitHub login |
    | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional, if enabling Google login |
 
-   `PORT` doesn't need to be set — Railway injects it and `Backend/src/index.ts` already listens on `env.PORT`.
-7. Deploy. Note the resulting public URL (e.g. `https://envsync-api-production.up.railway.app`).
+   `PORT` doesn't need to be set — Render injects it and `Backend/src/index.ts` already listens on `env.PORT`.
+4. Deploy. Note the resulting URL (e.g. `https://envsync-api.onrender.com`).
 
-## 2. Frontend → Vercel
+**Free-tier cold starts**: Render spins the service down after ~15 minutes idle. The first request after that takes ~30-50s to wake back up — the frontend shows a branded "Waking up the server..." screen for this rather than looking broken, and retries instead of treating it as a sign-out. A paid instance removes the delay entirely if it ever matters.
+
+## 3. Frontend → Vercel
 
 1. **Import Project** from the same GitHub repo.
 2. Set the project's **root directory** to `Frontend`.
@@ -41,23 +51,23 @@ This guide covers the recommended setup: **backend on Railway** (API + Postgres)
 
    | Variable | Value |
    |---|---|
-   | `NEXT_PUBLIC_API_URL` | `https://<your-railway-domain>/api` |
+   | `NEXT_PUBLIC_API_URL` | `https://<your-render-domain>/api` |
 
 4. Deploy. Note the resulting URL (e.g. `https://envsync.vercel.app`).
 
-## 3. Close the loop
+## 4. Close the loop
 
-Go back to Railway and set the backend's `CORS_ORIGIN` to the Vercel URL from step 2, then redeploy the backend. Cookies and CORS won't work correctly until this matches exactly (no trailing slash).
+Go back to Render and set the backend's `CORS_ORIGIN` to the Vercel URL from step 3, then redeploy the backend. Cookies and CORS won't work correctly until this matches exactly (no trailing slash).
 
-## 4. Post-deploy checklist
+## 5. Post-deploy checklist
 
-- Sign up with a real email → confirm the verification email arrives and the link works
+- Sign up with a real email → confirm the verification email arrives and clicking it actually creates the account (no account exists until verified)
 - Use "Forgot password" → confirm the reset email arrives and the link works
 - Invite a teammate → confirm the invite email arrives
-- If OAuth is configured, confirm the GitHub/Google login buttons work
+- If Google OAuth is configured, confirm the button works
 - `curl -I https://<your-vercel-domain>` → confirm security headers are present (`X-Frame-Options`, `Content-Security-Policy`, etc.)
-- **Do not** run `Backend/scripts/smoke-test.ts` against production — it freely creates throwaway orgs, users, and secrets. Keep it to local/dev/staging.
+- **Do not** run `Backend/scripts/smoke-test.ts` against production — it freely creates throwaway orgs, users, and secrets, and requires SMTP to be *unconfigured* to read back dev-mode tokens. Keep it to local dev only.
 
 ## Why not Docker?
 
-Docker packages an app with its exact runtime so it runs identically anywhere — mainly valuable when **self-hosting** on a bare VPS or your own server, where you'd otherwise have to manually match Node/Postgres versions yourself. Railway and Vercel both build directly from source and manage the runtime for you, so Docker adds no value on this path. It would matter if you later move to self-hosting instead — that's a fair to revisit then, not now.
+Docker packages an app with its exact runtime so it runs identically anywhere — mainly valuable when **self-hosting** on a bare VPS or your own server, where you'd otherwise have to manually match Node/Postgres versions yourself. Render, Vercel, and Neon all build directly from source or manage the runtime for you, so Docker adds no value on this path. It would matter if you later move to self-hosting instead.

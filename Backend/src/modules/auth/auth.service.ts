@@ -63,26 +63,24 @@ function toPublicUser(user: {
   };
 }
 
-async function createAndSendVerification(userId: string, email: string) {
+async function createAndSendSignupVerification(email: string, name: string, passwordHash: string) {
   const rawToken = VERIFY_TOKEN_PREFIX + crypto.randomBytes(32).toString("base64url");
   const tokenHash = sha256Hex(rawToken);
+  const expiresAt = new Date(Date.now() + VERIFY_TOKEN_EXPIRY_MS);
 
-  await prisma.emailVerificationToken.create({
-    data: {
-      userId,
-      tokenHash,
-      expiresAt: new Date(Date.now() + VERIFY_TOKEN_EXPIRY_MS),
-    },
+  await prisma.pendingSignup.upsert({
+    where: { email },
+    create: { email, name, passwordHash, tokenHash, expiresAt },
+    update: { name, passwordHash, tokenHash, expiresAt },
   });
 
   if (isEmailConfigured()) {
     const link = `${env.CORS_ORIGIN}/verify-email/${rawToken}`;
-    sendEmail({ to: email, ...verificationEmail(link) }).catch((err) => {
-      console.error("Failed to send verification email", err);
-    });
+    await sendEmail({ to: email, ...verificationEmail(link) });
+    return { sent: true, verifyToken: null as string | null };
   }
 
-  return rawToken;
+  return { sent: false, verifyToken: rawToken };
 }
 
 export async function issueSession(userId: string, email: string, meta: SessionMeta) {
@@ -103,66 +101,56 @@ export async function issueSession(userId: string, email: string, meta: SessionM
 }
 
 export async function signup(input: SignupInput) {
-  const existing = await prisma.user.findUnique({
-    where: { email: input.email },
-  });
+  const existing = await prisma.user.findUnique({ where: { email: input.email } });
 
   if (existing) {
     throw new ConflictError("An account with this email already exists");
   }
 
   const passwordHash = await hashPassword(input.password);
-
-  const user = await prisma.user.create({
-    data: {
-      name: input.name,
-      email: input.email,
-      passwordHash,
-      authProvider: "PASSWORD",
-    },
-  });
-
-  await createAndSendVerification(user.id, user.email);
-
-  return toPublicUser(user);
+  return createAndSendSignupVerification(input.email, input.name, passwordHash);
 }
 
-export async function resendVerificationEmail(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+export async function resendSignupVerification(email: string) {
+  const pending = await prisma.pendingSignup.findUnique({ where: { email } });
 
-  if (!user) {
-    throw new UnauthorizedError();
+  if (!pending) {
+    return { sent: false, verifyToken: null as string | null };
   }
 
-  if (user.emailVerifiedAt) {
-    throw new ConflictError("This email is already verified");
-  }
-
-  const rawToken = await createAndSendVerification(user.id, user.email);
-  const sent = isEmailConfigured();
-
-  return { sent, verifyToken: sent ? null : rawToken };
+  return createAndSendSignupVerification(pending.email, pending.name, pending.passwordHash);
 }
 
-export async function verifyEmail(rawToken: string) {
+export async function verifySignup(rawToken: string) {
   const tokenHash = sha256Hex(rawToken);
 
-  const verifyToken = await prisma.emailVerificationToken.findUnique({ where: { tokenHash } });
+  const pending = await prisma.pendingSignup.findUnique({ where: { tokenHash } });
 
-  if (!verifyToken || verifyToken.usedAt || verifyToken.expiresAt < new Date()) {
+  if (!pending || pending.expiresAt < new Date()) {
     throw new UnauthorizedError("This verification link is invalid or has expired");
   }
 
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: verifyToken.userId },
-      data: { emailVerifiedAt: new Date() },
-    }),
-    prisma.emailVerificationToken.update({
-      where: { id: verifyToken.id },
-      data: { usedAt: new Date() },
-    }),
-  ]);
+  const user = await prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({ where: { email: pending.email } });
+    if (existing) {
+      await tx.pendingSignup.delete({ where: { id: pending.id } });
+      throw new ConflictError("An account with this email already exists");
+    }
+
+    const created = await tx.user.create({
+      data: {
+        name: pending.name,
+        email: pending.email,
+        passwordHash: pending.passwordHash,
+        authProvider: "PASSWORD",
+        emailVerifiedAt: new Date(),
+      },
+    });
+    await tx.pendingSignup.delete({ where: { id: pending.id } });
+    return created;
+  });
+
+  return toPublicUser(user);
 }
 
 export async function login(input: LoginInput, meta: SessionMeta) {

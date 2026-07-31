@@ -23,7 +23,7 @@ export default function SignupPage() {
           </h2>
           <ul className="space-y-sm font-body-md text-body-md text-surface-dim">
             {[
-              "Email/password or GitHub OAuth",
+              "Email/password or Google OAuth",
               "Organizations, roles, and project vaults",
               "CLI pull/push for local builds",
             ].map((item) => (

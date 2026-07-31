@@ -31,6 +31,11 @@ export function AuthCard({
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [awaitingVerification, setAwaitingVerification] = useState<{
+    email: string;
+    verifyToken: string | null;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
   const isLogin = mode === "login";
 
   useEffect(() => {
@@ -40,8 +45,23 @@ export function AuthCard({
   }, [oauthError]);
 
   const postAuthPath = invite ? `/invite/${invite}` : "/projects";
-  const githubHref = `${API_URL}/auth/github${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`;
   const googleHref = `${API_URL}/auth/google${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`;
+
+  const verifyLink =
+    awaitingVerification?.verifyToken && typeof window !== "undefined"
+      ? `${window.location.origin}/verify-email/${awaitingVerification.verifyToken}`
+      : null;
+
+  const copyLink = async () => {
+    if (!verifyLink) return;
+    try {
+      await navigator.clipboard.writeText(verifyLink);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 3000);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -51,10 +71,12 @@ export function AuthCard({
     try {
       if (isLogin) {
         await login(email, password);
+        router.push(postAuthPath);
       } else {
-        await signup(name, email, password);
+        const result = await signup(name, email, password);
+        setAwaitingVerification({ email, verifyToken: result.verifyToken });
+        setSubmitting(false);
       }
-      router.push(postAuthPath);
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Something went wrong. Please try again."
@@ -73,28 +95,62 @@ export function AuthCard({
           EnvSync
         </Link>
         <h1 className="font-h1 text-h1 text-on-surface">
-          {isLogin ? "Welcome back" : "Create your account"}
+          {awaitingVerification
+            ? "Check your email"
+            : isLogin
+              ? "Welcome back"
+              : "Create your account"}
         </h1>
         <p className="mt-base font-body-md text-body-md text-secondary">
-          {isLogin
-            ? "Sign in to sync and manage encrypted environment variables."
-            : "Start securing your team's .env files in minutes."}
+          {awaitingVerification
+            ? "Verify your address to finish creating your account."
+            : isLogin
+              ? "Sign in to sync and manage encrypted environment variables."
+              : "Start securing your team's .env files in minutes."}
         </p>
       </div>
 
-      <a
-        href={githubHref}
-        className="mb-md flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container dark:bg-surface-container"
-      >
-        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden>
-          <path
-            fill="currentColor"
-            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"
-          />
-        </svg>
-        Continue with GitHub
-      </a>
+      {awaitingVerification ? (
+        <div className="flex flex-col gap-md">
+          <div className="rounded-lg border border-outline-variant bg-surface-container-low p-md text-center">
+            <Icon name="mark_email_read" className="mb-xs text-primary" style={{ fontSize: 28 }} />
+            <p className="font-body-sm text-body-sm text-secondary">
+              We sent a verification link to <strong>{awaitingVerification.email}</strong>. Your
+              account won&apos;t be created until you click it.
+            </p>
+          </div>
 
+          {verifyLink && (
+            <div className="flex flex-col gap-sm rounded-lg border border-primary/30 bg-primary/5 p-md">
+              <p className="font-body-sm text-body-sm text-secondary">
+                This app has no email provider configured, so your verification link is shown
+                directly here instead — copy it now.
+              </p>
+              <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
+                <span className="truncate pr-md font-code-md text-code-md text-on-surface">
+                  {verifyLink}
+                </span>
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
+                >
+                  <Icon name={copied ? "check" : "content_copy"} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setAwaitingVerification(null)}
+            className="text-center font-body-sm text-body-sm font-medium text-primary hover:underline"
+          >
+            Use a different email
+          </button>
+        </div>
+      ) : (
+        <>
       <a
         href={googleHref}
         className="mb-md flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container dark:bg-surface-container"
@@ -240,6 +296,8 @@ export function AuthCard({
         <p className="mt-md text-center font-body-sm text-body-sm text-outline">
           By creating an account you agree to our Terms and Privacy Policy.
         </p>
+      )}
+      </>
       )}
     </div>
   );

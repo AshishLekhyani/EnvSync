@@ -17,8 +17,7 @@ export default function PrivacyPage() {
             <p>
               We collect the account information you provide directly — name, email address, and
               password (stored only as a salted hash, never in plain text). If you sign in with
-              GitHub or Google, we receive your name, email, and account identifier from that
-              provider.
+              Google, we receive your name, email, and account identifier from that provider.
             </p>
           </section>
 

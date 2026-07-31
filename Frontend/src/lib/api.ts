@@ -258,7 +258,7 @@ export interface InviteSummary {
 }
 
 export interface InviteCreated extends InviteSummary {
-  token: string;
+  token: string | null;
 }
 
 export interface PublicInvite {
@@ -291,7 +291,7 @@ export interface ProjectAccessRequestSummary {
 
 export const api = {
   signup: (input: { name: string; email: string; password: string }) =>
-    request<{ user: PublicUser }>("/auth/signup", {
+    request<{ sent: boolean; verifyToken: string | null }>("/auth/signup", {
       method: "POST",
       body: JSON.stringify(input),
     }),
@@ -343,14 +343,15 @@ export const api = {
     }),
 
   verifyEmail: (token: string) =>
-    request<void>("/auth/verify-email", {
+    request<AuthResponse>("/auth/verify-email", {
       method: "POST",
       body: JSON.stringify({ token }),
     }),
 
-  resendVerificationEmail: () =>
+  resendVerificationEmail: (email: string) =>
     request<{ sent: boolean; verifyToken: string | null }>("/auth/resend-verification", {
       method: "POST",
+      body: JSON.stringify({ email }),
     }),
 
   listOrgs: () => request<OrgSummary[]>("/orgs"),

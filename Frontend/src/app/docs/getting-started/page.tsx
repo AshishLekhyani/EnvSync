@@ -18,7 +18,7 @@ export default function GettingStartedDocsPage() {
         <section>
           <h2 className="mb-sm font-h3 text-h3 text-on-surface">1. Create an account</h2>
           <p className="font-body-md text-body-md text-secondary">
-            Sign up with an email and password, or use GitHub/Google if your server has OAuth
+            Sign up with an email and password, or use Google if your server has OAuth
             configured. There&apos;s nothing to install for the web app — it runs entirely in
             the browser.
           </p>

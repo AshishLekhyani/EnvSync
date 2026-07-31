@@ -8,6 +8,7 @@ import {
   DeleteAccountInput,
   ForgotPasswordInput,
   LoginInput,
+  ResendSignupVerificationInput,
   ResetPasswordInput,
   SignupInput,
   UpdateProfileInput,
@@ -37,8 +38,8 @@ export function sessionMeta(req: Request) {
 }
 
 export const signup = asyncHandler(async (req, res) => {
-  const user = await authService.signup(req.body as SignupInput);
-  res.status(201).json({ user });
+  const result = await authService.signup(req.body as SignupInput);
+  res.status(200).json(result);
 });
 
 export const login = asyncHandler(async (req, res) => {
@@ -162,11 +163,19 @@ export const deleteAccount = asyncHandler(async (req, res) => {
 });
 
 export const verifyEmail = asyncHandler(async (req, res) => {
-  await authService.verifyEmail((req.body as VerifyEmailInput).token);
-  res.status(204).send();
+  const user = await authService.verifySignup((req.body as VerifyEmailInput).token);
+  const { accessToken, refreshToken } = await authService.issueSession(
+    user.id,
+    user.email,
+    sessionMeta(req)
+  );
+  setRefreshCookie(res, refreshToken);
+  res.status(200).json({ user, accessToken });
 });
 
 export const resendVerification = asyncHandler(async (req, res) => {
-  const result = await authService.resendVerificationEmail(req.user!.id);
+  const result = await authService.resendSignupVerification(
+    (req.body as ResendSignupVerificationInput).email
+  );
   res.status(200).json(result);
 });

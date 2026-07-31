@@ -1,5 +1,4 @@
 import { runExpiryScan } from "../src/modules/notifications/expiryScanner";
-import { findOrCreateGithubUser } from "../src/modules/auth/github.service";
 import { findOrCreateGoogleUser } from "../src/modules/auth/google.service";
 import { changePassword as changePasswordDirect } from "../src/modules/auth/auth.service";
 import { BadRequestError, ConflictError } from "../src/common/errors/AppError";
@@ -30,6 +29,32 @@ function fail(label: string, detail?: unknown): never {
   throw new Error(`smoke test failed: ${label}`);
 }
 
+async function signupAndVerify(name: string, email: string, password: string) {
+  let r = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email, password }),
+  });
+  const signupBody = await r.json();
+  if (r.status !== 200 || typeof signupBody.verifyToken !== "string") {
+    fail(`signup for ${email} should return a dev-mode verifyToken`, signupBody);
+  }
+
+  r = await fetch(`${BASE}/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: signupBody.verifyToken }),
+  });
+  const verifyBody = await r.json();
+  if (r.status !== 200) fail(`verify-email for ${email}`, verifyBody);
+
+  return {
+    accessToken: verifyBody.accessToken as string,
+    user: verifyBody.user,
+    refreshCookie: extractCookie(r.headers.get("set-cookie"), "refreshToken"),
+  };
+}
+
 async function main() {
   if (isEmailConfigured()) {
     fail(
@@ -42,50 +67,16 @@ async function main() {
   const viewerEmail = `viewer-${rand}@example.com`;
   const password = "supersecret123";
 
-  let res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Owner User", email: ownerEmail, password }),
-  });
-  if (res.status !== 201) fail("signup owner", await res.text());
-  ok("signup owner");
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: ownerEmail, password }),
-  });
-  const loginBody = await res.json();
-  if (res.status !== 200) fail("login owner", loginBody);
-  ok("login owner");
-  const ownerAccessToken: string = loginBody.accessToken;
-  const ownerRefreshCookie = extractCookie(res.headers.get("set-cookie"), "refreshToken");
+  const ownerSignup = await signupAndVerify("Owner User", ownerEmail, password);
+  ok("signup + verify owner");
+  const ownerAccessToken: string = ownerSignup.accessToken;
+  const ownerRefreshCookie = ownerSignup.refreshCookie;
   if (!ownerRefreshCookie) fail("capture refresh cookie");
 
-  res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(ownerAccessToken) });
+  let res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(ownerAccessToken) });
   const me = await res.json();
   if (res.status !== 200 || me.email !== ownerEmail) fail("get me", me);
   ok("get me");
-
-  const fakeGithubProfile = { githubId: `gh-${rand}`, email: `github-${rand}@example.com`, name: "GH User" };
-  const ghUser1 = await findOrCreateGithubUser(fakeGithubProfile);
-  if (ghUser1.authProvider !== "GITHUB" || ghUser1.email !== fakeGithubProfile.email) {
-    fail("create GITHUB user", ghUser1);
-  }
-  ok("findOrCreateGithubUser creates a new GITHUB user on first call");
-
-  const ghUser2 = await findOrCreateGithubUser(fakeGithubProfile);
-  if (ghUser2.id !== ghUser1.id) fail("find-not-recreate on repeat login", ghUser2);
-  ok("findOrCreateGithubUser is idempotent for the same GitHub identity");
-
-  let collided = false;
-  try {
-    await findOrCreateGithubUser({ githubId: `gh-collide-${rand}`, email: ownerEmail, name: "Collider" });
-  } catch (err) {
-    collided = err instanceof ConflictError;
-  }
-  if (!collided) fail("email collision with an existing PASSWORD account should throw ConflictError");
-  ok("findOrCreateGithubUser rejects email collision with an existing PASSWORD account (no raw P2002 leak)");
 
   const fakeGoogleProfile = { googleId: `gg-${rand}`, email: `google-${rand}@example.com`, name: "Google User" };
   const gUser1 = await findOrCreateGoogleUser(fakeGoogleProfile);
@@ -255,23 +246,9 @@ async function main() {
   if (res.status !== 201) fail("create prod secret", prodSecret);
   ok("create prod secret");
 
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Viewer User", email: viewerEmail, password }),
-  });
-  if (res.status !== 201) fail("signup viewer", await res.text());
-  ok("signup viewer");
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: viewerEmail, password }),
-  });
-  const viewerLogin = await res.json();
-  if (res.status !== 200) fail("login viewer", viewerLogin);
-  ok("login viewer");
-  const viewerAccessToken: string = viewerLogin.accessToken;
+  const viewerSignup = await signupAndVerify("Viewer User", viewerEmail, password);
+  ok("signup + verify viewer");
+  const viewerAccessToken: string = viewerSignup.accessToken;
 
   res = await fetch(`${BASE}/orgs/${orgId}/members`, {
     method: "POST",
@@ -534,21 +511,9 @@ async function main() {
   ok("get invite by token returns correct email/role, unaccepted");
 
   const mismatchEmail = `mismatch-${rand}@example.com`;
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Mismatch User", email: mismatchEmail, password }),
-  });
-  if (res.status !== 201) fail("signup mismatch user", await res.text());
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: mismatchEmail, password }),
-  });
-  const mismatchLogin = await res.json();
-  if (res.status !== 200) fail("login mismatch user", mismatchLogin);
-  const mismatchAccessToken: string = mismatchLogin.accessToken;
+  const mismatchAccessToken: string = (
+    await signupAndVerify("Mismatch User", mismatchEmail, password)
+  ).accessToken;
 
   res = await fetch(`${BASE}/invites/${createdInvite.token}/accept`, {
     method: "POST",
@@ -557,21 +522,9 @@ async function main() {
   if (res.status !== 403) fail("accepting an invite with a mismatched email should be 403", await res.text());
   ok("accepting an invite as a different email is rejected (403)");
 
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Invitee User", email: inviteeEmail, password }),
-  });
-  if (res.status !== 201) fail("signup invitee", await res.text());
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: inviteeEmail, password }),
-  });
-  const inviteeLogin = await res.json();
-  if (res.status !== 200) fail("login invitee", inviteeLogin);
-  const inviteeAccessToken: string = inviteeLogin.accessToken;
+  const inviteeAccessToken: string = (
+    await signupAndVerify("Invitee User", inviteeEmail, password)
+  ).accessToken;
 
   res = await fetch(`${BASE}/invites/${createdInvite.token}/accept`, {
     method: "POST",
@@ -610,24 +563,13 @@ async function main() {
     data: { expiresAt: new Date(Date.now() - 1000) },
   });
 
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Expiring User", email: `expiring-${rand}@example.com`, password }),
-  });
-  if (res.status !== 201) fail("signup expiring-invite user", await res.text());
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: `expiring-${rand}@example.com`, password }),
-  });
-  const expiringLogin = await res.json();
-  if (res.status !== 200) fail("login expiring-invite user", expiringLogin);
+  const expiringAccessToken: string = (
+    await signupAndVerify("Expiring User", `expiring-${rand}@example.com`, password)
+  ).accessToken;
 
   res = await fetch(`${BASE}/invites/${expiringInvite.token}/accept`, {
     method: "POST",
-    headers: authHeaders(expiringLogin.accessToken),
+    headers: authHeaders(expiringAccessToken),
   });
   if (res.status !== 409) fail("accepting an expired invite should be 409", await res.text());
   ok("accepting an expired invite is rejected (409)");
@@ -894,20 +836,8 @@ async function main() {
   ok("viewer cannot update org (403, member but insufficient role)");
 
   const thirdEmail = `third-${rand}@example.com`;
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Third User", email: thirdEmail, password }),
-  });
-  if (res.status !== 201) fail("signup third user", await res.text());
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: thirdEmail, password }),
-  });
-  const thirdLogin = await res.json();
-  if (res.status !== 200) fail("login third user", thirdLogin);
-  const thirdAccessToken: string = thirdLogin.accessToken;
+  const thirdAccessToken: string = (await signupAndVerify("Third User", thirdEmail, password))
+    .accessToken;
 
   res = await fetch(`${BASE}/orgs/${orgId}/members`, {
     method: "POST",
@@ -962,22 +892,10 @@ async function main() {
   // --- Project-level access control ---
 
   const restrictedEmail = `restricted-${rand}@example.com`;
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Restricted Dev", email: restrictedEmail, password }),
-  });
-  if (res.status !== 201) fail("signup restricted developer", await res.text());
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: restrictedEmail, password }),
-  });
-  const restrictedLogin = await res.json();
-  if (res.status !== 200) fail("login restricted developer", restrictedLogin);
-  const restrictedAccessToken: string = restrictedLogin.accessToken;
-  ok("signup + login restricted developer account");
+  const restrictedAccessToken: string = (
+    await signupAndVerify("Restricted Dev", restrictedEmail, password)
+  ).accessToken;
+  ok("signup + verify restricted developer account");
 
   res = await fetch(`${BASE}/orgs/${orgId}/members`, {
     method: "POST",
@@ -994,10 +912,6 @@ async function main() {
     headers: authHeaders(restrictedAccessToken),
   });
   const restrictedProjectsBeforeGrant = await res.json();
-  // As of Phase 13, a Developer browses the full org project list (can see
-  // it exists and request access) but hasAccess is false until granted --
-  // real access is still zero, just visibility isn't. The strict
-  // zero-visibility default now belongs to Viewer only (tested later).
   if (
     res.status !== 200 ||
     !(restrictedProjectsBeforeGrant as { id: string; hasAccess?: boolean }[]).every(
@@ -1165,21 +1079,9 @@ async function main() {
   }
   ok("create a project-scoped invite (grants org membership + one project's access together)");
 
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Project Invitee", email: projectInviteEmail, password }),
-  });
-  if (res.status !== 201) fail("signup project invitee", await res.text());
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: projectInviteEmail, password }),
-  });
-  const projectInviteeLogin = await res.json();
-  if (res.status !== 200) fail("login project invitee", projectInviteeLogin);
-  const projectInviteeAccessToken: string = projectInviteeLogin.accessToken;
+  const projectInviteeAccessToken: string = (
+    await signupAndVerify("Project Invitee", projectInviteEmail, password)
+  ).accessToken;
 
   res = await fetch(`${BASE}/invites/${projectInvite.token}/accept`, {
     method: "POST",
@@ -1320,16 +1222,6 @@ async function main() {
   }
   ok("deleting an org writes an audit entry that survives the cascade (orgId nulled, metadata snapshot intact)");
 
-  res = await fetch(`${BASE}/auth/github`, { redirect: "manual" });
-  const githubLocation = res.headers.get("location") ?? "";
-  if (res.status < 300 || res.status >= 400 || !githubLocation.includes("error=oauth_not_configured")) {
-    fail("GET /auth/github with no client credentials configured should redirect to oauth_not_configured", {
-      status: res.status,
-      location: githubLocation,
-    });
-  }
-  ok("GET /auth/github redirects to oauth_not_configured when unconfigured (route-level coverage)");
-
   res = await fetch(`${BASE}/auth/google`, { redirect: "manual" });
   const googleLocation = res.headers.get("location") ?? "";
   if (res.status < 300 || res.status >= 400 || !googleLocation.includes("error=oauth_not_configured")) {
@@ -1352,7 +1244,7 @@ async function main() {
 
   let oauthPasswordChangeRejected = false;
   try {
-    await changePasswordDirect(ghUser1.id, {
+    await changePasswordDirect(gUser1.id, {
       currentPassword: "whatever",
       newPassword: "newsupersecret123",
     });
@@ -1367,27 +1259,10 @@ async function main() {
   const profileTestEmail = `profile-${rand}@example.com`;
   const profileTestPassword = "supersecret123";
 
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: "Profile Tester",
-      email: profileTestEmail,
-      password: profileTestPassword,
-    }),
-  });
-  if (res.status !== 201) fail("signup profile-test account", await res.text());
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: profileTestEmail, password: profileTestPassword }),
-  });
-  const profileLogin = await res.json();
-  if (res.status !== 200) fail("login profile-test account", profileLogin);
-  ok("signup + login dedicated profile-test account");
-  const profileAccessToken: string = profileLogin.accessToken;
-  const profileRefreshCookie = extractCookie(res.headers.get("set-cookie"), "refreshToken");
+  const profileSignup = await signupAndVerify("Profile Tester", profileTestEmail, profileTestPassword);
+  ok("signup + verify dedicated profile-test account");
+  const profileAccessToken: string = profileSignup.accessToken;
+  const profileRefreshCookie = profileSignup.refreshCookie;
   if (!profileRefreshCookie) fail("capture profile-test refresh cookie");
 
   res = await fetch(`${BASE}/auth/me`, {
@@ -1456,7 +1331,7 @@ async function main() {
   res = await fetch(`${BASE}/auth/forgot-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: fakeGithubProfile.email }),
+    body: JSON.stringify({ email: fakeGoogleProfile.email }),
   });
   const oauthForgot = await res.json();
   if (res.status !== 200 || oauthForgot.resetToken !== null) {
@@ -1558,23 +1433,19 @@ async function main() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: "Verify Test", email: verifyTestEmail, password }),
   });
-  if (res.status !== 201) fail("signup for verification test", await res.text());
+  const signupResult = await res.json();
+  if (res.status !== 200 || typeof signupResult.verifyToken !== "string") {
+    fail("signup should return a dev-mode verifyToken (SMTP unconfigured)", signupResult);
+  }
+  ok("signup returns a dev-mode verifyToken instead of creating an account immediately");
 
   res = await fetch(`${BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: verifyTestEmail, password }),
   });
-  const verifyLogin = await res.json();
-  if (res.status !== 200) fail("login for verification test", verifyLogin);
-  const verifyAccessToken: string = verifyLogin.accessToken;
-
-  res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(verifyAccessToken) });
-  const meAfterSignup = await res.json();
-  if (meAfterSignup.emailVerifiedAt !== null) {
-    fail("a freshly signed-up user should not be verified yet", meAfterSignup);
-  }
-  ok("a freshly signed-up user starts unverified");
+  if (res.status !== 401) fail("login before verification should be 401 (no account exists yet)", await res.text());
+  ok("no account exists until the email is verified");
 
   res = await fetch(`${BASE}/auth/verify-email`, {
     method: "POST",
@@ -1586,28 +1457,47 @@ async function main() {
 
   res = await fetch(`${BASE}/auth/resend-verification`, {
     method: "POST",
-    headers: authHeaders(verifyAccessToken),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: `no-pending-signup-${rand}@example.com` }),
+  });
+  const noopResend = await res.json();
+  if (res.status !== 200 || noopResend.sent !== false || noopResend.verifyToken !== null) {
+    fail("resend-verification for an email with no pending signup should be a silent no-op", noopResend);
+  }
+  ok("resend-verification for a nonexistent pending signup is a silent no-op (no enumeration leak)");
+
+  res = await fetch(`${BASE}/auth/resend-verification`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: verifyTestEmail }),
   });
   const resendResult = await res.json();
   if (res.status !== 200 || typeof resendResult.verifyToken !== "string") {
-    fail("resend-verification should return a dev-mode token when SMTP is unconfigured", resendResult);
+    fail("resend-verification should return a fresh dev-mode token for a pending signup", resendResult);
   }
-  ok("resend-verification returns a dev-mode token when SMTP is unconfigured");
+  ok("resend-verification returns a fresh dev-mode token for a pending signup");
+
+  res = await fetch(`${BASE}/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: signupResult.verifyToken }),
+  });
+  if (res.status !== 401) fail("the original token should be invalidated once resent", await res.text());
+  ok("resending verification invalidates the previous token");
 
   res = await fetch(`${BASE}/auth/verify-email`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token: resendResult.verifyToken }),
   });
-  if (res.status !== 204) fail("verify-email with a valid token should be 204", await res.text());
-  ok("verify-email succeeds with a valid token (204)");
-
-  res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(verifyAccessToken) });
-  const meAfterVerify = await res.json();
-  if (typeof meAfterVerify.emailVerifiedAt !== "string") {
-    fail("emailVerifiedAt should be set after verification", meAfterVerify);
+  const verifyResult = await res.json();
+  if (res.status !== 200 || verifyResult.user?.email !== verifyTestEmail || !verifyResult.accessToken) {
+    fail("verify-email with a valid token should create the account and log in", verifyResult);
   }
-  ok("emailVerifiedAt is set after verification");
+  if (typeof verifyResult.user.emailVerifiedAt !== "string") {
+    fail("the newly-created account should already be marked verified", verifyResult);
+  }
+  ok("verify-email creates the account, marks it verified, and logs in (200)");
 
   res = await fetch(`${BASE}/auth/verify-email`, {
     method: "POST",
@@ -1617,32 +1507,26 @@ async function main() {
   if (res.status !== 401) fail("reusing an already-used verify token should be 401", await res.text());
   ok("an already-used verify token is rejected (401)");
 
-  res = await fetch(`${BASE}/auth/resend-verification`, {
+  res = await fetch(`${BASE}/auth/login`, {
     method: "POST",
-    headers: authHeaders(verifyAccessToken),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: verifyTestEmail, password }),
   });
-  if (res.status !== 409) {
-    fail("resend-verification for an already-verified account should be 409", await res.text());
-  }
-  ok("resend-verification is rejected once already verified (409)");
+  if (res.status !== 200) fail("login should succeed once the account exists post-verification", await res.text());
+  ok("login succeeds normally after verification");
+
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Verify Test Again", email: verifyTestEmail, password }),
+  });
+  if (res.status !== 409) fail("signing up again with a now-real account's email should be 409", await res.text());
+  ok("signup rejects an email that's already a real account (409)");
 
   // --- Phase 12: role-assignment hierarchy, invite approval workflow, auto-approve, account deletion ---
 
   async function signupLogin(name: string, email: string): Promise<string> {
-    let r = await fetch(`${BASE}/auth/signup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
-    });
-    if (r.status !== 201) fail(`signup ${name}`, await r.text());
-    r = await fetch(`${BASE}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const body = await r.json();
-    if (r.status !== 200) fail(`login ${name}`, body);
-    return body.accessToken;
+    return (await signupAndVerify(name, email, password)).accessToken;
   }
 
   const hierAdminEmail = `hier-admin-${rand}@example.com`;
@@ -2187,9 +2071,6 @@ async function main() {
 
   // --- Audit log filters ---
 
-  // The script's original owner JWT was minted near the very start of this
-  // (now very long) run and access tokens are short-lived -- log in fresh
-  // rather than risk an unrelated 401 from an expired token this late in.
   res = await fetch(`${BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2289,21 +2170,8 @@ async function main() {
   ok("owner disables the approvalRequests notification preference");
 
   const prefsDevEmail = `prefsdev-${rand}@example.com`;
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Prefs Dev", email: prefsDevEmail, password }),
-  });
-  if (res.status !== 201) fail("signup prefs-dev", await res.text());
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: prefsDevEmail, password }),
-  });
-  const prefsDevLogin = await res.json();
-  if (res.status !== 200) fail("login prefs-dev", prefsDevLogin);
-  const prefsDevToken: string = prefsDevLogin.accessToken;
+  const prefsDevToken: string = (await signupAndVerify("Prefs Dev", prefsDevEmail, password))
+    .accessToken;
 
   res = await fetch(`${BASE}/orgs/${orgId}/members`, {
     method: "POST",
@@ -2368,21 +2236,8 @@ async function main() {
   // --- Team member self-visibility (Part 1) ---
 
   const selfDevEmail = `selfdev-${rand}@example.com`;
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Self Dev", email: selfDevEmail, password }),
-  });
-  if (res.status !== 201) fail("signup self-visibility dev", await res.text());
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: selfDevEmail, password }),
-  });
-  const selfDevLogin = await res.json();
-  if (res.status !== 200) fail("login self-visibility dev", selfDevLogin);
-  const selfDevToken: string = selfDevLogin.accessToken;
+  const selfDevToken: string = (await signupAndVerify("Self Dev", selfDevEmail, password))
+    .accessToken;
 
   res = await fetch(`${BASE}/orgs/${orgId}/members`, {
     method: "POST",
@@ -2437,19 +2292,8 @@ async function main() {
   ok("requester receives a project_access.approved notification");
 
   const rejectDevEmail = `rejectdev-${rand}@example.com`;
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Reject Dev", email: rejectDevEmail, password }),
-  });
-  if (res.status !== 201) fail("signup reject-notification dev", await res.text());
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: rejectDevEmail, password }),
-  });
-  const rejectDevLogin = await res.json();
-  const rejectDevToken: string = rejectDevLogin.accessToken;
+  const rejectDevToken: string = (await signupAndVerify("Reject Dev", rejectDevEmail, password))
+    .accessToken;
   res = await fetch(`${BASE}/orgs/${orgId}/members`, {
     method: "POST",
     headers: authHeaders(ownerAccessToken),
@@ -2523,19 +2367,9 @@ async function main() {
   if (res.status !== 201) fail("create throwaway project for delete test", throwawayProject);
 
   const deleteTestAdminEmail = `delproj-admin-${rand}@example.com`;
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Delete Test Admin", email: deleteTestAdminEmail, password }),
-  });
-  if (res.status !== 201) fail("signup delete-test admin", await res.text());
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: deleteTestAdminEmail, password }),
-  });
-  const deleteTestAdminLogin = await res.json();
-  const deleteTestAdminToken: string = deleteTestAdminLogin.accessToken;
+  const deleteTestAdminToken: string = (
+    await signupAndVerify("Delete Test Admin", deleteTestAdminEmail, password)
+  ).accessToken;
   res = await fetch(`${BASE}/orgs/${orgId}/members`, {
     method: "POST",
     headers: authHeaders(ownerAccessToken),
@@ -2654,19 +2488,9 @@ async function main() {
   const leftInvite = await res.json();
   if (res.status !== 201) fail("create invite for the leaves-after-accepting test", leftInvite);
 
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Left Invite", email: leftInviteEmail, password }),
-  });
-  if (res.status !== 201) fail("signup leaves-after-accepting invitee", await res.text());
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: leftInviteEmail, password }),
-  });
-  const leftInviteLogin = await res.json();
-  const leftInviteToken: string = leftInviteLogin.accessToken;
+  const leftInviteToken: string = (
+    await signupAndVerify("Left Invite", leftInviteEmail, password)
+  ).accessToken;
 
   res = await fetch(`${BASE}/invites/${leftInvite.token}/accept`, {
     method: "POST",
@@ -2740,13 +2564,6 @@ async function main() {
   if (res.status !== 403) fail("API token should not be able to delete the account", await res.text());
   ok("API token cannot delete the account (403, session auth required)");
 
-  res = await fetch(`${BASE}/auth/resend-verification`, {
-    method: "POST",
-    headers: authHeaders(auditRawToken),
-  });
-  if (res.status !== 403) fail("API token should not be able to resend a verification email", await res.text());
-  ok("API token cannot resend a verification email (403, session auth required)");
-
   // --- GET /auth/me stays reachable for a token (CLI login needs it) but its org list is scoped ---
 
   res = await fetch(`${BASE}/orgs`, {
@@ -2775,25 +2592,17 @@ async function main() {
   // --- Notifications are org-scoped for API-token auth ---
 
   const notifScopeDevEmail = `notifscope-dev-${rand}@example.com`;
-  await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Notif Scope Dev", email: notifScopeDevEmail, password }),
-  });
+  const notifScopeDevToken = (
+    await signupAndVerify("Notif Scope Dev", notifScopeDevEmail, password)
+  ).accessToken;
   await fetch(`${BASE}/orgs/${orgId}/members`, {
     method: "POST",
     headers: authHeaders(ownerAccessToken),
     body: JSON.stringify({ email: notifScopeDevEmail, role: "DEVELOPER" }),
   });
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: notifScopeDevEmail, password }),
-  });
-  const notifScopeDevLogin = await res.json();
   res = await fetch(`${BASE}/orgs/${orgId}/projects/${projectId}/access-requests`, {
     method: "POST",
-    headers: authHeaders(notifScopeDevLogin.accessToken),
+    headers: authHeaders(notifScopeDevToken),
   });
   if (res.status !== 201) fail("notif-scope dev requests project access to generate an owner notification", await res.text());
 
@@ -2840,12 +2649,7 @@ async function main() {
   ok("audit log purge rejects a malformed 'before' date with a clean 400 instead of a 500");
 
   const hammerEmail = `hammer-${rand}@example.com`;
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Hammer", email: hammerEmail, password }),
-  });
-  if (res.status !== 201) fail("signup hammer test account", await res.text());
+  await signupAndVerify("Hammer", hammerEmail, password);
 
   let loginRateLimited = false;
   for (let i = 0; i < 20; i++) {
@@ -2876,9 +2680,6 @@ async function main() {
   ok("a different account sharing the same IP is unaffected (email+IP keying confirmed, no NAT lockout)");
 
   let signupRateLimited = false;
-  // Bounded generously above the limiter's max, not tied to it exactly --
-  // this loop's only job is to prove *some* 429 eventually fires, however
-  // many legitimate signups this script has already made by this point.
   for (let i = 0; i < 50; i++) {
     res = await fetch(`${BASE}/auth/signup`, {
       method: "POST",
@@ -2895,7 +2696,7 @@ async function main() {
       signupRateLimited = true;
       break;
     }
-    if (res.status !== 201) fail(`unexpected status during signup hammer (attempt ${i})`, await res.text());
+    if (res.status !== 200) fail(`unexpected status during signup hammer (attempt ${i})`, await res.text());
   }
   if (!signupRateLimited) fail("expected signup rate limiter to trigger 429 within 50 signups from one IP");
   ok("repeated signups from one IP trigger 429 (signup abuse protection)");

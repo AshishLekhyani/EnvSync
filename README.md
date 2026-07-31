@@ -4,7 +4,7 @@ A Doppler/Infisical-style secrets manager: organizations, projects, and environm
 
 ## Features
 
-- **Auth**: email/password (argon2id) or GitHub/Google OAuth, with real email verification
+- **Auth**: email/password (argon2id) or Google OAuth, with real email verification
 - **Organizations & RBAC**: OWNER/ADMIN/DEVELOPER/VIEWER roles, a per-org role × environment-tier permission matrix (with sane defaults, overridable per org), plus project-level access control
 - **Projects & environments**: DEVELOPMENT/TESTING/STAGING/PRODUCTION tiers per project
 - **Secrets**: AES-256-GCM encrypted at rest, full version history with restore, rotation, and optional expiration
@@ -28,7 +28,7 @@ Cli/        @ashishlekhyani/envsync-cli — the command-line client
 
 Requires Node >=18 and a local PostgreSQL instance.
 
-1. Copy `Backend/.env.example` to `Backend/.env` and fill in `DATABASE_URL`, `JWT_ACCESS_SECRET`, and `ENCRYPTION_MASTER_KEY` (32 random bytes, base64-encoded, prefixed `base64:`). `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` and `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are optional — OAuth login is disabled gracefully if unset. `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`EMAIL_FROM` are also optional — without them, password reset/invite/verification links are shown directly in the UI instead of emailed (see the comments in `.env.example` for Gmail/Outlook app-password setup).
+1. Copy `Backend/.env.example` to `Backend/.env` and fill in `DATABASE_URL`, `JWT_ACCESS_SECRET`, and `ENCRYPTION_MASTER_KEY` (32 random bytes, base64-encoded, prefixed `base64:`). `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are optional — Google OAuth login is disabled gracefully if unset. `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`EMAIL_FROM` are also optional — without them, password reset/invite/verification links are shown directly in the UI instead of emailed (see the comments in `.env.example` for Gmail/Outlook app-password setup).
 2. From `Backend/`: `npx prisma migrate dev` to create the schema.
 3. From the repo root:
    - `npm install`

@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 
 export default function VerifyEmailPage() {
   const { token } = useParams<{ token: string }>();
-  const { user, loading: authLoading, refreshMe } = useAuth();
+  const router = useRouter();
+  const { verifyAndLogin } = useAuth();
 
   const [status, setStatus] = useState<"pending" | "success" | "error">("pending");
   const [error, setError] = useState<string | null>(null);
@@ -20,11 +21,10 @@ export default function VerifyEmailPage() {
     if (ran.current) return;
     ran.current = true;
 
-    api
-      .verifyEmail(token)
+    verifyAndLogin(token)
       .then(() => {
         setStatus("success");
-        refreshMe();
+        window.setTimeout(() => router.push("/projects"), 1500);
       })
       .catch((err) => {
         setStatus("error");
@@ -55,16 +55,8 @@ export default function VerifyEmailPage() {
             <Icon name="check_circle" className="text-primary" style={{ fontSize: 32 }} />
             <h1 className="font-h1 text-h1 text-on-surface">Email verified</h1>
             <p className="font-body-sm text-body-sm text-secondary">
-              Your email address is confirmed.
+              Your account is ready. Taking you in...
             </p>
-            {!authLoading && (
-              <Link
-                href={user ? "/projects" : "/login"}
-                className="w-full rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90"
-              >
-                {user ? "Go to Projects" : "Log in"}
-              </Link>
-            )}
           </div>
         )}
 
@@ -74,10 +66,10 @@ export default function VerifyEmailPage() {
             <h1 className="font-h1 text-h1 text-on-surface">Verification failed</h1>
             <p className="font-body-sm text-body-sm text-secondary">{error}</p>
             <Link
-              href={user ? "/settings/profile" : "/login"}
-              className="w-full rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface"
+              href="/signup"
+              className="w-full rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90"
             >
-              {user ? "Back to Settings" : "Log in"}
+              Back to Sign Up
             </Link>
           </div>
         )}

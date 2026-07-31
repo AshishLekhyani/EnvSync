@@ -6,6 +6,19 @@ export const metadata = { title: "Changelog — EnvSync" };
 
 const ENTRIES = [
   {
+    version: "v0.16",
+    date: "July 2026",
+    title: "Going live: real email, verified signup, Google-only OAuth",
+    items: [
+      "Password reset, invites, and email verification now send real email via SMTP when configured, instead of only showing the link in the UI.",
+      "Signup now requires email verification before an account is created — no more usable, unverified accounts.",
+      "Removed GitHub OAuth sign-in; Google OAuth remains.",
+      "Deployed to production (Vercel frontend, Render backend, Neon Postgres) with a branded loading screen for cold starts.",
+      "Published the CLI to npm as @ashishlekhyani/envsync-cli.",
+      "Added a real favicon and app icon.",
+    ],
+  },
+  {
     version: "v0.15",
     date: "July 2026",
     title: "Live updates, real confirmation dialogs, audit retention",

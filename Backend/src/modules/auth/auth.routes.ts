@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { validate } from "../../common/validation/validate";
 import * as authController from "./auth.controller";
-import * as githubController from "./github.controller";
 import * as googleController from "./google.controller";
 import { requireAuth, requireSessionAuth } from "./auth.middleware";
 import {
@@ -18,6 +17,7 @@ import {
   deleteAccountSchema,
   forgotPasswordSchema,
   loginSchema,
+  resendSignupVerificationSchema,
   resetPasswordSchema,
   signupSchema,
   updateProfileSchema,
@@ -90,12 +90,9 @@ authRouter.post(
 );
 authRouter.post(
   "/resend-verification",
-  requireAuth,
-  requireSessionAuth,
   resendVerificationRateLimiter,
+  validate({ body: resendSignupVerificationSchema }),
   authController.resendVerification
 );
-authRouter.get("/github", githubController.start);
-authRouter.get("/github/callback", githubController.callback);
 authRouter.get("/google", googleController.start);
 authRouter.get("/google/callback", googleController.callback);

@@ -91,6 +91,7 @@ export async function findOrCreateGoogleUser(profile: GoogleProfile) {
       name: profile.name,
       authProvider: "GOOGLE",
       providerId: profile.googleId,
+      emailVerifiedAt: new Date(),
     },
   });
 }
