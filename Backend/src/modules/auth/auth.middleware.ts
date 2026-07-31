@@ -1,5 +1,6 @@
+import { NextFunction, Request, Response } from "express";
 import { asyncHandler } from "../../common/middleware/asyncHandler";
-import { UnauthorizedError } from "../../common/errors/AppError";
+import { ForbiddenError, UnauthorizedError } from "../../common/errors/AppError";
 import { verifyAccessToken } from "./tokens";
 import { authenticateApiToken, TOKEN_PREFIX } from "../apiTokens/apiToken.service";
 
@@ -32,3 +33,10 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
 
   next();
 });
+
+export function requireSessionAuth(req: Request, _res: Response, next: NextFunction) {
+  if (req.apiTokenId) {
+    throw new ForbiddenError("This action requires a full login session, not an API token");
+  }
+  next();
+}

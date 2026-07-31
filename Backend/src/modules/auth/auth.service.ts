@@ -241,7 +241,7 @@ export async function findSessionByRefreshToken(rawRefreshToken: string) {
   return prisma.session.findFirst({ where: { refreshTokenHash: tokenHash } });
 }
 
-export async function getMe(userId: string) {
+export async function getMe(userId: string, restrictToOrgId?: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
   if (!user) {
@@ -249,7 +249,7 @@ export async function getMe(userId: string) {
   }
 
   const memberships = await prisma.orgMembership.findMany({
-    where: { userId },
+    where: { userId, ...(restrictToOrgId ? { orgId: restrictToOrgId } : {}) },
     include: { org: true },
   });
 

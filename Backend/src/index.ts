@@ -1,6 +1,9 @@
 import { createApp } from "./app";
 import { env } from "./config/env";
+import { getMasterKey } from "./modules/encryption/masterKey";
 import { startExpiryScanner } from "./modules/notifications/expiryScanner";
+
+getMasterKey();
 
 const app = createApp();
 

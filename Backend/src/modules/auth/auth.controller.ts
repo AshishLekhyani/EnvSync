@@ -76,7 +76,7 @@ export const logout = asyncHandler(async (req, res) => {
 });
 
 export const me = asyncHandler(async (req, res) => {
-  const data = await authService.getMe(req.user!.id);
+  const data = await authService.getMe(req.user!.id, req.apiTokenOrgId);
   res.status(200).json(data);
 });
 
@@ -116,14 +116,21 @@ export const events = asyncHandler(async (req, res) => {
 
   registerConnection(session.userId, res);
 
-  const heartbeat = setInterval(() => {
-    res.write(": heartbeat\n\n");
-  }, 20000);
-
-  req.on("close", () => {
+  const cleanup = () => {
     clearInterval(heartbeat);
     unregisterConnection(session.userId, res);
-  });
+  };
+
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(": heartbeat\n\n");
+    } catch {
+      cleanup();
+    }
+  }, 20000);
+
+  res.on("error", cleanup);
+  req.on("close", cleanup);
 });
 
 export const changePassword = asyncHandler(async (req, res) => {

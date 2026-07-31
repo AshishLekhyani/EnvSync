@@ -2599,6 +2599,144 @@ async function main() {
   }
   ok("an invite disappears from the Sent Invites list once the invitee leaves the org");
 
+  // --- Security audit fixes: API tokens can no longer act as account-level session auth ---
+
+  res = await fetch(`${BASE}/orgs/${orgId}/tokens`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ name: "Security audit test token" }),
+  });
+  const auditToken = await res.json();
+  if (res.status !== 201) fail("create token for account-level-block tests", auditToken);
+  const auditRawToken: string = auditToken.token;
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "PATCH",
+    headers: authHeaders(auditRawToken),
+    body: JSON.stringify({ name: "Should Not Work" }),
+  });
+  if (res.status !== 403) fail("API token should not be able to PATCH /auth/me", await res.text());
+  ok("API token cannot update the profile (403, session auth required)");
+
+  res = await fetch(`${BASE}/auth/change-password`, {
+    method: "POST",
+    headers: authHeaders(auditRawToken),
+    body: JSON.stringify({ currentPassword: "whatever", newPassword: "irrelevant123" }),
+  });
+  if (res.status !== 403) fail("API token should not be able to change the password", await res.text());
+  ok("API token cannot change the account password (403, session auth required)");
+
+  res = await fetch(`${BASE}/auth/sessions`, { headers: authHeaders(auditRawToken) });
+  if (res.status !== 403) fail("API token should not be able to list sessions", await res.text());
+  ok("API token cannot list account sessions (403, session auth required)");
+
+  res = await fetch(`${BASE}/auth/sessions/nonexistent-id`, {
+    method: "DELETE",
+    headers: authHeaders(auditRawToken),
+  });
+  if (res.status !== 403) fail("API token should not be able to revoke a session", await res.text());
+  ok("API token cannot revoke a session (403, session auth required)");
+
+  res = await fetch(`${BASE}/auth/me`, {
+    method: "DELETE",
+    headers: authHeaders(auditRawToken),
+    body: JSON.stringify({ confirmEmail: ownerEmail }),
+  });
+  if (res.status !== 403) fail("API token should not be able to delete the account", await res.text());
+  ok("API token cannot delete the account (403, session auth required)");
+
+  // --- GET /auth/me stays reachable for a token (CLI login needs it) but its org list is scoped ---
+
+  res = await fetch(`${BASE}/orgs`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ name: "Second Owner Org", slug: `second-owner-org-${rand}` }),
+  });
+  const secondOrg = await res.json();
+  if (res.status !== 201) fail("create a second org owned by the same user", secondOrg);
+
+  res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(auditRawToken) });
+  const tokenMe = await res.json();
+  if (
+    res.status !== 200 ||
+    !Array.isArray(tokenMe.organizations) ||
+    tokenMe.organizations.length !== 1 ||
+    tokenMe.organizations[0].id !== orgId
+  ) {
+    fail(
+      "GET /auth/me with an API token should only list the token's own org, not every org the user belongs to",
+      tokenMe
+    );
+  }
+  ok("GET /auth/me via an API token is restricted to the token's own org (cross-org membership leak closed)");
+
+  // --- Notifications are org-scoped for API-token auth ---
+
+  const notifScopeDevEmail = `notifscope-dev-${rand}@example.com`;
+  await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Notif Scope Dev", email: notifScopeDevEmail, password }),
+  });
+  await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: notifScopeDevEmail, role: "DEVELOPER" }),
+  });
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: notifScopeDevEmail, password }),
+  });
+  const notifScopeDevLogin = await res.json();
+  res = await fetch(`${BASE}/orgs/${orgId}/projects/${projectId}/access-requests`, {
+    method: "POST",
+    headers: authHeaders(notifScopeDevLogin.accessToken),
+  });
+  if (res.status !== 201) fail("notif-scope dev requests project access to generate an owner notification", await res.text());
+
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(ownerAccessToken) });
+  const ownerNotifsForScopeTest = await res.json();
+  const org1Notif = (
+    ownerNotifsForScopeTest as { id: string; metadata: { orgId?: string } | null }[]
+  ).find((n) => n.metadata?.orgId === orgId);
+  if (!org1Notif) fail("expected at least one notification scoped to orgId to exist", ownerNotifsForScopeTest);
+
+  res = await fetch(`${BASE}/orgs/${secondOrg.id}/tokens`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ name: "Second org token" }),
+  });
+  const secondOrgToken = await res.json();
+  if (res.status !== 201) fail("create a token scoped to the second org", secondOrgToken);
+
+  res = await fetch(`${BASE}/notifications/${org1Notif!.id}`, {
+    method: "DELETE",
+    headers: authHeaders(secondOrgToken.token),
+  });
+  if (res.status !== 404) {
+    fail("a token scoped to a different org should not be able to dismiss this notification (404)", await res.text());
+  }
+  ok("a notification is invisible/unreachable via an API token scoped to a different org");
+
+  res = await fetch(`${BASE}/notifications/${org1Notif!.id}`, {
+    method: "DELETE",
+    headers: authHeaders(auditRawToken),
+  });
+  if (res.status !== 204) {
+    fail("the same notification IS dismissable via a token scoped to its own org", await res.text());
+  }
+  ok("the same notification is reachable via a token scoped to the correct org (fix isn't overly broad)");
+
+  // --- Audit purge rejects a malformed date cleanly ---
+
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?before=not-a-date`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 400) fail("audit purge with a malformed date should be a clean 400", await res.text());
+  ok("audit log purge rejects a malformed 'before' date with a clean 400 instead of a 500");
+
   const hammerEmail = `hammer-${rand}@example.com`;
   res = await fetch(`${BASE}/auth/signup`, {
     method: "POST",

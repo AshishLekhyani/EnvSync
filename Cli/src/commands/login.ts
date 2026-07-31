@@ -7,11 +7,25 @@ interface MeResponse {
   name: string;
 }
 
+function readStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => (data += chunk));
+    process.stdin.on("end", () => resolve(data.trim()));
+    process.stdin.on("error", reject);
+  });
+}
+
 export async function runLogin(args: string[]): Promise<void> {
-  const token = args[0];
+  let token = args[0];
+
+  if (!token && !process.stdin.isTTY) {
+    token = await readStdin();
+  }
 
   if (!token) {
-    console.error("Usage: envsync login <token>");
+    console.error("Usage: envsync login <token>\n   or: echo $TOKEN | envsync login");
     process.exit(1);
   }
 

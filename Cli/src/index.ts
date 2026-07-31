@@ -13,7 +13,7 @@ function printHelp() {
   console.log(`envsync <command> [options]
 
 Commands:
-  login <token>                                            Authenticate with a service token
+  login [token]                                             Authenticate with a service token (reads stdin if omitted)
   logout                                                    Remove local credentials
   projects                                                  List projects in your organizations
   environments --project <id>                               List environments for a project

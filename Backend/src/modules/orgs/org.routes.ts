@@ -4,6 +4,7 @@ import { orgIdFromParam, requireOrgRole } from "../rbac/rbac.middleware";
 import { validate } from "../../common/validation/validate";
 import * as orgController from "./org.controller";
 import * as membershipController from "./membership.controller";
+import { checkEmailRateLimiter } from "./membership.rateLimit";
 import { createOrgSchema, updateOrgSchema } from "./org.validators";
 import {
   addMemberSchema,
@@ -49,6 +50,7 @@ orgRouter.get(
 );
 orgRouter.get(
   "/:orgId/members/check-email",
+  checkEmailRateLimiter,
   requireOrgRole("ADMIN", orgIdFromParam()),
   validate({ query: checkEmailQuerySchema }),
   membershipController.checkEmailExists

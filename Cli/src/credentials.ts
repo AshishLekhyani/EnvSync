@@ -21,7 +21,7 @@ export function readCredentials(): Credentials | null {
 }
 
 export function writeCredentials(credentials: Credentials): void {
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
   fs.writeFileSync(CREDENTIALS_PATH, JSON.stringify(credentials, null, 2), {
     mode: 0o600,
   });

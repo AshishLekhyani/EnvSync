@@ -4,8 +4,8 @@ export const metadata = { title: "CLI Reference — EnvSync Docs" };
 
 const COMMANDS = [
   {
-    cmd: "envsync login <token>",
-    desc: "Authenticate with a service token generated in Settings → CLI & Tokens. Writes credentials to ~/.envsync/credentials.json.",
+    cmd: "envsync login [token]",
+    desc: "Authenticate with a service token generated in Settings → CLI & Tokens. Writes credentials to ~/.envsync/credentials.json. Reads the token from stdin if omitted (e.g. echo $TOKEN | envsync login), avoiding shell history.",
   },
   {
     cmd: "envsync logout",
@@ -75,6 +75,16 @@ export default function CliDocsPage() {
         environment, so each key produces its own audited reveal entry — an environment with
         50 secrets means 50 audit rows per pull. <code className="rounded bg-surface-container px-1 font-code-sm text-code-sm">status</code> never reveals
         values, so it&apos;s audit-quiet by design.
+      </p>
+
+      <p className="mt-md font-body-sm text-body-sm text-secondary">
+        A note on token storage: <code className="rounded bg-surface-container px-1 font-code-sm text-code-sm">envsync login &lt;token&gt;</code> writes
+        the token to <code className="rounded bg-surface-container px-1 font-code-sm text-code-sm">~/.envsync/credentials.json</code>, readable
+        only by your user account. Setting an{" "}
+        <code className="rounded bg-surface-container px-1 font-code-sm text-code-sm">ENVSYNC_TOKEN</code> environment variable instead (common in CI)
+        skips that file, but environment variables are inherited by child processes and can be
+        visible to other tools or users on the same machine — prefer it only in environments
+        you trust, and never pass a token as a bare command-line argument on a shared host.
       </p>
     </DocsShell>
   );

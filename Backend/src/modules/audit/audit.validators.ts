@@ -12,6 +12,6 @@ export const listAuditLogsQuerySchema = z.object({
 export type ListAuditLogsQuery = z.infer<typeof listAuditLogsQuerySchema>;
 
 export const purgeAuditLogsQuerySchema = z.object({
-  before: z.string().min(1),
+  before: z.string().refine((v) => !isNaN(new Date(v).getTime()), "Invalid date"),
 });
 export type PurgeAuditLogsQuery = z.infer<typeof purgeAuditLogsQuerySchema>;

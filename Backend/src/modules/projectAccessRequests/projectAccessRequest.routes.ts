@@ -2,11 +2,13 @@ import { Router } from "express";
 import { requireAuth } from "../auth/auth.middleware";
 import { orgIdFromParam, requireOrgRole } from "../rbac/rbac.middleware";
 import * as accessRequestController from "./projectAccessRequest.controller";
+import { accessRequestCreateRateLimiter } from "./projectAccessRequest.rateLimit";
 
 export const createAccessRequestRouter = Router({ mergeParams: true });
 createAccessRequestRouter.use(requireAuth);
 createAccessRequestRouter.post(
   "/",
+  accessRequestCreateRateLimiter,
   requireOrgRole("VIEWER", orgIdFromParam()),
   accessRequestController.createAccessRequest
 );

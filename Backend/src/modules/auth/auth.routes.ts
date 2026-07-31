@@ -3,7 +3,7 @@ import { validate } from "../../common/validation/validate";
 import * as authController from "./auth.controller";
 import * as githubController from "./github.controller";
 import * as googleController from "./google.controller";
-import { requireAuth } from "./auth.middleware";
+import { requireAuth, requireSessionAuth } from "./auth.middleware";
 import {
   forgotPasswordRateLimiter,
   loginRateLimiter,
@@ -41,12 +41,14 @@ authRouter.get("/me", requireAuth, authController.me);
 authRouter.patch(
   "/me",
   requireAuth,
+  requireSessionAuth,
   validate({ body: updateProfileSchema }),
   authController.updateProfile
 );
 authRouter.post(
   "/change-password",
   requireAuth,
+  requireSessionAuth,
   validate({ body: changePasswordSchema }),
   authController.changePassword
 );
@@ -65,11 +67,17 @@ authRouter.post(
 authRouter.delete(
   "/me",
   requireAuth,
+  requireSessionAuth,
   validate({ body: deleteAccountSchema }),
   authController.deleteAccount
 );
-authRouter.get("/sessions", requireAuth, authController.listSessions);
-authRouter.delete("/sessions/:sessionId", requireAuth, authController.revokeSession);
+authRouter.get("/sessions", requireAuth, requireSessionAuth, authController.listSessions);
+authRouter.delete(
+  "/sessions/:sessionId",
+  requireAuth,
+  requireSessionAuth,
+  authController.revokeSession
+);
 authRouter.get("/events", authController.events);
 authRouter.get("/github", githubController.start);
 authRouter.get("/github/callback", githubController.callback);
