@@ -16,16 +16,20 @@ npm install -g @ashishlekhyani/envsync-cli
    echo "$TOKEN" | envsync login
    ```
    or pass it directly: `envsync login <token>`
-3. Find your project/environment IDs:
+3. Run `envsync` with no arguments — it launches an interactive menu that picks your
+   project, environment, and action (pull/push/run/status) for you. No IDs or flags needed.
+
+Prefer flags/scripting instead? That works too:
+1. Find your project/environment IDs:
    ```
    envsync projects
    envsync environments --project <projectId>
    ```
-4. Link this folder so you don't have to pass `--project`/`--environment` on every command:
+2. Link this folder so you don't have to pass `--project`/`--environment` on every command:
    ```
    envsync link --project <projectId> --environment <environmentId>
    ```
-5. Pull secrets into a local `.env` file:
+3. Pull secrets into a local `.env` file:
    ```
    envsync pull
    ```
@@ -36,6 +40,7 @@ npm install -g @ashishlekhyani/envsync-cli
 |---|---|
 | `envsync login [token]` | Authenticate with a service token. Reads the token from stdin if omitted (`echo $TOKEN \| envsync login`), avoiding shell history. Writes credentials to `~/.envsync/credentials.json` (mode `0600`). |
 | `envsync logout` | Removes local credentials. Does not revoke the token server-side — revoke it from Settings if it may have been compromised. |
+| `envsync` / `envsync menu` | Interactive mode — pick a project/environment (or reuse a linked one), then an action, from a numbered menu. No flags needed. Runs automatically when you type `envsync` with no arguments while logged in. |
 | `envsync projects` | Lists every project you have access to, with its ID. |
 | `envsync environments [--project <id>]` | Lists every environment for a project, with its ID. |
 | `envsync link --project <id> --environment <id>` | Remembers a project/environment for the current folder (writes `.envsync.json` there), so the commands below can omit `--project`/`--environment` entirely. |

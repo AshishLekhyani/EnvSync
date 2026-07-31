@@ -370,6 +370,10 @@ export function CliTab() {
               <div className="space-y-md">
                 {[
                   {
+                    cmd: "envsync",
+                    desc: "No flags to remember — launches an interactive menu that picks your project, environment, and action for you.",
+                  },
+                  {
                     cmd: "envsync run -- <app>",
                     desc: "Inject variables directly into your process without using files.",
                   },
@@ -379,7 +383,7 @@ export function CliTab() {
                   },
                   {
                     cmd: "envsync status",
-                    desc: "Check the drift between your local environment and EnvSync servers.",
+                    desc: "Check the drift between your local environment and EnvSync servers, including what changed since your last pull.",
                   },
                   {
                     cmd: "envsync help",
