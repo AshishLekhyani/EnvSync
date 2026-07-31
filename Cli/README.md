@@ -44,7 +44,7 @@ npm install -g @ashishlekhyani/envsync-cli
 | Variable | Purpose |
 |---|---|
 | `ENVSYNC_TOKEN` | Use a service token directly without running `login` first — the standard way to authenticate in CI (GitHub Actions, Docker builds, etc.). Takes priority over any locally saved credentials. |
-| `ENVSYNC_API_URL` | Point the CLI at a self-hosted EnvSync API instead of the default. Must be HTTPS unless it's `localhost`/`127.0.0.1` — the CLI warns if not. |
+| `ENVSYNC_API_URL` | Point the CLI at a self-hosted EnvSync API instead of the default (`https://envsync-api.onrender.com/api`). Must be HTTPS unless it's `localhost`/`127.0.0.1` — the CLI warns if not. |
 
 ## Notes on audit trails and security
 

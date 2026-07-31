@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = "http://localhost:4000/api";
+const DEFAULT_API_URL = "https://envsync-api.onrender.com/api";
 
 export class ApiError extends Error {
   status: number;
