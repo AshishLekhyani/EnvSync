@@ -1,6 +1,6 @@
 {
   "name": "@ashishlekhyani/envsync-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": false,
   "publishConfig": {
     "access": "public"
@@ -9,7 +9,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AshishLekhyani/EnvSync.git",
+    "url": "git+https://github.com/AshishLekhyani/EnvSync.git",
     "directory": "Cli"
   },
   "keywords": [
