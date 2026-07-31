@@ -12,10 +12,20 @@ export interface Credentials {
 }
 
 export function readCredentials(): Credentials | null {
+  let raw: string;
   try {
-    const raw = fs.readFileSync(CREDENTIALS_PATH, "utf8");
+    raw = fs.readFileSync(CREDENTIALS_PATH, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error(`Warning: couldn't read ${CREDENTIALS_PATH}: ${(err as Error).message}`);
+    }
+    return null;
+  }
+
+  try {
     return JSON.parse(raw) as Credentials;
   } catch {
+    console.error(`Warning: ${CREDENTIALS_PATH} exists but isn't valid JSON. Run \`envsync login\` again.`);
     return null;
   }
 }

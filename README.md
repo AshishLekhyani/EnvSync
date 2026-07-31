@@ -40,7 +40,7 @@ Live at [envsync-five.vercel.app](https://envsync-five.vercel.app). CLI publishe
 
 **API tokens & CLI**
 - Scoped service tokens, identity-inheriting (a token can only ever do what its creator can do) and hard-locked to the org it was issued for
-- Zero-runtime-dependency CLI: `login`, `logout`, `projects`, `environments`, `pull`, `push`, `run`, `status` — reads a token from stdin or `ENVSYNC_TOKEN` for CI use
+- Minimal-dependency CLI (one, `cross-spawn`): `login`, `logout`, `projects`, `environments`, `pull`, `push`, `run`, `status` — reads a token from stdin or `ENVSYNC_TOKEN` for CI use
 - CLI and browser share the exact same RBAC/audit code path — a `pull` is audited identically to a manual reveal
 
 **Everything else**

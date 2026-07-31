@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import spawn from "cross-spawn";
 import { apiRequest } from "../apiClient";
 import { resolveEnvironment } from "../environment";
 import { parseProjectEnvFlags } from "../flags";
@@ -42,6 +42,11 @@ export async function runRun(argv: string[]): Promise<void> {
 
   process.on("SIGINT", () => child.kill("SIGINT"));
   process.on("SIGTERM", () => child.kill("SIGTERM"));
+
+  child.on("error", (err) => {
+    console.error(`Failed to run "${command}": ${err.message}`);
+    process.exitCode = 1;
+  });
 
   child.on("exit", (code) => {
     process.exitCode = code ?? 0;

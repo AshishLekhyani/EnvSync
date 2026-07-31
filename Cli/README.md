@@ -1,6 +1,6 @@
 # @ashishlekhyani/envsync-cli
 
-The command-line client for [EnvSync](https://github.com/AshishLekhyani/EnvSync) — a secrets manager for environment variables. Pull, push, and inject secrets without ever committing a `.env` file. Zero runtime dependencies.
+The command-line client for [EnvSync](https://github.com/AshishLekhyani/EnvSync) — a secrets manager for environment variables. Pull, push, and inject secrets without ever committing a `.env` file. One runtime dependency, [`cross-spawn`](https://www.npmjs.com/package/cross-spawn) (used only by `envsync run`, for correct cross-platform command execution — it has zero dependencies of its own and is the same package npm itself relies on internally).
 
 ## Install
 
