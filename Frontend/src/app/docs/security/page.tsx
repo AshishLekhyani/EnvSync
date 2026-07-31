@@ -35,6 +35,19 @@ export default function SecurityDocsPage() {
         </section>
 
         <section>
+          <h2 className="mb-sm font-h3 text-h3 text-on-surface">Email verification</h2>
+          <p className="font-body-md text-body-md text-secondary">
+            Signing up doesn&apos;t create an account by itself — it creates a pending signup and
+            emails a verification link. The real account, with its password hash, is only
+            created once that link is clicked. This means there&apos;s never a window where a
+            usable, unverified account sits in the database under an email its owner never
+            confirmed. Password reset, invites, and this verification link all send real email
+            via SMTP when it&apos;s configured on the server, and fall back to showing the link
+            directly in the UI when it isn&apos;t.
+          </p>
+        </section>
+
+        <section>
           <h2 className="mb-sm font-h3 text-h3 text-on-surface">Passwords &amp; sessions</h2>
           <p className="mb-sm font-body-md text-body-md text-secondary">
             Passwords are hashed with <strong>argon2id</strong>, the current OWASP-recommended

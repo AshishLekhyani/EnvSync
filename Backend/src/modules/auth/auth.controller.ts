@@ -21,10 +21,11 @@ export const REFRESH_COOKIE = "refreshToken";
 export const REFRESH_COOKIE_PATH = "/api/auth";
 
 export function setRefreshCookie(res: Response, token: string) {
+  const isProduction = env.NODE_ENV === "production";
   res.cookie(REFRESH_COOKIE, token, {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
     maxAge: REFRESH_TOKEN_MAX_AGE_MS,
     path: REFRESH_COOKIE_PATH,
   });

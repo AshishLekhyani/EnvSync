@@ -302,7 +302,8 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  refresh: () => request<AuthResponse>("/auth/refresh", { method: "POST" }),
+  refresh: (signal?: AbortSignal) =>
+    request<AuthResponse>("/auth/refresh", { method: "POST", signal }),
 
   logout: () => request<void>("/auth/logout", { method: "POST" }),
 

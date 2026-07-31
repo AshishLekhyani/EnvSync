@@ -110,19 +110,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    const MAX_ATTEMPTS = 3;
-    const RETRY_DELAY_MS = 4000;
+    const MAX_ATTEMPTS = 10;
+    const ATTEMPT_TIMEOUT_MS = 15000;
+    const RETRY_DELAY_MS = 3000;
 
     (async () => {
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
         try {
-          const { accessToken, user: refreshedUser } = await api.refresh();
+          const { accessToken, user: refreshedUser } = await api.refresh(controller.signal);
+          window.clearTimeout(timeout);
           setAccessToken(accessToken);
           if (cancelled) return;
           setUser(refreshedUser);
           await loadMe();
           break;
         } catch (err) {
+          window.clearTimeout(timeout);
           const isCleanUnauthorized = err instanceof ApiError && err.status === 401;
           if (isCleanUnauthorized || attempt === MAX_ATTEMPTS) {
             if (!cancelled) {
