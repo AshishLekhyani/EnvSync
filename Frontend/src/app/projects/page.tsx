@@ -340,7 +340,7 @@ function ProjectsPageContent() {
                     <Link
                       key={project.id}
                       href={`/projects/${project.id}`}
-                      className="github-card flex min-h-[180px] flex-col justify-between rounded-lg p-md"
+                      className="github-card active-project-accent flex min-h-[180px] flex-col justify-between rounded-lg p-md"
                     >
                       <div>
                         <div className="mb-sm flex items-start justify-between">

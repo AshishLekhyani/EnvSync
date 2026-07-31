@@ -321,7 +321,7 @@
 }
 
 .active-project-accent {
-  border-left: 4px solid #f48120;
+  border-left: 4px solid #f48120 !important;
 }
 
 .code-block-header {

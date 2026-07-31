@@ -88,6 +88,18 @@ export default function EnvironmentSecretsPage() {
   const [expiryDateInput, setExpiryDateInput] = useState("");
   const [savingExpiry, setSavingExpiry] = useState(false);
 
+  const [showCopyToast, setShowCopyToast] = useState(false);
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setShowCopyToast(true);
+      window.setTimeout(() => setShowCopyToast(false), 3000);
+    } catch {
+      /* ignore */
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -815,6 +827,16 @@ export default function EnvironmentSecretsPage() {
                   <span className="font-label-md text-[11px] uppercase tracking-widest text-secondary">
                     CLI Commands
                   </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyText(`envsync pull --project ${projectId} --environment ${environmentId}`)
+                    }
+                    className="flex items-center gap-1 rounded px-sm py-1 font-label-md text-label-md text-primary hover:bg-primary-container/40"
+                  >
+                    <Icon name="content_copy" className="text-[16px]" />
+                    Copy
+                  </button>
                 </div>
                 <div className="rounded border border-outline-variant bg-surface-container-low p-md font-code-md text-code-md text-on-surface-variant">
                   <span className="font-bold text-primary">envsync</span> pull --project{" "}
@@ -824,6 +846,17 @@ export default function EnvironmentSecretsPage() {
             </div>
           </>
         )}
+      </div>
+
+      <div
+        className={`copy-toast fixed bottom-lg right-lg z-[100] flex items-center gap-md rounded-xl bg-inverse-surface px-lg py-md text-inverse-on-surface shadow-xl ${
+          showCopyToast ? "show" : ""
+        }`}
+      >
+        <Icon name="check_circle" className="text-primary-fixed-dim" />
+        <div>
+          <p className="font-body-md text-body-md font-bold">Copied to Clipboard</p>
+        </div>
       </div>
     </AppShell>
   );
