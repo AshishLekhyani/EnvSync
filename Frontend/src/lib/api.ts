@@ -140,6 +140,7 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   hasAccess?: boolean;
+  hasPendingAccessRequest?: boolean;
 }
 
 export interface EnvironmentSummary {
@@ -181,6 +182,13 @@ export interface AuditLogEntry {
   metadata: Record<string, unknown> | null;
   ipAddress: string | null;
   createdAt: string;
+}
+
+export interface PaginatedAuditLogs {
+  items: AuditLogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export type SecretChangeType = "CREATE" | "UPDATE" | "DELETE" | "RESTORE" | "ROTATE";
@@ -496,6 +504,7 @@ export const api = {
       startDate?: string;
       endDate?: string;
       limit?: number;
+      page?: number;
     }
   ) => {
     const qs = new URLSearchParams();
@@ -505,9 +514,16 @@ export const api = {
     if (params?.startDate) qs.set("startDate", params.startDate);
     if (params?.endDate) qs.set("endDate", params.endDate);
     if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.page) qs.set("page", String(params.page));
     const suffix = qs.toString() ? `?${qs}` : "";
-    return request<AuditLogEntry[]>(`/orgs/${orgId}/audit-logs${suffix}`);
+    return request<AuditLogEntry[] | PaginatedAuditLogs>(`/orgs/${orgId}/audit-logs${suffix}`);
   },
+
+  purgeAuditLogs: (orgId: string, before: string) =>
+    request<{ deletedCount: number }>(
+      `/orgs/${orgId}/audit-logs?before=${encodeURIComponent(before)}`,
+      { method: "DELETE" }
+    ),
 
   listSecretVersions: (secretId: string) =>
     request<SecretVersionMetadata[]>(`/secrets/${secretId}/versions`),
@@ -555,6 +571,11 @@ export const api = {
 
   markAllNotificationsRead: () =>
     request<void>("/notifications/read-all", { method: "POST" }),
+
+  dismissNotification: (notificationId: string) =>
+    request<void>(`/notifications/${notificationId}`, { method: "DELETE" }),
+
+  clearAllNotifications: () => request<void>("/notifications", { method: "DELETE" }),
 
   getPermissionMatrix: (orgId: string) =>
     request<PermissionMatrix>(`/orgs/${orgId}/permissions`),

@@ -25,7 +25,8 @@ export const listProjects = asyncHandler(async (req, res) => {
   const projects = await projectService.listProjects(
     req.params.orgId,
     accessibleProjectIds,
-    browseAll
+    browseAll,
+    req.user!.id
   );
   res.status(200).json(projects);
 });

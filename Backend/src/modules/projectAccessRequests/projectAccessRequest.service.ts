@@ -3,7 +3,7 @@ import { prisma } from "../../db/prisma";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
 import { canBrowseAllProjects, hasProjectAccess } from "../rbac/projectAccess.service";
 import { writeAuditLog } from "../audit/audit.service";
-import { notifyUserAccessChanged } from "../auth/sse";
+import { notifyUserAccessChanged, notifyUserNotificationCreated } from "../auth/sse";
 import { shouldNotify } from "../notifications/notification.service";
 import { Actor } from "../orgs/membership.service";
 
@@ -85,6 +85,9 @@ export async function createAccessRequest(
         metadata: { orgId, requestId: request.id, projectId, projectName: project.name },
       })),
     });
+    for (const recipientId of approverIds) {
+      notifyUserNotificationCreated(recipientId);
+    }
   }
 
   return request;
@@ -129,6 +132,7 @@ export async function approveAccessRequest(
 ) {
   const request = await getPendingRequest(orgId, requestId);
   await assertCanDecide(orgId, request.projectId, actorMembership);
+  const notify = await shouldNotify(request.requestedById, "accessChanges");
 
   await prisma.$transaction(async (tx) => {
     await tx.projectMembership.upsert({
@@ -161,9 +165,24 @@ export async function approveAccessRequest(
       },
       ipAddress,
     });
+
+    if (notify) {
+      await tx.notification.create({
+        data: {
+          orgId,
+          recipientId: request.requestedById,
+          type: "project_access.approved",
+          message: `Your request for access to ${request.project.name} was approved`,
+          targetType: "Project",
+          targetId: request.projectId,
+          metadata: { orgId, requestId: request.id, projectId: request.projectId },
+        },
+      });
+    }
   });
 
-  notifyUserAccessChanged(request.requestedById, orgId);
+  notifyUserAccessChanged(request.requestedById, orgId, request.projectId);
+  if (notify) notifyUserNotificationCreated(request.requestedById);
 }
 
 export async function rejectAccessRequest(
@@ -174,25 +193,44 @@ export async function rejectAccessRequest(
 ) {
   const request = await getPendingRequest(orgId, requestId);
   await assertCanDecide(orgId, request.projectId, actorMembership);
+  const notify = await shouldNotify(request.requestedById, "accessChanges");
 
-  await prisma.projectAccessRequest.update({
-    where: { id: request.id },
-    data: { status: "REJECTED", decidedById: actorMembership.userId, decidedAt: new Date() },
+  await prisma.$transaction(async (tx) => {
+    await tx.projectAccessRequest.update({
+      where: { id: request.id },
+      data: { status: "REJECTED", decidedById: actorMembership.userId, decidedAt: new Date() },
+    });
+
+    await writeAuditLog(tx, {
+      orgId,
+      actorId: actorMembership.userId,
+      action: "project_access.reject",
+      targetType: "ProjectAccessRequest",
+      targetId: request.id,
+      projectId: request.projectId,
+      metadata: {
+        projectName: request.project.name,
+        requesterEmail: request.requestedBy.email,
+      },
+      ipAddress,
+    });
+
+    if (notify) {
+      await tx.notification.create({
+        data: {
+          orgId,
+          recipientId: request.requestedById,
+          type: "project_access.rejected",
+          message: `Your request for access to ${request.project.name} was rejected`,
+          targetType: "Project",
+          targetId: request.projectId,
+          metadata: { orgId, requestId: request.id, projectId: request.projectId },
+        },
+      });
+    }
   });
 
-  await writeAuditLog(prisma, {
-    orgId,
-    actorId: actorMembership.userId,
-    action: "project_access.reject",
-    targetType: "ProjectAccessRequest",
-    targetId: request.id,
-    projectId: request.projectId,
-    metadata: {
-      projectName: request.project.name,
-      requesterEmail: request.requestedBy.email,
-    },
-    ipAddress,
-  });
+  if (notify) notifyUserNotificationCreated(request.requestedById);
 }
 
 export async function listAccessRequests(orgId: string) {

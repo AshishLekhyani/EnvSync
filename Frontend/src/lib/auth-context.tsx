@@ -181,8 +181,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const onAccessChanged = (event: MessageEvent) => {
       let orgId: string | undefined;
+      let projectId: string | undefined;
       try {
-        orgId = JSON.parse(event.data)?.orgId;
+        const payload = JSON.parse(event.data);
+        orgId = payload?.orgId;
+        projectId = payload?.projectId;
       } catch {
         /* ignore malformed payload */
       }
@@ -191,14 +194,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         queryClient.invalidateQueries({ queryKey: queryKeys.orgProjects(orgId) });
         queryClient.invalidateQueries({ queryKey: queryKeys.orgMembers(orgId) });
       }
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.project(projectId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectEnvironments(projectId) });
+      }
+    };
+
+    const onNotificationCreated = () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
     };
 
     source.addEventListener("session-revoked", onRevoked);
     source.addEventListener("access-changed", onAccessChanged);
+    source.addEventListener("notification-created", onNotificationCreated);
 
     return () => {
       source.removeEventListener("session-revoked", onRevoked);
       source.removeEventListener("access-changed", onAccessChanged);
+      source.removeEventListener("notification-created", onNotificationCreated);
       source.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

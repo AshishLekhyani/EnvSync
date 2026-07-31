@@ -8,7 +8,7 @@ import { Icon } from "@/components/Icon";
 import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
 import { queryKeys } from "@/lib/query-keys";
-import { api, ApiError, AuditLogEntry } from "@/lib/api";
+import { api, ApiError, AuditLogEntry, PaginatedAuditLogs } from "@/lib/api";
 import { ACTION_DISPLAY, describeAuditLog, getActionDisplay } from "@/lib/auditActions";
 import { exportAuditLogsCsv } from "@/lib/auditExport";
 
@@ -23,6 +23,7 @@ function AuditPageContent() {
   const actorId = searchParams.get("actorId");
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
+  const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
 
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -31,7 +32,14 @@ function AuditPageContent() {
     } else {
       next.delete(key);
     }
+    next.delete("page");
     router.push(`/audit${next.toString() ? `?${next}` : ""}`);
+  };
+
+  const setPage = (nextPage: number) => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("page", String(nextPage));
+    router.push(`/audit?${next}`);
   };
 
   const membersQuery = useQuery({
@@ -42,6 +50,7 @@ function AuditPageContent() {
   const members = membersQuery.data ?? [];
 
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -57,7 +66,7 @@ function AuditPageContent() {
 
     api
       .listAuditLogs(org.id, {
-        limit: 50,
+        page,
         projectId: projectId ?? undefined,
         action: action ?? undefined,
         actorId: actorId ?? undefined,
@@ -66,7 +75,9 @@ function AuditPageContent() {
       })
       .then((result) => {
         if (!cancelled) {
-          setLogs(result);
+          const paginated = result as PaginatedAuditLogs;
+          setLogs(paginated.items);
+          setTotal(paginated.total);
           setError(null);
         }
       })
@@ -82,7 +93,7 @@ function AuditPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [org, projectId, action, actorId, startDate, endDate]);
+  }, [org, projectId, action, actorId, startDate, endDate, page]);
 
   const onExport = async () => {
     if (!org) return;
@@ -254,6 +265,32 @@ function AuditPageContent() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {!loading && total > 0 && (
+              <div className="flex items-center justify-between border-t border-[#D0D7DE] dark:border-outline-variant px-md py-sm">
+                <span className="font-body-sm text-body-sm text-on-surface-variant">
+                  Page {page} of {Math.max(1, Math.ceil(total / 40))} ({total} entries)
+                </span>
+                <div className="flex gap-sm">
+                  <button
+                    type="button"
+                    disabled={page <= 1}
+                    onClick={() => setPage(page - 1)}
+                    className="rounded-lg border border-outline-variant px-md py-1 font-label-md text-label-md text-on-surface disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    disabled={page >= Math.ceil(total / 40)}
+                    onClick={() => setPage(page + 1)}
+                    className="rounded-lg border border-outline-variant px-md py-1 font-label-md text-label-md text-on-surface disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             )}
           </div>

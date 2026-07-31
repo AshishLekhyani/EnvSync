@@ -1,4 +1,5 @@
 import { prisma } from "../../db/prisma";
+import { notifyUserNotificationCreated } from "../auth/sse";
 
 const WARNING_WINDOW_DAYS = 7;
 
@@ -49,6 +50,9 @@ export async function runExpiryScan() {
       })),
     });
 
+    for (const r of recipients) {
+      notifyUserNotificationCreated(r.userId);
+    }
     created += recipients.length;
   }
 

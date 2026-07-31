@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar } from "./Avatar";
 import { Icon } from "./Icon";
 import { OrgSwitcher } from "./OrgSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
 import { useOutsideClick } from "@/lib/useOutsideClick";
+import { useLeaveOrganization } from "@/lib/useLeaveOrganization";
+import { queryKeys } from "@/lib/query-keys";
 import { api, ApiError, NotificationSummary } from "@/lib/api";
 
 const NAV = [
@@ -40,11 +43,18 @@ export function TopNav({
   const pathname = usePathname();
   const router = useRouter();
   const { user, activeOrg, logout } = useAuth();
+  const queryClient = useQueryClient();
+  const { leave: leaveOrg, leaving: leavingOrg, canLeave: canLeaveOrg } = useLeaveOrganization();
 
   const [searchValue, setSearchValue] = useState("");
-  const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
+  const notifQuery = useQuery({
+    queryKey: queryKeys.notifications(),
+    queryFn: api.listNotifications,
+    enabled: !!user,
+  });
+  const notifications = notifQuery.data ?? [];
+  const notifLoading = notifQuery.isPending;
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifLoading, setNotifLoading] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   useOutsideClick(notifRef, () => setNotifOpen(false));
 
@@ -63,30 +73,32 @@ export function TopNav({
     setSearchValue("");
   }, [pathname]);
 
-  useEffect(() => {
-    api.listNotifications().then(setNotifications).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (!notifOpen) return;
-    setNotifLoading(true);
-    api
-      .listNotifications()
-      .then(setNotifications)
-      .catch(() => {})
-      .finally(() => setNotifLoading(false));
-  }, [notifOpen]);
-
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const onMarkRead = async (id: string) => {
     await api.markNotificationRead(id);
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    queryClient.setQueryData<NotificationSummary[]>(queryKeys.notifications(), (prev) =>
+      (prev ?? []).map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
   };
 
   const onMarkAllRead = async () => {
     await api.markAllNotificationsRead();
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    queryClient.setQueryData<NotificationSummary[]>(queryKeys.notifications(), (prev) =>
+      (prev ?? []).map((n) => ({ ...n, read: true }))
+    );
+  };
+
+  const onDismiss = async (id: string) => {
+    await api.dismissNotification(id);
+    queryClient.setQueryData<NotificationSummary[]>(queryKeys.notifications(), (prev) =>
+      (prev ?? []).filter((n) => n.id !== id)
+    );
+  };
+
+  const onClearAll = async () => {
+    await api.clearAllNotifications();
+    queryClient.setQueryData<NotificationSummary[]>(queryKeys.notifications(), []);
   };
 
   const onApprovalDecision = async (n: NotificationSummary, decision: "approve" | "reject") => {
@@ -140,6 +152,18 @@ export function TopNav({
         </Link>
         <span className="hidden h-6 w-px bg-outline-variant md:block" />
         <OrgSwitcher />
+        {canLeaveOrg && (
+          <button
+            type="button"
+            disabled={leavingOrg}
+            onClick={leaveOrg}
+            title={`Leave ${activeOrg?.name ?? "organization"}`}
+            aria-label="Leave organization"
+            className="rounded-lg p-xs text-secondary transition-colors hover:bg-surface-container hover:text-error disabled:opacity-50"
+          >
+            <Icon name="logout" style={{ fontSize: 18 }} />
+          </button>
+        )}
         <nav className="hidden h-full items-center gap-lg pt-2 md:flex">
           {NAV.map((item) => {
             if (item.requiresOrg && !activeOrg) {
@@ -214,15 +238,26 @@ export function TopNav({
                 <span className="font-label-md text-label-md font-bold text-on-surface">
                   Notifications
                 </span>
-                {unreadCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={onMarkAllRead}
-                    className="font-body-sm text-body-sm text-primary hover:underline"
-                  >
-                    Mark all read
-                  </button>
-                )}
+                <div className="flex items-center gap-sm">
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={onMarkAllRead}
+                      className="font-body-sm text-body-sm text-primary hover:underline"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                  {notifications.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={onClearAll}
+                      className="font-body-sm text-body-sm text-secondary hover:underline"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="max-h-96 overflow-y-auto">
                 {notifLoading ? (
@@ -244,14 +279,29 @@ export function TopNav({
                       n.type === "project_access.requested";
                     const decided = approvalResult[n.id];
 
+                    const dismissButton = (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDismiss(n.id);
+                        }}
+                        aria-label="Dismiss notification"
+                        className="absolute right-sm top-sm rounded p-[2px] text-secondary opacity-0 transition-opacity hover:text-error group-hover:opacity-100"
+                      >
+                        <Icon name="close" style={{ fontSize: 14 }} />
+                      </button>
+                    );
+
                     if (isApprovalRequest && (!n.read || decided)) {
                       return (
                         <div
                           key={n.id}
-                          className={`flex w-full flex-col items-start gap-xs border-b border-outline-variant px-md py-sm text-left ${
+                          className={`group relative flex w-full flex-col items-start gap-xs border-b border-outline-variant px-md py-sm pr-lg text-left ${
                             n.read ? "" : "bg-primary/5"
                           }`}
                         >
+                          {dismissButton}
                           <span className="font-body-sm text-body-sm text-on-surface">
                             {n.message}
                           </span>
@@ -291,21 +341,26 @@ export function TopNav({
                     }
 
                     return (
-                      <button
+                      <div
                         key={n.id}
-                        type="button"
-                        onClick={() => onMarkRead(n.id)}
-                        className={`flex w-full flex-col items-start gap-xs border-b border-outline-variant px-md py-sm text-left transition-colors last:border-b-0 hover:bg-surface-container-low ${
+                        className={`group relative border-b border-outline-variant last:border-b-0 ${
                           n.read ? "" : "bg-primary/5"
                         }`}
                       >
-                        <span className="font-body-sm text-body-sm text-on-surface">
-                          {n.message}
-                        </span>
-                        <span className="font-body-sm text-[11px] text-secondary">
-                          {new Date(n.createdAt).toLocaleString()}
-                        </span>
-                      </button>
+                        {dismissButton}
+                        <button
+                          type="button"
+                          onClick={() => onMarkRead(n.id)}
+                          className="flex w-full flex-col items-start gap-xs px-md py-sm pr-lg text-left transition-colors hover:bg-surface-container-low"
+                        >
+                          <span className="font-body-sm text-body-sm text-on-surface">
+                            {n.message}
+                          </span>
+                          <span className="font-body-sm text-[11px] text-secondary">
+                            {new Date(n.createdAt).toLocaleString()}
+                          </span>
+                        </button>
+                      </div>
                     );
                   })
                 )}

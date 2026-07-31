@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
+import { useConfirm } from "@/lib/confirm-context";
 import {
   api,
   ApiError,
@@ -26,6 +27,7 @@ const ROLE_ROWS: OrgRole[] = ["OWNER", "ADMIN", "DEVELOPER", "VIEWER"];
 function TransferOwnershipSection({ orgId }: { orgId: string }) {
   const router = useRouter();
   const { refreshMe } = useAuth();
+  const confirm = useConfirm();
   const [members, setMembers] = useState<MemberSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState("");
@@ -56,9 +58,12 @@ function TransferOwnershipSection({ orgId }: { orgId: string }) {
   const onTransfer = async () => {
     if (!selectedMember) return;
     if (
-      !window.confirm(
-        `Make ${selectedMember.user.name} the Owner? You will be demoted to Admin immediately.`
-      )
+      !(await confirm({
+        title: "Transfer Ownership",
+        message: `Make ${selectedMember.user.name} the Owner? You will be demoted to Admin immediately.`,
+        confirmLabel: "Transfer",
+        danger: true,
+      }))
     ) {
       return;
     }

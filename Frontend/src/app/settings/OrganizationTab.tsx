@@ -6,6 +6,8 @@ import { Icon } from "@/components/Icon";
 import { Modal } from "@/components/Modal";
 import { CreateOrgForm } from "@/components/CreateOrgForm";
 import { useAuth } from "@/lib/auth-context";
+import { useConfirm } from "@/lib/confirm-context";
+import { useLeaveOrganization } from "@/lib/useLeaveOrganization";
 import { api, ApiError, MemberSummary } from "@/lib/api";
 import { downloadJson } from "@/lib/csv";
 
@@ -161,9 +163,87 @@ function DataExportSection({ orgId, orgSlug }: { orgId: string; orgSlug: string 
   );
 }
 
+function AuditRetentionSection({ orgId }: { orgId: string }) {
+  const confirm = useConfirm();
+  const [before, setBefore] = useState("");
+  const [purging, setPurging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<number | null>(null);
+
+  const onPurge = async () => {
+    if (!before) return;
+    if (
+      !(await confirm({
+        title: "Delete Audit Log Entries",
+        message: `This permanently deletes every log entry before ${before}. This cannot be undone.`,
+        confirmLabel: "Delete",
+        danger: true,
+      }))
+    ) {
+      return;
+    }
+    setPurging(true);
+    setError(null);
+    setResult(null);
+    try {
+      const { deletedCount } = await api.purgeAuditLogs(orgId, before);
+      setResult(deletedCount);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete log entries");
+    } finally {
+      setPurging(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
+      <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
+        <Icon name="delete_sweep" className="text-primary" />
+        <h2 className="font-h3 text-h3 text-on-surface">Audit Log Retention</h2>
+      </div>
+      <div className="flex flex-col gap-sm p-md">
+        <p className="font-body-sm text-body-sm text-on-surface-variant">
+          Permanently delete audit log entries older than a chosen date. This cannot be undone.
+        </p>
+        {error && (
+          <p className="font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">{error}</p>
+        )}
+        {result !== null && (
+          <p className="font-body-sm text-body-sm text-primary">
+            {result} log {result === 1 ? "entry" : "entries"} deleted.
+          </p>
+        )}
+        <div className="flex flex-wrap items-end gap-sm">
+          <label className="block">
+            <span className="mb-xs block font-label-md text-label-md text-on-surface">
+              Delete logs before
+            </span>
+            <input
+              type="date"
+              value={before}
+              onChange={(e) => setBefore(e.target.value)}
+              className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={!before || purging}
+            onClick={onPurge}
+            className="rounded-lg border border-[#CF222E] bg-transparent px-md py-sm font-body-sm text-body-sm font-bold text-[#CF222E] transition-colors hover:bg-[#CF222E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/50 dark:text-red-400"
+          >
+            {purging ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function OrganizationTab() {
   const { activeOrg: org, organizations, refreshMe, switchOrg } = useAuth();
   const router = useRouter();
+  const confirm = useConfirm();
+  const { leave, leaving, error: leaveError } = useLeaveOrganization();
 
   const [name, setName] = useState(org?.name ?? "");
   const [saving, setSaving] = useState(false);
@@ -173,9 +253,6 @@ export function OrganizationTab() {
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  const [leaving, setLeaving] = useState(false);
-  const [leaveError, setLeaveError] = useState<string | null>(null);
 
   const [showCreateOrg, setShowCreateOrg] = useState(false);
 
@@ -247,26 +324,6 @@ export function OrganizationTab() {
     }
   };
 
-  const onLeave = async () => {
-    if (!window.confirm(`Leave ${org.name}? You'll lose access immediately.`)) {
-      return;
-    }
-    setLeaving(true);
-    setLeaveError(null);
-    try {
-      await api.leaveOrganization(org.id);
-      const remaining = organizations.filter((o) => o.id !== org.id);
-      await refreshMe();
-      if (remaining[0]) {
-        switchOrg(remaining[0].id);
-      }
-      router.push("/projects");
-    } catch (err) {
-      setLeaveError(err instanceof ApiError ? err.message : "Failed to leave organization");
-      setLeaving(false);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-lg">
       <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
@@ -335,6 +392,8 @@ export function OrganizationTab() {
 
       {isOwner && <DataExportSection orgId={org.id} orgSlug={org.slug} />}
 
+      {isOwner && <AuditRetentionSection orgId={org.id} />}
+
       {!isOwner && (
         <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-md">
           <h4 className="flex items-center gap-sm font-body-md text-body-md font-bold text-on-surface">
@@ -352,7 +411,7 @@ export function OrganizationTab() {
           <button
             type="button"
             disabled={leaving}
-            onClick={onLeave}
+            onClick={leave}
             className="mt-md rounded-lg border border-outline-variant px-md py-sm font-body-sm text-body-sm font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-40"
           >
             {leaving ? "Leaving..." : `Leave ${org.name}`}

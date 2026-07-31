@@ -83,7 +83,7 @@ function ProjectsPageContent() {
       .listAuditLogs(org.id, { limit: 5 })
       .then((logs) => {
         if (!cancelled) {
-          setAuditLogs(logs);
+          setAuditLogs(logs as AuditLogEntry[]);
           setAuditForbidden(false);
         }
       })
@@ -327,11 +327,13 @@ function ProjectsPageContent() {
                       </div>
                       <button
                         type="button"
-                        disabled={requestedIds.has(project.id)}
+                        disabled={project.hasPendingAccessRequest || requestedIds.has(project.id)}
                         onClick={() => onRequestAccess(project.id)}
                         className="rounded-lg border border-primary/40 px-md py-sm font-label-md text-label-md text-primary transition-colors hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {requestedIds.has(project.id) ? "Access Requested" : "Request Access"}
+                        {project.hasPendingAccessRequest || requestedIds.has(project.id)
+                          ? "Access Requested"
+                          : "Request Access"}
                       </button>
                     </div>
                   ) : (

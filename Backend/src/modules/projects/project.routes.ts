@@ -44,7 +44,7 @@ projectRouter.patch(
 );
 projectRouter.delete(
   "/:projectId",
-  requireOrgRole("ADMIN", orgIdFromProjectParam()),
+  requireOrgRole("OWNER", orgIdFromProjectParam()),
   requireProjectAccess(projectIdFromParam()),
   projectController.deleteProject
 );

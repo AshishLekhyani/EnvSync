@@ -237,7 +237,7 @@ export function ProjectsSidebar() {
               const expanded = project.id === expandedProjectId;
 
               if (project.hasAccess === false) {
-                const requested = requestedIds.has(project.id);
+                const requested = project.hasPendingAccessRequest || requestedIds.has(project.id);
                 return (
                   <div
                     key={project.id}

@@ -2270,6 +2270,257 @@ async function main() {
   }
   ok("notification preference re-enabled correctly resumes project-access-request notifications");
 
+  // --- Team member self-visibility (Part 1) ---
+
+  const selfDevEmail = `selfdev-${rand}@example.com`;
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Self Dev", email: selfDevEmail, password }),
+  });
+  if (res.status !== 201) fail("signup self-visibility dev", await res.text());
+
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: selfDevEmail, password }),
+  });
+  const selfDevLogin = await res.json();
+  if (res.status !== 200) fail("login self-visibility dev", selfDevLogin);
+  const selfDevToken: string = selfDevLogin.accessToken;
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: selfDevEmail, role: "DEVELOPER" }),
+  });
+  if (res.status !== 201) fail("add self-visibility dev as DEVELOPER with zero project grants", await res.text());
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(selfDevToken) });
+  const selfDevMembers = await res.json();
+  if (
+    res.status !== 200 ||
+    !(selfDevMembers as { user: { email: string } }[]).some((m) => m.user.email === selfDevEmail)
+  ) {
+    fail("a Developer with zero project grants should still see their own row in the member list", selfDevMembers);
+  }
+  ok("a Developer with zero project grants sees their own row in listMembers (Part 1 fix)");
+
+  // --- Pending access request persists + decision notifications (Parts 3, 4) ---
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects/${projectId}/access-requests`, {
+    method: "POST",
+    headers: authHeaders(selfDevToken),
+  });
+  const selfDevRequest = await res.json();
+  if (res.status !== 201) fail("self-visibility dev requests project access", selfDevRequest);
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, { headers: authHeaders(selfDevToken) });
+  const selfDevProjects = await res.json();
+  const selfDevTargetProject = (
+    selfDevProjects as { id: string; hasAccess?: boolean; hasPendingAccessRequest?: boolean }[]
+  ).find((p) => p.id === projectId);
+  if (!selfDevTargetProject || selfDevTargetProject.hasPendingAccessRequest !== true) {
+    fail("listProjects should report hasPendingAccessRequest:true right after requesting", selfDevTargetProject);
+  }
+  ok("hasPendingAccessRequest persists in listProjects immediately after requesting (Part 3 fix)");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/project-access-requests/${selfDevRequest.id}/approve`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("owner approves self-visibility dev's access request", await res.text());
+
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(selfDevToken) });
+  const selfDevNotifs = await res.json();
+  const approvedNotif = (selfDevNotifs as { id: string; type: string; targetId: string | null }[]).find(
+    (n) => n.type === "project_access.approved" && n.targetId === projectId
+  );
+  if (!approvedNotif) {
+    fail("requester should be notified their access request was approved (Part 4 fix)", selfDevNotifs);
+  }
+  ok("requester receives a project_access.approved notification");
+
+  const rejectDevEmail = `rejectdev-${rand}@example.com`;
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Reject Dev", email: rejectDevEmail, password }),
+  });
+  if (res.status !== 201) fail("signup reject-notification dev", await res.text());
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: rejectDevEmail, password }),
+  });
+  const rejectDevLogin = await res.json();
+  const rejectDevToken: string = rejectDevLogin.accessToken;
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: rejectDevEmail, role: "DEVELOPER" }),
+  });
+  if (res.status !== 201) fail("add reject-notification dev", await res.text());
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects/${projectId}/access-requests`, {
+    method: "POST",
+    headers: authHeaders(rejectDevToken),
+  });
+  const rejectDevRequest = await res.json();
+  if (res.status !== 201) fail("reject-notification dev requests project access", rejectDevRequest);
+
+  res = await fetch(`${BASE}/orgs/${orgId}/project-access-requests/${rejectDevRequest.id}/reject`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("owner rejects reject-notification dev's access request", await res.text());
+
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(rejectDevToken) });
+  const rejectDevNotifs = await res.json();
+  const rejectedNotif = (rejectDevNotifs as { id: string; type: string; targetId: string | null }[]).find(
+    (n) => n.type === "project_access.rejected" && n.targetId === projectId
+  );
+  if (!rejectedNotif) {
+    fail("requester should be notified their access request was rejected (Part 4 fix)", rejectDevNotifs);
+  }
+  ok("requester receives a project_access.rejected notification");
+
+  // --- Dismiss / clear notifications (Part 6) ---
+
+  res = await fetch(`${BASE}/notifications/${rejectedNotif.id}`, {
+    method: "DELETE",
+    headers: authHeaders(selfDevToken),
+  });
+  if (res.status !== 404) fail("dismissing someone else's notification should be 404 (ownership scoped)", await res.text());
+  ok("dismissing another user's notification is rejected (404, ownership enforced)");
+
+  res = await fetch(`${BASE}/notifications/${rejectedNotif.id}`, {
+    method: "DELETE",
+    headers: authHeaders(rejectDevToken),
+  });
+  if (res.status !== 204) fail("dismiss own notification", await res.text());
+
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(rejectDevToken) });
+  const afterDismiss = await res.json();
+  if ((afterDismiss as { id: string }[]).some((n) => n.id === rejectedNotif.id)) {
+    fail("dismissed notification should no longer appear", afterDismiss);
+  }
+  ok("dismissed notification disappears from the list");
+
+  res = await fetch(`${BASE}/notifications`, {
+    method: "DELETE",
+    headers: authHeaders(selfDevToken),
+  });
+  if (res.status !== 204) fail("clear all notifications", await res.text());
+  res = await fetch(`${BASE}/notifications`, { headers: authHeaders(selfDevToken) });
+  const afterClearAll = await res.json();
+  if ((afterClearAll as unknown[]).length !== 0) fail("clear-all should empty the notification list", afterClearAll);
+  ok("clear-all empties the notification list");
+
+  // --- Owner-only project delete ---
+
+  res = await fetch(`${BASE}/orgs/${orgId}/projects`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ name: "Throwaway Project", slug: `throwaway-${rand}` }),
+  });
+  const throwawayProject = await res.json();
+  if (res.status !== 201) fail("create throwaway project for delete test", throwawayProject);
+
+  const deleteTestAdminEmail = `delproj-admin-${rand}@example.com`;
+  res = await fetch(`${BASE}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Delete Test Admin", email: deleteTestAdminEmail, password }),
+  });
+  if (res.status !== 201) fail("signup delete-test admin", await res.text());
+  res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: deleteTestAdminEmail, password }),
+  });
+  const deleteTestAdminLogin = await res.json();
+  const deleteTestAdminToken: string = deleteTestAdminLogin.accessToken;
+  res = await fetch(`${BASE}/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: authHeaders(ownerAccessToken),
+    body: JSON.stringify({ email: deleteTestAdminEmail, role: "ADMIN", projectId: throwawayProject.id }),
+  });
+  if (res.status !== 201) fail("add delete-test admin with access to the throwaway project", await res.text());
+
+  res = await fetch(`${BASE}/projects/${throwawayProject.id}`, {
+    method: "DELETE",
+    headers: authHeaders(deleteTestAdminToken),
+  });
+  if (res.status !== 403) fail("an Admin should not be able to delete a project (Owner-only now)", await res.text());
+  ok("project deletion is rejected for Admin (403, Owner-only)");
+
+  res = await fetch(`${BASE}/projects/${throwawayProject.id}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  if (res.status !== 204) fail("Owner deletes the throwaway project", await res.text());
+  res = await fetch(`${BASE}/projects/${throwawayProject.id}`, { headers: authHeaders(ownerAccessToken) });
+  if (res.status !== 404) fail("deleted project should 404 afterward", await res.text());
+  ok("Owner can delete an individual project, and it's actually gone afterward");
+
+  // --- Audit log pagination + Owner-only retention purge (Part 9) ---
+
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?page=1`, { headers: authHeaders(ownerAccessToken) });
+  const auditPage1 = await res.json();
+  if (
+    res.status !== 200 ||
+    !Array.isArray(auditPage1.items) ||
+    auditPage1.pageSize !== 40 ||
+    auditPage1.page !== 1 ||
+    typeof auditPage1.total !== "number" ||
+    auditPage1.items.length !== Math.min(40, auditPage1.total)
+  ) {
+    fail("paginated audit-logs response should have the expected shape (40/page)", auditPage1);
+  }
+  ok("audit log pagination returns the expected {items,total,page,pageSize} shape, capped at 40");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?limit=5`, { headers: authHeaders(ownerAccessToken) });
+  const auditUnpaginated = await res.json();
+  if (res.status !== 200 || !Array.isArray(auditUnpaginated) || auditUnpaginated.length !== 5) {
+    fail("a page-less limit call (export path) should still return a plain array", auditUnpaginated);
+  }
+  ok("the unpaginated limit-only call path (used by CSV export) still returns a plain array");
+
+  const totalBeforePurge: number = auditPage1.total;
+
+  res = await fetch(
+    `${BASE}/orgs/${orgId}/audit-logs?before=${encodeURIComponent(new Date().toISOString().slice(0, 10))}`,
+    { method: "DELETE", headers: authHeaders(viewerAccessToken) }
+  );
+  if (res.status !== 403) fail("a non-Owner should not be able to purge audit logs (403)", await res.text());
+  ok("audit log purge is rejected for a non-Owner (403)");
+
+  const futureCutoff = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?before=${encodeURIComponent(futureCutoff)}`, {
+    method: "DELETE",
+    headers: authHeaders(ownerAccessToken),
+  });
+  const purgeResult = await res.json();
+  if (res.status !== 200 || purgeResult.deletedCount !== totalBeforePurge) {
+    fail(
+      `Owner purging with a future cutoff should delete every existing entry (expected ${totalBeforePurge})`,
+      purgeResult
+    );
+  }
+  ok("Owner can purge audit log entries before a cutoff date, deleting exactly the expected count");
+
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs?page=1`, { headers: authHeaders(ownerAccessToken) });
+  const auditAfterPurge = await res.json();
+  if (
+    res.status !== 200 ||
+    auditAfterPurge.total !== 1 ||
+    auditAfterPurge.items[0]?.action !== "audit_log.purge"
+  ) {
+    fail("after a full purge, only the purge action's own audit entry should remain", auditAfterPurge);
+  }
+  ok("the purge action writes its own audit entry, which survives the purge it describes");
+
   const hammerEmail = `hammer-${rand}@example.com`;
   res = await fetch(`${BASE}/auth/signup`, {
     method: "POST",

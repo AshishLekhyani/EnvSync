@@ -6,6 +6,21 @@ export const metadata = { title: "Changelog — EnvSync" };
 
 const ENTRIES = [
   {
+    version: "v0.15",
+    date: "July 2026",
+    title: "Live updates, real confirmation dialogs, audit retention",
+    items: [
+      "Leaving an organization or project, notifications, and access-request decisions now update live — no manual reload needed.",
+      "Every confirmation dialog in the app is now a real modal instead of a browser popup.",
+      "Notifications can be dismissed individually or cleared all at once, and arrive live instead of only refreshing when opened.",
+      "You're now notified when your own project access request is approved or rejected.",
+      "A quick \"leave organization\" shortcut was added next to the org switcher in the navbar.",
+      "Owners can now delete an individual project, and can purge audit log entries older than a chosen date.",
+      "Audit Logs are now paginated (40 per page) instead of a single capped list.",
+      "Fixed a bug where a Developer or Admin without any project grants couldn't see their own row on the Team page.",
+    ],
+  },
+  {
     version: "v0.14",
     date: "July 2026",
     title: "Integration guides, profile photos, security pass",

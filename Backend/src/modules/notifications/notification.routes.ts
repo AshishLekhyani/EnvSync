@@ -8,3 +8,5 @@ notificationsRouter.use(requireAuth);
 notificationsRouter.get("/", notificationController.listNotifications);
 notificationsRouter.post("/read-all", notificationController.markAllRead);
 notificationsRouter.patch("/:notificationId/read", notificationController.markRead);
+notificationsRouter.delete("/", notificationController.clearAllNotifications);
+notificationsRouter.delete("/:notificationId", notificationController.dismissNotification);

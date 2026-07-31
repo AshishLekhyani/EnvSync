@@ -40,3 +40,17 @@ export function markAllRead(userId: string) {
     data: { read: true },
   });
 }
+
+export async function dismissNotification(userId: string, notificationId: string) {
+  const result = await prisma.notification.deleteMany({
+    where: { id: notificationId, recipientId: userId },
+  });
+
+  if (result.count === 0) {
+    throw new NotFoundError("Notification not found");
+  }
+}
+
+export function clearAllNotifications(userId: string) {
+  return prisma.notification.deleteMany({ where: { recipientId: userId } });
+}

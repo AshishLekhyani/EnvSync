@@ -15,7 +15,11 @@ export const listMembers = asyncHandler(async (req, res) => {
     req.membership!.role,
     req.membership!
   );
-  const members = await membershipService.listMembers(req.params.orgId, accessibleProjectIds);
+  const members = await membershipService.listMembers(
+    req.params.orgId,
+    accessibleProjectIds,
+    req.user!.id
+  );
   res.status(200).json(members);
 });
 

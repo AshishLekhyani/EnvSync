@@ -6,6 +6,12 @@ export const listAuditLogsQuerySchema = z.object({
   actorId: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(200).default(50).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(50).optional(),
+  page: z.coerce.number().int().min(1).optional(),
 });
 export type ListAuditLogsQuery = z.infer<typeof listAuditLogsQuerySchema>;
+
+export const purgeAuditLogsQuerySchema = z.object({
+  before: z.string().min(1),
+});
+export type PurgeAuditLogsQuery = z.infer<typeof purgeAuditLogsQuerySchema>;

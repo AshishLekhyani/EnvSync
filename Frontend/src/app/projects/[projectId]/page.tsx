@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
+import { useConfirm } from "@/lib/confirm-context";
 import { queryKeys } from "@/lib/query-keys";
 import {
   api,
@@ -42,7 +43,11 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user, activeOrg: org } = useAuth();
+  const confirm = useConfirm();
   const [leaving, setLeaving] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletingProject, setDeletingProject] = useState(false);
+  const [deleteProjectError, setDeleteProjectError] = useState<string | null>(null);
 
   const projectQuery = useQuery({
     queryKey: queryKeys.project(projectId),
@@ -90,16 +95,33 @@ export default function ProjectDetailPage() {
   };
 
   const onLeaveProject = async () => {
-    if (!org || !window.confirm("Leave this project? You'll lose access to it immediately.")) {
+    if (!org || !(await confirm("Leave this project? You'll lose access to it immediately."))) {
       return;
     }
     setLeaving(true);
     try {
       await api.leaveProject(org.id, projectId);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orgProjects(org.id) });
       router.push("/projects");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to leave project");
       setLeaving(false);
+    }
+  };
+
+  const onDeleteProject = async () => {
+    if (!project) return;
+    setDeletingProject(true);
+    setDeleteProjectError(null);
+    try {
+      await api.deleteProject(project.id);
+      if (org) {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.orgProjects(org.id) });
+      }
+      router.push("/projects");
+    } catch (err) {
+      setDeleteProjectError(err instanceof ApiError ? err.message : "Failed to delete project");
+      setDeletingProject(false);
     }
   };
 
@@ -122,9 +144,8 @@ export default function ProjectDetailPage() {
           </div>
         ) : !project ? (
           <div className="github-card rounded-lg p-xl text-center font-body-md text-body-md text-secondary">
-            {projectQuery.error instanceof ApiError
-              ? projectQuery.error.message
-              : "Project not found."}
+            This project isn&apos;t available anymore — it may have been deleted, or your
+            access to it may have changed.
           </div>
         ) : (
           <>
@@ -235,6 +256,42 @@ export default function ProjectDetailPage() {
                 </div>
               )}
             </div>
+
+            {org && org.role === "OWNER" && (
+              <div className="mt-xl rounded-xl border border-[#CF222E]/30 bg-[#FFEBE9] p-md dark:border-red-500/30 dark:bg-red-500/10">
+                <h4 className="flex items-center gap-sm font-body-md text-body-md font-bold text-[#CF222E] dark:text-red-400">
+                  <Icon name="warning" />
+                  Delete Project
+                </h4>
+                <p className="mt-xs font-body-sm text-body-sm text-[#CF222E]/80 dark:text-red-400/80">
+                  This permanently deletes {project.name} and every environment and secret
+                  inside it. This cannot be undone.
+                </p>
+                <label className="mt-md block max-w-sm">
+                  <span className="mb-xs block font-label-md text-label-md text-[#CF222E] dark:text-red-400">
+                    Type <span className="font-mono font-bold">{project.slug}</span> to confirm
+                  </span>
+                  <input
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    className="w-full rounded-lg border border-[#CF222E]/40 bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-[#CF222E] focus:ring-2 focus:ring-[#CF222E]/20"
+                  />
+                </label>
+                {deleteProjectError && (
+                  <p className="mt-sm font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
+                    {deleteProjectError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  disabled={deleteConfirmText !== project.slug || deletingProject}
+                  onClick={onDeleteProject}
+                  className="mt-md rounded-lg border border-[#CF222E] bg-transparent px-md py-sm font-body-sm text-body-sm font-bold text-[#CF222E] transition-colors hover:bg-[#CF222E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/50 dark:text-red-400"
+                >
+                  {deletingProject ? "Deleting..." : `Delete ${project.name}`}
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

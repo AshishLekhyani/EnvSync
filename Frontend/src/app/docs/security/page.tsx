@@ -86,11 +86,22 @@ export default function SecurityDocsPage() {
 
         <section>
           <h2 className="mb-sm font-h3 text-h3 text-on-surface">Audit logging</h2>
+          <p className="mb-sm font-body-md text-body-md text-secondary">
+            Every mutating action — and every secret reveal — writes an audit log row: who,
+            what, when, and from where. Revealing a secret is always freshly audited, even if
+            you revealed the same value moments earlier; nothing about a reveal is cached
+            client-side to avoid a stale plaintext value sitting in memory unaudited. This
+            applies identically whether the action came from the browser or the CLI — both go
+            through the same service functions, so a{" "}
+            <code className="rounded bg-surface-container px-1 font-code-sm text-code-sm">pull</code>{" "}
+            or{" "}
+            <code className="rounded bg-surface-container px-1 font-code-sm text-code-sm">push</code>{" "}
+            leaves the same trail a manual reveal or edit would.
+          </p>
           <p className="font-body-md text-body-md text-secondary">
-            Every mutating action — and every secret reveal — writes an immutable audit log row:
-            who, what, when, and from where. Revealing a secret is always freshly audited, even
-            if you revealed the same value moments earlier; nothing about a reveal is cached
-            client-side to avoid a stale plaintext value sitting in memory unaudited.
+            Logs are append-only in normal use. The Owner can permanently delete entries older
+            than a chosen date from Settings → Organization, for orgs that need to manage log
+            retention — that action is itself logged.
           </p>
         </section>
 

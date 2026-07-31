@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
+import { useConfirm } from "@/lib/confirm-context";
 import { api, ApiError, SessionSummary } from "@/lib/api";
 
 export function SecurityTab() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const confirm = useConfirm();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export function SecurityTab() {
   }, [user]);
 
   const onRevokeSession = async (sessionId: string) => {
-    if (!window.confirm("Revoke this session? That device will be signed out immediately.")) {
+    if (!(await confirm("Revoke this session? That device will be signed out immediately."))) {
       return;
     }
     setRevokingSessionId(sessionId);
@@ -68,9 +70,13 @@ export function SecurityTab() {
 
   const onDeleteAccount = async () => {
     if (
-      !window.confirm(
-        "This permanently deletes your account and everything only you have access to. This cannot be undone. Continue?"
-      )
+      !(await confirm({
+        title: "Delete Account",
+        message:
+          "This permanently deletes your account and everything only you have access to. This cannot be undone. Continue?",
+        confirmLabel: "Delete",
+        danger: true,
+      }))
     ) {
       return;
     }

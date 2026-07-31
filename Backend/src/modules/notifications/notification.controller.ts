@@ -18,3 +18,13 @@ export const markAllRead = asyncHandler(async (req, res) => {
   await notificationService.markAllRead(req.user!.id);
   res.status(204).send();
 });
+
+export const dismissNotification = asyncHandler(async (req, res) => {
+  await notificationService.dismissNotification(req.user!.id, req.params.notificationId);
+  res.status(204).send();
+});
+
+export const clearAllNotifications = asyncHandler(async (req, res) => {
+  await notificationService.clearAllNotifications(req.user!.id);
+  res.status(204).send();
+});

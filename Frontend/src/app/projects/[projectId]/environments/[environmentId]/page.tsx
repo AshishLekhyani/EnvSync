@@ -6,6 +6,7 @@ import { Fragment, FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
+import { useConfirm } from "@/lib/confirm-context";
 import {
   api,
   ApiError,
@@ -51,6 +52,7 @@ export default function EnvironmentSecretsPage() {
     environmentId: string;
   }>();
   const { user, activeOrg: org } = useAuth();
+  const confirm = useConfirm();
 
   const [environment, setEnvironment] = useState<EnvironmentSummary | null>(null);
   const [secrets, setSecrets] = useState<SecretMetadata[]>([]);
@@ -191,7 +193,8 @@ export default function EnvironmentSecretsPage() {
   };
 
   const onDelete = async (secretId: string) => {
-    if (!window.confirm("Delete this secret? This cannot be undone.")) return;
+    if (!(await confirm({ message: "Delete this secret? This cannot be undone.", danger: true })))
+      return;
     setError(null);
     try {
       await api.deleteSecret(secretId);
@@ -252,7 +255,9 @@ export default function EnvironmentSecretsPage() {
   };
 
   const onRotate = async (secretId: string) => {
-    if (!window.confirm("Rotate this secret? A new random value will replace the current one.")) {
+    if (
+      !(await confirm("Rotate this secret? A new random value will replace the current one."))
+    ) {
       return;
     }
 
@@ -292,7 +297,7 @@ export default function EnvironmentSecretsPage() {
   };
 
   const onRestore = async (secretId: string, version: number) => {
-    if (!window.confirm(`Restore version ${version}? This creates a new current version.`)) {
+    if (!(await confirm(`Restore version ${version}? This creates a new current version.`))) {
       return;
     }
 
@@ -346,7 +351,8 @@ export default function EnvironmentSecretsPage() {
           </div>
         ) : !environment ? (
           <div className="github-card rounded-lg p-xl text-center font-body-md text-body-md text-secondary">
-            {error ?? "Environment not found."}
+            This environment isn&apos;t available anymore — it may have been deleted, or your
+            access to it may have changed.
           </div>
         ) : (
           <>

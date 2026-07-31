@@ -3,7 +3,7 @@ import { buildCsv, downloadCsv } from "./csv";
 import { getActionDisplay } from "./auditActions";
 
 export async function exportAuditLogsCsv(orgId: string, orgSlug: string) {
-  const logs = await api.listAuditLogs(orgId, { limit: 200 });
+  const logs = (await api.listAuditLogs(orgId, { limit: 200 })) as AuditLogEntry[];
 
   const headers = ["Timestamp", "Actor", "Action", "Key/Target", "Project", "IP Address"];
   const rows = logs.map((log: AuditLogEntry) => [

@@ -39,7 +39,8 @@ export type AuditAction =
   | "org.ownership_transfer"
   | "project_access.request"
   | "project_access.approve"
-  | "project_access.reject";
+  | "project_access.reject"
+  | "audit_log.purge";
 
 interface WriteAuditLogInput {
   orgId: string;
@@ -70,6 +71,8 @@ export function writeAuditLog(
   });
 }
 
+const PAGE_SIZE = 40;
+
 interface ListAuditLogsFilters {
   projectId?: string;
   action?: string;
@@ -77,6 +80,7 @@ interface ListAuditLogsFilters {
   startDate?: string;
   endDate?: string;
   limit?: number;
+  page?: number;
 }
 
 function resolveProjectFilter(
@@ -95,7 +99,7 @@ function resolveProjectFilter(
   return { in: accessibleProjectIds };
 }
 
-export function listAuditLogs(
+export async function listAuditLogs(
   orgId: string,
   filters: ListAuditLogsFilters,
   accessibleProjectIds: "all" | string[]
@@ -108,19 +112,66 @@ export function listAuditLogs(
     createdAt.lte = end;
   }
 
+  const where = {
+    orgId,
+    projectId: resolveProjectFilter(filters.projectId, accessibleProjectIds),
+    action: filters.action,
+    actorId: filters.actorId,
+    ...(createdAt.gte || createdAt.lte ? { createdAt } : {}),
+  };
+
+  const include = {
+    actor: { select: { id: true, name: true, email: true } },
+    project: { select: { id: true, name: true } },
+  } as const;
+
+  if (filters.page) {
+    const page = filters.page;
+    const [items, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        include,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+      }),
+      prisma.auditLog.count({ where }),
+    ]);
+    return { items, total, page, pageSize: PAGE_SIZE };
+  }
+
   return prisma.auditLog.findMany({
-    where: {
-      orgId,
-      projectId: resolveProjectFilter(filters.projectId, accessibleProjectIds),
-      action: filters.action,
-      actorId: filters.actorId,
-      ...(createdAt.gte || createdAt.lte ? { createdAt } : {}),
-    },
-    include: {
-      actor: { select: { id: true, name: true, email: true } },
-      project: { select: { id: true, name: true } },
-    },
+    where,
+    include,
     orderBy: { createdAt: "desc" },
     take: filters.limit ?? 50,
   });
+}
+
+export async function purgeAuditLogs(
+  orgId: string,
+  before: string,
+  actorId: string,
+  ipAddress?: string
+) {
+  const cutoff = new Date(before);
+
+  const deletedCount = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.auditLog.deleteMany({
+      where: { orgId, createdAt: { lt: cutoff } },
+    });
+
+    await writeAuditLog(tx, {
+      orgId,
+      actorId,
+      action: "audit_log.purge",
+      targetType: "AuditLog",
+      metadata: { beforeDate: before, deletedCount: count },
+      ipAddress,
+    });
+
+    return count;
+  });
+
+  return { deletedCount };
 }

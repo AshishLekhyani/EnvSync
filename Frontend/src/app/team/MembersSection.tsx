@@ -6,6 +6,7 @@ import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
+import { useConfirm } from "@/lib/confirm-context";
 import { queryKeys } from "@/lib/query-keys";
 import { assignableRoles } from "@/lib/roles";
 import { api, ApiError, MemberSummary, OrgRole } from "@/lib/api";
@@ -23,6 +24,7 @@ function ProjectAccessRow({
   onRemoved: (membershipId: string) => void;
 }) {
   const { activeOrg: org, user } = useAuth();
+  const confirm = useConfirm();
   const isOwner = org?.role === "OWNER";
 
   const projectsQuery = useQuery({
@@ -44,7 +46,7 @@ function ProjectAccessRow({
   const onChangeRole = async (nextRole: OrgRole) => {
     if (nextRole === member.role) return;
     if (
-      !window.confirm(`Change ${member.user.name}'s role from ${member.role} to ${nextRole}?`)
+      !(await confirm(`Change ${member.user.name}'s role from ${member.role} to ${nextRole}?`))
     ) {
       return;
     }
@@ -63,11 +65,14 @@ function ProjectAccessRow({
   const onRemove = async () => {
     const isSelf = member.user.id === user?.id;
     if (
-      !window.confirm(
-        isSelf
+      !(await confirm({
+        title: isSelf ? "Leave Organization" : "Remove Member",
+        message: isSelf
           ? "Leave this organization? You'll lose access immediately."
-          : `Remove ${member.user.name} from this organization?`
-      )
+          : `Remove ${member.user.name} from this organization?`,
+        confirmLabel: isSelf ? "Leave" : "Remove",
+        danger: true,
+      }))
     ) {
       return;
     }

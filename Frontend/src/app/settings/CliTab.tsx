@@ -3,10 +3,12 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { useAuth } from "@/lib/auth-context";
+import { useConfirm } from "@/lib/confirm-context";
 import { api, ApiError, ApiTokenCreated, ApiTokenSummary } from "@/lib/api";
 
 export function CliTab() {
   const { activeOrg: org } = useAuth();
+  const confirm = useConfirm();
   const [showToast, setShowToast] = useState(false);
 
   const [tokens, setTokens] = useState<ApiTokenSummary[]>([]);
@@ -78,7 +80,7 @@ export function CliTab() {
 
   const onRevokeToken = async (tokenId: string) => {
     if (!org) return;
-    if (!window.confirm("Revoke this token? Anything using it will stop working immediately.")) {
+    if (!(await confirm("Revoke this token? Anything using it will stop working immediately."))) {
       return;
     }
     setRevokingId(tokenId);

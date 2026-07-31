@@ -6,6 +6,7 @@ import { ConflictError, ForbiddenError, NotFoundError } from "../../common/error
 import { assertCanAssignRole, Actor } from "../orgs/membership.service";
 import { writeAuditLog } from "../audit/audit.service";
 import { shouldNotify } from "../notifications/notification.service";
+import { notifyUserNotificationCreated } from "../auth/sse";
 import { CreateInviteInput, SetBlanketAutoApproveInput } from "./invite.validators";
 
 export const INVITE_PREFIX = "invite_";
@@ -88,6 +89,9 @@ async function notifyApprovers(
       metadata: { orgId, inviteId: invite.id, inviteEmail: invite.email, inviterName: inviter.name },
     })),
   });
+  for (const recipientId of recipientIds) {
+    notifyUserNotificationCreated(recipientId);
+  }
 }
 
 export async function createInvite(

@@ -4,7 +4,7 @@ import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from ".
 import { ROLE_WEIGHT } from "../rbac/roles";
 import { hasProjectAccess } from "../rbac/projectAccess.service";
 import { writeAuditLog } from "../audit/audit.service";
-import { notifyUserAccessChanged } from "../auth/sse";
+import { notifyUserAccessChanged, notifyUserNotificationCreated } from "../auth/sse";
 import { shouldNotify } from "../notifications/notification.service";
 import { AddMemberInput, UpdateMemberRoleInput } from "./membership.validators";
 
@@ -20,7 +20,11 @@ export function assertCanAssignRole(actorRole: OrgRole, targetRole: OrgRole) {
   }
 }
 
-export async function listMembers(orgId: string, accessibleProjectIds: "all" | string[]) {
+export async function listMembers(
+  orgId: string,
+  accessibleProjectIds: "all" | string[],
+  userId: string
+) {
   const canSeeAll = accessibleProjectIds === "all";
 
   const memberships = await prisma.orgMembership.findMany({
@@ -31,6 +35,7 @@ export async function listMembers(orgId: string, accessibleProjectIds: "all" | s
           OR: [
             { role: "OWNER" },
             { canViewAllProjects: true },
+            { userId },
             {
               user: {
                 projectAccess: { some: { projectId: { in: accessibleProjectIds } } },
@@ -403,6 +408,7 @@ export async function leaveOrganization(orgId: string, userId: string, ipAddress
       });
       await tx.organization.delete({ where: { id: orgId } });
     });
+    notifyUserAccessChanged(userId, orgId);
     return;
   }
 
@@ -419,6 +425,7 @@ export async function leaveOrganization(orgId: string, userId: string, ipAddress
 
     await tx.orgMembership.delete({ where: { id: membership.id } });
   });
+  notifyUserAccessChanged(userId, orgId);
 }
 
 export async function transferOwnership(
@@ -491,6 +498,7 @@ export async function transferOwnership(
 
   notifyUserAccessChanged(actorMembership.userId, orgId);
   notifyUserAccessChanged(targetMembership.userId, orgId);
+  if (notifyNewOwner) notifyUserNotificationCreated(targetMembership.userId);
 }
 
 export async function leaveProject(
@@ -517,4 +525,6 @@ export async function leaveProject(
     metadata: { targetUserId: userId, projectId, projectName: project.name, reason: "left_voluntarily" },
     ipAddress,
   });
+
+  notifyUserAccessChanged(userId, orgId, projectId);
 }

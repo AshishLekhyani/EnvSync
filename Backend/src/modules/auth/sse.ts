@@ -26,10 +26,18 @@ export function notifyUserSessionsRevoked(userId: string) {
   }
 }
 
-export function notifyUserAccessChanged(userId: string, orgId: string) {
+export function notifyUserAccessChanged(userId: string, orgId: string, projectId?: string) {
   const set = connectionsByUserId.get(userId);
   if (!set) return;
   for (const res of set) {
-    res.write(`event: access-changed\ndata: ${JSON.stringify({ orgId })}\n\n`);
+    res.write(`event: access-changed\ndata: ${JSON.stringify({ orgId, projectId })}\n\n`);
+  }
+}
+
+export function notifyUserNotificationCreated(userId: string) {
+  const set = connectionsByUserId.get(userId);
+  if (!set) return;
+  for (const res of set) {
+    res.write("event: notification-created\ndata: {}\n\n");
   }
 }

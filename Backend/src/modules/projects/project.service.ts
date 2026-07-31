@@ -59,7 +59,8 @@ export async function createProject(
 export async function listProjects(
   orgId: string,
   accessibleProjectIds: "all" | string[],
-  browseAll = false
+  browseAll = false,
+  userId?: string
 ) {
   const canSeeAll = accessibleProjectIds === "all";
 
@@ -71,9 +72,19 @@ export async function listProjects(
 
   const accessibleSet = canSeeAll ? null : new Set(accessibleProjectIds);
 
+  let pendingRequestSet: Set<string> | null = null;
+  if (browseAll && !canSeeAll && userId) {
+    const pending = await prisma.projectAccessRequest.findMany({
+      where: { orgId, requestedById: userId, status: "PENDING" },
+      select: { projectId: true },
+    });
+    pendingRequestSet = new Set(pending.map((p) => p.projectId));
+  }
+
   return projects.map((project) => ({
     ...toProjectResponse(project),
     hasAccess: accessibleSet ? accessibleSet.has(project.id) : true,
+    hasPendingAccessRequest: pendingRequestSet ? pendingRequestSet.has(project.id) : false,
   }));
 }
 
