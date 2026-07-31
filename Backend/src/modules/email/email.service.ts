@@ -1,43 +1,18 @@
-import { promises as dns } from "dns";
-import nodemailer, { Transporter } from "nodemailer";
 import { env } from "../../config/env";
 
-let transporter: Transporter | null = null;
-
 export function isEmailConfigured(): boolean {
-  return !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.EMAIL_FROM);
+  return !!(env.SENDGRID_API_KEY && env.EMAIL_FROM);
 }
 
-const SMTP_TIMEOUT_MS = 20000;
+const SENDGRID_TIMEOUT_MS = 20000;
 
-// Render's network has no outbound IPv6 route, but Node's dual-stack DNS
-// resolution can still hand back an IPv6 address, causing an ENETUNREACH
-// hang. Resolving to IPv4 ourselves and pinning `tls.servername` to the
-// original hostname keeps cert validation correct while avoiding IPv6.
-async function resolveIPv4Host(host: string): Promise<string> {
-  try {
-    const addresses = await dns.resolve4(host);
-    return addresses[0] ?? host;
-  } catch {
-    return host;
+function parseFromAddress(raw: string): { email: string; name?: string } {
+  const match = raw.match(/^(.*)<(.+)>$/);
+  if (match) {
+    const name = match[1].trim().replace(/^"|"$/g, "");
+    return { email: match[2].trim(), name: name || undefined };
   }
-}
-
-async function getTransporter(): Promise<Transporter> {
-  if (!transporter) {
-    const resolvedHost = await resolveIPv4Host(env.SMTP_HOST!);
-    transporter = nodemailer.createTransport({
-      host: resolvedHost,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_SECURE,
-      auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
-      connectionTimeout: SMTP_TIMEOUT_MS,
-      greetingTimeout: SMTP_TIMEOUT_MS,
-      socketTimeout: SMTP_TIMEOUT_MS,
-      tls: { servername: env.SMTP_HOST },
-    });
-  }
-  return transporter;
+  return { email: raw.trim() };
 }
 
 export interface EmailPayload {
@@ -52,18 +27,38 @@ export async function sendEmail(payload: EmailPayload): Promise<{ sent: boolean 
     return { sent: false };
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SENDGRID_TIMEOUT_MS);
+
   try {
-    const activeTransporter = await getTransporter();
-    await activeTransporter.sendMail({
-      from: env.EMAIL_FROM,
-      to: payload.to,
-      subject: payload.subject,
-      html: payload.html,
-      text: payload.text,
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.SENDGRID_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: payload.to }] }],
+        from: parseFromAddress(env.EMAIL_FROM!),
+        subject: payload.subject,
+        content: [
+          { type: "text/plain", value: payload.text },
+          { type: "text/html", value: payload.html },
+        ],
+      }),
+      signal: controller.signal,
     });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`SendGrid responded ${res.status}: ${body}`);
+    }
+
     return { sent: true };
   } catch (err) {
     console.error("Failed to send email", err);
     return { sent: false };
+  } finally {
+    clearTimeout(timeout);
   }
 }

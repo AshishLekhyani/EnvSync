@@ -8,7 +8,7 @@ This is the actual setup this project runs on: **backend on Render** (API), **da
 - A [Neon](https://neon.tech) account (free Postgres)
 - A [Render](https://render.com) account
 - A [Vercel](https://vercel.com) account
-- An SMTP account for real password-reset/invite/verification emails (a personal Gmail or Outlook account works — see `Backend/.env.example` for app-password setup notes). Optional: without it, those flows fall back to showing the link directly in the UI instead of emailing it.
+- A [SendGrid](https://sendgrid.com) account for real password-reset/invite/verification emails (free tier, 100/day). Sent via SendGrid's HTTP API, not SMTP — Render (and many hosts) block outbound SMTP ports, so raw SMTP doesn't work here. Verify a single sender email under Settings → Sender Authentication → Single Sender Verification (no domain required), then create a restricted API key with only "Mail Send" permission. Optional: without it, those flows fall back to showing the link directly in the UI instead of emailing it.
 - If you want Google sign-in, a Google Cloud OAuth Client (optional — the button is hidden gracefully if unset).
 
 ## 1. Database → Neon
@@ -35,7 +35,7 @@ This is the actual setup this project runs on: **backend on Render** (API), **da
    | `ENCRYPTION_MASTER_KEY` | `base64:` + `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
    | `NODE_ENV` | `production` |
    | `CORS_ORIGIN` | your Vercel URL — fill this in **after** step 3 below, then redeploy |
-   | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` / `EMAIL_FROM` | your SMTP provider's values |
+   | `SENDGRID_API_KEY` / `EMAIL_FROM` | your SendGrid API key and the verified sender address, e.g. `EnvSync <you@example.com>` |
    | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional, if enabling Google login |
 
    `PORT` doesn't need to be set — Render injects it and `Backend/src/index.ts` already listens on `env.PORT`.
@@ -66,7 +66,7 @@ Go back to Render and set the backend's `CORS_ORIGIN` to the Vercel URL from ste
 - Invite a teammate → confirm the invite email arrives
 - If Google OAuth is configured, confirm the button works
 - `curl -I https://<your-vercel-domain>` → confirm security headers are present (`X-Frame-Options`, `Content-Security-Policy`, etc.)
-- **Do not** run `Backend/scripts/smoke-test.ts` against production — it freely creates throwaway orgs, users, and secrets, and requires SMTP to be *unconfigured* to read back dev-mode tokens. Keep it to local dev only.
+- **Do not** run `Backend/scripts/smoke-test.ts` against production — it freely creates throwaway orgs, users, and secrets, and requires email sending to be *unconfigured* to read back dev-mode tokens. Keep it to local dev only.
 
 ## Why not Docker?
 

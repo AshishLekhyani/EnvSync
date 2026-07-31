@@ -58,7 +58,7 @@ async function signupAndVerify(name: string, email: string, password: string) {
 async function main() {
   if (isEmailConfigured()) {
     fail(
-      "SMTP is configured — this suite needs dev-mode token links to verify the full reset/invite/verification flow end-to-end. Comment out SMTP_HOST/SMTP_USER/SMTP_PASS/EMAIL_FROM in Backend/.env, restart the dev server, and re-run. Real delivery is a separate manual check (see DEPLOYMENT.md)."
+      "Email sending is configured — this suite needs dev-mode token links to verify the full reset/invite/verification flow end-to-end. Comment out SENDGRID_API_KEY/EMAIL_FROM in Backend/.env, restart the dev server, and re-run. Real delivery is a separate manual check (see DEPLOYMENT.md)."
     );
   }
 
@@ -1435,7 +1435,7 @@ async function main() {
   });
   const signupResult = await res.json();
   if (res.status !== 200 || typeof signupResult.verifyToken !== "string") {
-    fail("signup should return a dev-mode verifyToken (SMTP unconfigured)", signupResult);
+    fail("signup should return a dev-mode verifyToken (email unconfigured)", signupResult);
   }
   ok("signup returns a dev-mode verifyToken instead of creating an account immediately");
 

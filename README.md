@@ -9,7 +9,7 @@ Live at [envsync-five.vercel.app](https://envsync-five.vercel.app). CLI publishe
 **Auth & accounts**
 - Email/password (argon2id) or Google OAuth
 - Signup requires email verification *before* the account is created — there's no window where an unverified, unusable account sits in the database
-- Password reset and email verification send real email via SMTP when configured, and fall back to showing the link directly in the UI when it isn't (useful for local dev and self-hosters who skip email setup)
+- Password reset and email verification send real email via SendGrid's HTTP API when configured, and fall back to showing the link directly in the UI when it isn't (useful for local dev and self-hosters who skip email setup)
 - Short-lived JWT access tokens + rotating opaque refresh tokens (httpOnly cookie); revoking a session takes effect immediately across every open tab via a live SSE push, not on next reload
 - Account deletion, with a solo-ownership check that blocks deleting an account that would silently orphan an organization
 
@@ -23,7 +23,7 @@ Live at [envsync-five.vercel.app](https://envsync-five.vercel.app). CLI publishe
 - Role assignment (via invite or promotion) is capped strictly below the assigner's own role — a Developer can only ever grant Viewer, an Admin can never grant Admin or Owner
 
 **Invites**
-- Shareable invite links, optionally scoped to a specific project, emailed automatically when SMTP is configured
+- Shareable invite links, optionally scoped to a specific project, emailed automatically when email sending is configured
 - Invites created by a Developer require Admin approval before they're usable, unless an auto-approve rule exists (per-developer or org-wide)
 - A live notification tells the requester when their invite or access request is approved/rejected
 
@@ -86,11 +86,11 @@ Requires Node ≥18 and a local PostgreSQL instance (or a free [Neon](https://ne
 | `NODE_ENV` | Optional (default `development`) | `production` enables secure cookies, stricter behavior |
 | `CORS_ORIGIN` | Required | The frontend's origin — must match exactly for cookies/CORS to work |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth login — the button is hidden gracefully if unset |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` / `EMAIL_FROM` | Optional | Real email delivery for password reset/invites/verification — falls back to showing the link in the UI if unset (see `.env.example` for Gmail/Outlook app-password setup) |
+| `SENDGRID_API_KEY` / `EMAIL_FROM` | Optional | Real email delivery for password reset/invites/verification via SendGrid's HTTP API — falls back to showing the link in the UI if unset (see `.env.example` for single-sender-verification setup) |
 
 ### Verification
 
-`Backend/scripts/smoke-test.ts` (`npm run smoke-test` from `Backend/`) exercises the full API end-to-end against a running dev server and is the closest thing this project has to an integration test suite — 260+ assertions covering auth, RBAC, encryption round-trips, invites, audit logs, rate limiting, and more. It needs SMTP left **unconfigured** locally (it reads dev-mode tokens back from API responses) and a fresh backend restart between runs (in-memory rate limiters persist per-process).
+`Backend/scripts/smoke-test.ts` (`npm run smoke-test` from `Backend/`) exercises the full API end-to-end against a running dev server and is the closest thing this project has to an integration test suite — 260+ assertions covering auth, RBAC, encryption round-trips, invites, audit logs, rate limiting, and more. It needs email sending left **unconfigured** locally (it reads dev-mode tokens back from API responses) and a fresh backend restart between runs (in-memory rate limiters persist per-process).
 
 ## Docs
 
