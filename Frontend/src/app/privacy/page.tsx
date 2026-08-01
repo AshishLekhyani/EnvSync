@@ -15,9 +15,9 @@ export default function PrivacyPage() {
           <section>
             <h2 className="mb-xs font-h3 text-h3 text-on-surface">Information we collect</h2>
             <p>
-              We collect the account information you provide directly — name, email address, and
-              password (stored only as a salted hash, never in plain text). If you sign in with
-              Google, we receive your name, email, and account identifier from that provider.
+              We collect the account information Google provides when you sign in — your name,
+              email address, and account identifier. We never receive or store your Google
+              password; authentication happens entirely on Google&apos;s side.
             </p>
           </section>
 

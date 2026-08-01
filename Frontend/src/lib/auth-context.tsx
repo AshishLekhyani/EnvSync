@@ -30,14 +30,6 @@ interface AuthContextValue {
   activeOrgId: string | null;
   activeOrg: OrgSummary | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (
-    name: string,
-    email: string,
-    password: string,
-    invite?: string
-  ) => Promise<{ sent: boolean; verifyToken: string | null }>;
-  verifyAndLogin: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
   switchOrg: (orgId: string) => void;
@@ -149,33 +141,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = useCallback(
-    async (email: string, password: string) => {
-      const { accessToken, user: loggedInUser } = await api.login({ email, password });
-      setAccessToken(accessToken);
-      setUser(loggedInUser);
-      await loadMe();
-    },
-    [loadMe]
-  );
-
-  const signup = useCallback(
-    async (name: string, email: string, password: string, invite?: string) => {
-      return api.signup({ name, email, password, invite });
-    },
-    []
-  );
-
-  const verifyAndLogin = useCallback(
-    async (token: string) => {
-      const { accessToken, user: verifiedUser } = await api.verifyEmail(token);
-      setAccessToken(accessToken);
-      setUser(verifiedUser);
-      await loadMe();
-    },
-    [loadMe]
-  );
-
   const forceLogout = useCallback(() => {
     setAccessToken(null);
     setUser(null);
@@ -258,9 +223,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         activeOrgId,
         activeOrg,
         loading,
-        login,
-        signup,
-        verifyAndLogin,
         logout,
         refreshMe,
         switchOrg,

@@ -1,15 +1,14 @@
 # EnvSync
 
-A Doppler/Infisical-style secrets manager: organizations, projects, and environment-scoped secrets, encrypted at rest with AES-256-GCM envelope encryption and gated by role-based access control. Real email delivery, a real CLI, and real audit logging — nothing in this app is a mocked-up demo.
+A Doppler/Infisical-style secrets manager: organizations, projects, and environment-scoped secrets, encrypted at rest with AES-256-GCM envelope encryption and gated by role-based access control. A real CLI and real audit logging — nothing in this app is a mocked-up demo.
 
 Live at [envsync-five.vercel.app](https://envsync-five.vercel.app). CLI published as [`@ashishlekhyani/envsync-cli`](https://www.npmjs.com/package/@ashishlekhyani/envsync-cli).
 
 ## Features
 
 **Auth & accounts**
-- Email/password (argon2id) or Google OAuth
-- Signup requires email verification *before* the account is created — there's no window where an unverified, unusable account sits in the database
-- Password reset and email verification send real email via SendGrid's HTTP API when configured, and fall back to showing the link directly in the UI when it isn't (useful for local dev and self-hosters who skip email setup)
+- Google is the only sign-in method — no passwords are ever stored, hashed, reset, or brute-forced, because there's no password at all. Google verifies email ownership, which is stronger than a self-issued verification email could ever be
+- Signing in with Google for an email that already has an account links to that existing account (and all its data) instead of creating a duplicate or rejecting the sign-in
 - Short-lived JWT access tokens + rotating opaque refresh tokens (httpOnly cookie); revoking a session takes effect immediately across every open tab via a live SSE push, not on next reload
 - Account deletion, with a solo-ownership check that blocks deleting an account that would silently orphan an organization
 
@@ -85,8 +84,8 @@ Requires Node ≥18 and a local PostgreSQL instance (or a free [Neon](https://ne
 | `PORT` | Optional (default `4000`) | API listen port |
 | `NODE_ENV` | Optional (default `development`) | `production` enables secure cookies, stricter behavior |
 | `CORS_ORIGIN` | Required | The frontend's origin — must match exactly for cookies/CORS to work |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth login — the button is hidden gracefully if unset |
-| `SENDGRID_API_KEY` / `EMAIL_FROM` | Optional | Real email delivery for password reset/invites/verification via SendGrid's HTTP API — falls back to showing the link in the UI if unset (see `.env.example` for single-sender-verification setup) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Required for a real deployment | The server still boots without these (useful for local backend-only work), but Google is the only sign-in method — nobody can log in until they're set. Unset, the button redirects to a clear "not configured" error rather than failing silently |
+| `SENDGRID_API_KEY` / `EMAIL_FROM` | Optional | Real email delivery for org invites via SendGrid's HTTP API — falls back to showing the link in the UI if unset (see `.env.example` for single-sender-verification setup). Not used for sign-in, since Google is the only auth method |
 
 ### Verification
 

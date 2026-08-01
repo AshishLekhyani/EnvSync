@@ -292,18 +292,6 @@ export interface ProjectAccessRequestSummary {
 export const api = {
   getCliVersion: () => request<{ version: string | null }>("/meta/cli-version"),
 
-  signup: (input: { name: string; email: string; password: string; invite?: string }) =>
-    request<{ sent: boolean; verifyToken: string | null }>("/auth/signup", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
-
-  login: (input: { email: string; password: string }) =>
-    request<AuthResponse>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
-
   refresh: (signal?: AbortSignal) =>
     request<AuthResponse>("/auth/refresh", { method: "POST", signal }),
 
@@ -321,40 +309,10 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  changePassword: (input: { currentPassword: string; newPassword: string }) =>
-    request<void>("/auth/change-password", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
-
-  requestPasswordReset: (email: string) =>
-    request<{ resetToken: string | null }>("/auth/forgot-password", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    }),
-
-  resetPassword: (token: string, newPassword: string) =>
-    request<void>("/auth/reset-password", {
-      method: "POST",
-      body: JSON.stringify({ token, newPassword }),
-    }),
-
   deleteAccount: (confirmEmail: string) =>
     request<void>("/auth/me", {
       method: "DELETE",
       body: JSON.stringify({ confirmEmail }),
-    }),
-
-  verifyEmail: (token: string) =>
-    request<AuthResponse>("/auth/verify-email", {
-      method: "POST",
-      body: JSON.stringify({ token }),
-    }),
-
-  resendVerificationEmail: (email: string) =>
-    request<{ sent: boolean; verifyToken: string | null }>("/auth/resend-verification", {
-      method: "POST",
-      body: JSON.stringify({ email }),
     }),
 
   listOrgs: () => request<OrgSummary[]>("/orgs"),

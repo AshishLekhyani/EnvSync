@@ -18,11 +18,10 @@ export default function GettingStartedDocsPage() {
         <section>
           <h2 className="mb-sm font-h3 text-h3 text-on-surface">1. Create an account</h2>
           <p className="font-body-md text-body-md text-secondary">
-            Sign up with an email and password, or use Google if your server has OAuth
-            configured. For password signup, your account isn&apos;t created until you click the
-            verification link sent to your email — this prevents anyone from signing up with an
-            email they don&apos;t own. There&apos;s nothing to install for the web app — it runs
-            entirely in the browser.
+            Sign in with Google — that&apos;s the only sign-in method, by design. Google verifies
+            you actually own the email address, so EnvSync never has to store or verify a
+            password itself. Your account is created automatically on first sign-in. There&apos;s
+            nothing to install for the web app — it runs entirely in the browser.
           </p>
         </section>
 

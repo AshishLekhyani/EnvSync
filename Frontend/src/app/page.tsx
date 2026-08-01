@@ -78,7 +78,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col items-center justify-center gap-md sm:flex-row">
               <Link
-                href="/signup"
+                href="/login"
                 className="rounded-lg bg-primary-container px-xl py-md font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90 active:scale-95"
               >
                 Get Started for Free
@@ -399,7 +399,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col justify-center gap-md sm:flex-row">
               <Link
-                href="/signup"
+                href="/login"
                 className="rounded-lg bg-primary-container px-xl py-md font-bold text-white shadow-lg transition-all hover:shadow-primary/20"
               >
                 Get Started for Free

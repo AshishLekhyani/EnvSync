@@ -3,17 +3,7 @@ import { asyncHandler } from "../../common/middleware/asyncHandler";
 import { UnauthorizedError } from "../../common/errors/AppError";
 import { env } from "../../config/env";
 import * as authService from "./auth.service";
-import {
-  ChangePasswordInput,
-  DeleteAccountInput,
-  ForgotPasswordInput,
-  LoginInput,
-  ResendSignupVerificationInput,
-  ResetPasswordInput,
-  SignupInput,
-  UpdateProfileInput,
-  VerifyEmailInput,
-} from "./auth.validators";
+import { DeleteAccountInput, UpdateProfileInput } from "./auth.validators";
 import { REFRESH_TOKEN_MAX_AGE_MS } from "./tokens";
 import { registerConnection, unregisterConnection } from "./sse";
 
@@ -37,20 +27,6 @@ export function sessionMeta(req: Request) {
     ipAddress: req.ip,
   };
 }
-
-export const signup = asyncHandler(async (req, res) => {
-  const result = await authService.signup(req.body as SignupInput);
-  res.status(200).json(result);
-});
-
-export const login = asyncHandler(async (req, res) => {
-  const { user, accessToken, refreshToken } = await authService.login(
-    req.body as LoginInput,
-    sessionMeta(req)
-  );
-  setRefreshCookie(res, refreshToken);
-  res.status(200).json({ user, accessToken });
-});
 
 export const refresh = asyncHandler(async (req, res) => {
   const raw = req.cookies?.[REFRESH_COOKIE];
@@ -136,47 +112,8 @@ export const events = asyncHandler(async (req, res) => {
   req.on("close", cleanup);
 });
 
-export const changePassword = asyncHandler(async (req, res) => {
-  const raw = req.cookies?.[REFRESH_COOKIE];
-  const currentSession = raw ? await authService.findSessionByRefreshToken(raw) : null;
-  await authService.changePassword(
-    req.user!.id,
-    req.body as ChangePasswordInput,
-    currentSession?.id
-  );
-  res.status(204).send();
-});
-
-export const forgotPassword = asyncHandler(async (req, res) => {
-  const result = await authService.requestPasswordReset(req.body as ForgotPasswordInput);
-  res.status(200).json(result);
-});
-
-export const resetPassword = asyncHandler(async (req, res) => {
-  await authService.resetPassword(req.body as ResetPasswordInput);
-  res.status(204).send();
-});
-
 export const deleteAccount = asyncHandler(async (req, res) => {
   await authService.deleteAccount(req.user!.id, req.body as DeleteAccountInput);
   res.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
   res.status(204).send();
-});
-
-export const verifyEmail = asyncHandler(async (req, res) => {
-  const user = await authService.verifySignup((req.body as VerifyEmailInput).token);
-  const { accessToken, refreshToken } = await authService.issueSession(
-    user.id,
-    user.email,
-    sessionMeta(req)
-  );
-  setRefreshCookie(res, refreshToken);
-  res.status(200).json({ user, accessToken });
-});
-
-export const resendVerification = asyncHandler(async (req, res) => {
-  const result = await authService.resendSignupVerification(
-    (req.body as ResendSignupVerificationInput).email
-  );
-  res.status(200).json(result);
 });

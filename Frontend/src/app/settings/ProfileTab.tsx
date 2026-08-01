@@ -50,13 +50,6 @@ export function ProfileTab() {
 
   const [savingPrefs, setSavingPrefs] = useState<keyof NotificationPrefs | null>(null);
 
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState("");
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSaved, setPasswordSaved] = useState(false);
-
   if (!user) return null;
 
   const onSelectPhoto = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -121,29 +114,6 @@ export function ProfileTab() {
       setNameError(err instanceof ApiError ? err.message : "Failed to update profile");
     } finally {
       setSavingName(false);
-    }
-  };
-
-  const onChangePassword = async (e: FormEvent) => {
-    e.preventDefault();
-    setPasswordError(null);
-    setPasswordSaved(false);
-    if (newPassword !== confirmNewPassword) {
-      setPasswordError("New passwords don't match.");
-      return;
-    }
-    setChangingPassword(true);
-    try {
-      await api.changePassword({ currentPassword, newPassword });
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmNewPassword("");
-      setPasswordSaved(true);
-      window.setTimeout(() => setPasswordSaved(false), 3000);
-    } catch (err) {
-      setPasswordError(err instanceof ApiError ? err.message : "Failed to change password");
-    } finally {
-      setChangingPassword(false);
     }
   };
 
@@ -226,82 +196,6 @@ export function ProfileTab() {
               )}
             </div>
           </form>
-        </div>
-      </div>
-
-      <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
-        <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
-          <Icon name="password" className="text-primary" />
-          <h2 className="font-h3 text-h3 text-on-surface">Password</h2>
-        </div>
-        <div className="p-md">
-          {user.authProvider !== "PASSWORD" ? (
-            <p className="font-body-sm text-body-sm text-on-surface-variant">
-              You signed in via {user.authProvider === "GITHUB" ? "GitHub" : "Google"} —
-              there&apos;s no password to manage.
-            </p>
-          ) : (
-            <form onSubmit={onChangePassword} className="flex max-w-md flex-col gap-md">
-              <label className="block">
-                <span className="mb-xs block font-label-md text-label-md text-on-surface">
-                  Current password
-                </span>
-                <input
-                  required
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-xs block font-label-md text-label-md text-on-surface">
-                  New password
-                </span>
-                <input
-                  required
-                  minLength={8}
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-xs block font-label-md text-label-md text-on-surface">
-                  Confirm new password
-                </span>
-                <input
-                  required
-                  minLength={8}
-                  type="password"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
-                />
-              </label>
-              {passwordError && (
-                <p className="font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
-                  {passwordError}
-                </p>
-              )}
-              <p className="font-body-sm text-[11px] text-on-surface-variant">
-                Changing your password signs out every other active session.
-              </p>
-              <div className="flex items-center gap-md">
-                <button
-                  type="submit"
-                  disabled={changingPassword}
-                  className="self-start rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
-                >
-                  {changingPassword ? "Updating..." : "Change Password"}
-                </button>
-                {passwordSaved && (
-                  <span className="font-body-sm text-body-sm text-primary">Password updated.</span>
-                )}
-              </div>
-            </form>
-          )}
         </div>
       </div>
 

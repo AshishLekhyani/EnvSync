@@ -1,46 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
-import { Icon } from "@/components/Icon";
-import { API_URL, ApiError } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
-
-const SLOW_SUBMIT_THRESHOLD_MS = 3500;
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { API_URL } from "@/lib/api";
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  oauth_not_configured: "Single sign-on isn't configured on this server yet.",
+  oauth_not_configured: "Google sign-in isn't configured on this server yet.",
   oauth_denied: "Sign-in was cancelled.",
   state_mismatch: "Sign-in failed. Please try again.",
-  email_in_use: "An account with this email already exists. Log in with your password.",
   oauth_failed: "Sign-in failed. Please try again.",
 };
 
-export function AuthCard({
-  mode,
-}: {
-  mode: "login" | "signup";
-}) {
-  const router = useRouter();
+export function AuthCard() {
   const searchParams = useSearchParams();
   const invite = searchParams.get("invite");
   const oauthError = searchParams.get("error");
-  const { login, signup } = useAuth();
-  const [showPassword, setShowPassword] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [awaitingVerification, setAwaitingVerification] = useState<{
-    email: string;
-    verifyToken: string | null;
-  } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [slowSubmit, setSlowSubmit] = useState(false);
-  const isLogin = mode === "login";
 
   useEffect(() => {
     if (oauthError) {
@@ -48,61 +24,7 @@ export function AuthCard({
     }
   }, [oauthError]);
 
-  useEffect(() => {
-    if (!submitting) {
-      setSlowSubmit(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setSlowSubmit(true), SLOW_SUBMIT_THRESHOLD_MS);
-    return () => window.clearTimeout(timer);
-  }, [submitting]);
-
-  const postAuthPath = invite ? `/invite/${invite}` : "/projects";
   const googleHref = `${API_URL}/auth/google${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`;
-
-  const verifyLink =
-    awaitingVerification?.verifyToken && typeof window !== "undefined"
-      ? `${window.location.origin}/verify-email/${awaitingVerification.verifyToken}${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`
-      : null;
-
-  const copyLink = async () => {
-    if (!verifyLink) return;
-    try {
-      await navigator.clipboard.writeText(verifyLink);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 3000);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-
-    if (!isLogin && password !== confirmPassword) {
-      setError("Passwords don't match.");
-      setSubmitting(false);
-      return;
-    }
-
-    try {
-      if (isLogin) {
-        await login(email, password);
-        router.push(postAuthPath);
-      } else {
-        const result = await signup(name, email, password, invite ?? undefined);
-        setAwaitingVerification({ email, verifyToken: result.verifyToken });
-        setSubmitting(false);
-      }
-    } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : "Something went wrong. Please try again."
-      );
-      setSubmitting(false);
-    }
-  };
 
   return (
     <div className="w-full max-w-md rounded-xl border border-outline-variant bg-white dark:bg-surface-container-lowest p-xl shadow-[0_1px_0_rgba(27,31,35,0.04)]">
@@ -113,66 +35,21 @@ export function AuthCard({
         >
           EnvSync
         </Link>
-        <h1 className="font-h1 text-h1 text-on-surface">
-          {awaitingVerification
-            ? "Check your email"
-            : isLogin
-              ? "Welcome back"
-              : "Create your account"}
-        </h1>
+        <h1 className="font-h1 text-h1 text-on-surface">Welcome to EnvSync</h1>
         <p className="mt-base font-body-md text-body-md text-secondary">
-          {awaitingVerification
-            ? "Verify your address to finish creating your account."
-            : isLogin
-              ? "Sign in to sync and manage encrypted environment variables."
-              : "Start securing your team's .env files in minutes."}
+          Sign in with Google to sync and manage encrypted environment variables.
         </p>
       </div>
 
-      {awaitingVerification ? (
-        <div className="flex flex-col gap-md">
-          <div className="rounded-lg border border-outline-variant bg-surface-container-low p-md text-center">
-            <Icon name="mark_email_read" className="mb-xs text-primary" style={{ fontSize: 28 }} />
-            <p className="font-body-sm text-body-sm text-secondary">
-              We sent a verification link to <strong>{awaitingVerification.email}</strong>. Your
-              account won&apos;t be created until you click it.
-            </p>
-          </div>
-
-          {verifyLink && (
-            <div className="flex flex-col gap-sm rounded-lg border border-primary/30 bg-primary/5 p-md">
-              <p className="font-body-sm text-body-sm text-secondary">
-                This app has no email provider configured, so your verification link is shown
-                directly here instead — copy it now.
-              </p>
-              <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
-                <span className="truncate pr-md font-code-md text-code-md text-on-surface">
-                  {verifyLink}
-                </span>
-                <button
-                  type="button"
-                  onClick={copyLink}
-                  className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
-                >
-                  <Icon name={copied ? "check" : "content_copy"} />
-                </button>
-              </div>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setAwaitingVerification(null)}
-            className="text-center font-body-sm text-body-sm font-medium text-primary hover:underline"
-          >
-            Use a different email
-          </button>
+      {error && (
+        <div className="mb-md rounded-lg border border-[#CF222E]/30 bg-[#FFEBE9] px-md py-sm font-body-sm text-body-sm text-[#CF222E] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+          {error}
         </div>
-      ) : (
-        <>
+      )}
+
       <a
         href={googleHref}
-        className="mb-md flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container dark:bg-surface-container"
+        className="flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-[#F6F8FA] px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container dark:bg-surface-container"
       >
         <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden>
           <path
@@ -195,164 +72,9 @@ export function AuthCard({
         Continue with Google
       </a>
 
-      <div className="mb-md flex items-center gap-md">
-        <div className="h-px flex-1 bg-outline-variant" />
-        <span className="font-body-sm text-body-sm text-secondary">or</span>
-        <div className="h-px flex-1 bg-outline-variant" />
-      </div>
-
-      {error && (
-        <div className="mb-md rounded-lg border border-[#CF222E]/30 bg-[#FFEBE9] px-md py-sm font-body-sm text-body-sm text-[#CF222E] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={onSubmit} className="space-y-md">
-        {!isLogin && (
-          <label className="block">
-            <span className="mb-xs block font-label-md text-label-md text-on-surface">
-              Full name
-            </span>
-            <input
-              required
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ashish Kumar"
-              maxLength={100}
-              className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:border-primary focus:ring-2 focus:ring-primary-container"
-            />
-          </label>
-        )}
-
-        <label className="block">
-          <span className="mb-xs block font-label-md text-label-md text-on-surface">
-            Work email
-          </span>
-          <input
-            required
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:border-primary focus:ring-2 focus:ring-primary-container"
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-xs block font-label-md text-label-md text-on-surface">
-            Password
-          </span>
-          <div className="relative">
-            <input
-              required
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={isLogin ? "Enter your password" : "At least 8 characters"}
-              minLength={8}
-              className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm pr-xl font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:border-primary focus:ring-2 focus:ring-primary-container"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-sm top-1/2 -translate-y-1/2 text-secondary hover:text-primary"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              <Icon name={showPassword ? "visibility_off" : "visibility"} />
-            </button>
-          </div>
-        </label>
-
-        {!isLogin && (
-          <label className="block">
-            <span className="mb-xs block font-label-md text-label-md text-on-surface">
-              Confirm password
-            </span>
-            <input
-              required
-              type={showPassword ? "text" : "password"}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Re-enter your password"
-              minLength={8}
-              className={`w-full rounded-lg border px-md py-sm font-body-md text-body-md text-on-surface outline-none transition-all placeholder:text-secondary focus:ring-2 ${
-                confirmPassword && confirmPassword !== password
-                  ? "border-[#CF222E] focus:border-[#CF222E] focus:ring-[#CF222E]/20"
-                  : "border-outline-variant focus:border-primary focus:ring-primary-container"
-              }`}
-            />
-            {confirmPassword && confirmPassword !== password && (
-              <span className="mt-xs block font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
-                Passwords don&apos;t match.
-              </span>
-            )}
-          </label>
-        )}
-
-        {isLogin && (
-          <div className="flex items-center justify-end">
-            <Link
-              href="/forgot-password"
-              className="font-body-sm text-body-sm font-medium text-primary hover:underline"
-            >
-              Forgot password?
-            </Link>
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90 active:scale-[0.99] disabled:opacity-60"
-        >
-          {submitting
-            ? slowSubmit
-              ? "Waking up the server..."
-              : "Please wait..."
-            : isLogin
-              ? "Sign in"
-              : "Create account"}
-        </button>
-        {slowSubmit && (
-          <p className="text-center font-body-sm text-body-sm text-secondary">
-            This app runs on a free-tier server that sleeps when idle — first request after a
-            while can take up to a minute.
-          </p>
-        )}
-      </form>
-
-      <p className="mt-lg text-center font-body-sm text-body-sm text-secondary">
-        {isLogin ? (
-          <>
-            Don&apos;t have an account?{" "}
-            <Link
-              href={invite ? `/signup?invite=${invite}` : "/signup"}
-              className="font-medium text-primary hover:underline"
-            >
-              Sign up
-            </Link>
-          </>
-        ) : (
-          <>
-            Already have an account?{" "}
-            <Link
-              href={invite ? `/login?invite=${invite}` : "/login"}
-              className="font-medium text-primary hover:underline"
-            >
-              Log in
-            </Link>
-          </>
-        )}
+      <p className="mt-lg text-center font-body-sm text-body-sm text-outline">
+        By continuing you agree to our Terms and Privacy Policy.
       </p>
-
-      {!isLogin && (
-        <p className="mt-md text-center font-body-sm text-body-sm text-outline">
-          By creating an account you agree to our Terms and Privacy Policy.
-        </p>
-      )}
-      </>
-      )}
     </div>
   );
 }

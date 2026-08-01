@@ -35,25 +35,25 @@ export default function SecurityDocsPage() {
         </section>
 
         <section>
-          <h2 className="mb-sm font-h3 text-h3 text-on-surface">Email verification</h2>
+          <h2 className="mb-sm font-h3 text-h3 text-on-surface">Authentication &amp; identity</h2>
+          <p className="mb-sm font-body-md text-body-md text-secondary">
+            EnvSync doesn&apos;t implement its own password storage or email verification —
+            signing in with Google is the only account-creation path. Google verifies that you
+            actually control the email address before EnvSync ever sees it, which is a stronger
+            guarantee than a self-issued &quot;click this link&quot; verification email could give.
+            There&apos;s no password to leak, hash, reset, or brute-force, because there&apos;s
+            no password at all.
+          </p>
           <p className="font-body-md text-body-md text-secondary">
-            Signing up doesn&apos;t create an account by itself — it creates a pending signup and
-            emails a verification link. The real account, with its password hash, is only
-            created once that link is clicked. This means there&apos;s never a window where a
-            usable, unverified account sits in the database under an email its owner never
-            confirmed. Password reset, invites, and this verification link all send real email
-            via SMTP when it&apos;s configured on the server, and fall back to showing the link
-            directly in the UI when it isn&apos;t.
+            If an email address already has an EnvSync account (created before this change, or
+            some other way), signing in with Google for that same address links to the existing
+            account rather than creating a duplicate or rejecting the sign-in — the account
+            keeps all of its organizations and data, just with password sign-in retired.
           </p>
         </section>
 
         <section>
-          <h2 className="mb-sm font-h3 text-h3 text-on-surface">Passwords &amp; sessions</h2>
-          <p className="mb-sm font-body-md text-body-md text-secondary">
-            Passwords are hashed with <strong>argon2id</strong>, the current OWASP-recommended
-            algorithm, with explicit cost parameters pinned in code so a library upgrade
-            can&apos;t silently change the security posture.
-          </p>
+          <h2 className="mb-sm font-h3 text-h3 text-on-surface">Sessions</h2>
           <p className="font-body-md text-body-md text-secondary">
             Authentication uses short-lived JWT access tokens (HS256, algorithm pinned
             explicitly) plus a separate, opaque refresh token stored as an httpOnly cookie.
@@ -131,9 +131,9 @@ export default function SecurityDocsPage() {
         <section>
           <h2 className="mb-sm font-h3 text-h3 text-on-surface">Real-time session control</h2>
           <p className="font-body-md text-body-md text-secondary">
-            Revoking a session — from Settings, or automatically on a password change — takes
-            effect immediately, not on the affected device&apos;s next reload. A live event
-            channel notifies connected sessions the moment one of them is revoked.
+            Revoking a session from Settings takes effect immediately, not on the affected
+            device&apos;s next reload. A live event channel notifies connected sessions the
+            moment one of them is revoked.
           </p>
         </section>
       </div>

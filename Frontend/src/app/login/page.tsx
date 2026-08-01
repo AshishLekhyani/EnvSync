@@ -40,7 +40,7 @@ export default function LoginPage() {
           </Link>
         </div>
         <Suspense fallback={null}>
-          <AuthCard mode="login" />
+          <AuthCard />
         </Suspense>
       </div>
     </div>

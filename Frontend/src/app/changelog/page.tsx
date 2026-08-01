@@ -6,6 +6,18 @@ export const metadata = { title: "Changelog — EnvSync" };
 
 const ENTRIES = [
   {
+    version: "v0.18",
+    date: "August 2026",
+    title: "Google-only sign-in: password auth removed",
+    items: [
+      "Removed password-based signup and login entirely — Google is now the only way to sign in.",
+      "Fixed a real vulnerability this surfaced: signup/reset/verification tokens could leak to an unauthenticated caller on a transient email-send failure, allowing account creation or takeover under someone else's email address. Removing password auth removes this attack surface entirely, since Google verifies email ownership instead of EnvSync issuing its own verification links.",
+      "Signing in with Google for an email that already has an account (e.g. one created before this change) links to that existing account and its data, instead of creating a duplicate or rejecting the sign-in.",
+      "Removed the separate Sign Up page, forgot/reset password, and email verification flows — one Google button on the login page covers both new and returning users.",
+      "Settings → Profile no longer shows a password-change section — there's nothing to change.",
+    ],
+  },
+  {
     version: "v0.17",
     date: "August 2026",
     title: "CLI overhaul: interactive menu, project linking, real fixes",
@@ -18,7 +30,7 @@ const ENTRIES = [
       "Fixed envsync run failing on Windows for npm/npx/yarn-based commands.",
       "Fixed a security gap where an API token could list every organization its creator belongs to, instead of only the one it was scoped to.",
       "Fixed several docs and in-app pages referencing the wrong CLI npm package name.",
-      "Investigated real email delivery (SendGrid) but reverted to the existing copy-the-link flow after persistent spam-folder and deliverability issues without a verified sending domain — password reset, invites, and verification remain fully functional either way.",
+      "Investigated real email delivery (SendGrid) but reverted to the existing copy-the-link flow after persistent spam-folder and deliverability issues without a verified sending domain.",
     ],
   },
   {

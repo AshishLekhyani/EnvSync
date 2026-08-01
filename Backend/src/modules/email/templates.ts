@@ -35,19 +35,6 @@ function wrap(heading: string, bodyHtml: string, buttonLabel: string, link: stri
 </html>`;
 }
 
-export function passwordResetEmail(link: string): RenderedEmail {
-  return {
-    subject: "Reset your EnvSync password",
-    html: wrap(
-      "Reset your password",
-      "We received a request to reset your EnvSync password. This link expires in 1 hour. If you didn't request this, you can safely ignore this email.",
-      "Reset Password",
-      link
-    ),
-    text: `Reset your EnvSync password: ${link}\n\nThis link expires in 1 hour. If you didn't request this, you can ignore this email.`,
-  };
-}
-
 export function inviteEmail(orgName: string, role: string, link: string): RenderedEmail {
   return {
     subject: `You've been invited to join ${orgName} on EnvSync`,
@@ -61,15 +48,3 @@ export function inviteEmail(orgName: string, role: string, link: string): Render
   };
 }
 
-export function verificationEmail(link: string): RenderedEmail {
-  return {
-    subject: "Verify your EnvSync email address",
-    html: wrap(
-      "Verify your email",
-      "Confirm this is your email address to finish securing your EnvSync account. This link expires in 24 hours.",
-      "Verify Email",
-      link
-    ),
-    text: `Verify your EnvSync email address: ${link}\n\nThis link expires in 24 hours.`,
-  };
-}

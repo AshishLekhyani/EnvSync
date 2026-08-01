@@ -1,42 +1,12 @@
-import crypto from "node:crypto";
 import { prisma } from "../../db/prisma";
-import {
-  BadRequestError,
-  ConflictError,
-  NotFoundError,
-  UnauthorizedError,
-} from "../../common/errors/AppError";
-import { sha256Hex } from "../../common/hash";
-import { hashPassword, verifyPassword } from "./password";
-import {
-  generateRefreshToken,
-  getRefreshTokenExpiry,
-  hashRefreshToken,
-  signAccessToken,
-} from "./tokens";
-import {
-  ChangePasswordInput,
-  DeleteAccountInput,
-  ForgotPasswordInput,
-  LoginInput,
-  ResetPasswordInput,
-  SignupInput,
-  UpdateProfileInput,
-} from "./auth.validators";
+import { BadRequestError, ConflictError, NotFoundError, UnauthorizedError } from "../../common/errors/AppError";
+import { generateRefreshToken, getRefreshTokenExpiry, hashRefreshToken, signAccessToken } from "./tokens";
+import { DeleteAccountInput, UpdateProfileInput } from "./auth.validators";
 import { notifyUserSessionsRevoked } from "./sse";
 import { writeAuditLog } from "../audit/audit.service";
 import { isValidAvatarDataUrl } from "../../common/imageValidation";
-import { env } from "../../config/env";
-import { isEmailConfigured, sendEmail } from "../email/email.service";
-import { passwordResetEmail, verificationEmail } from "../email/templates";
 
 const DEFAULT_NOTIFICATION_PREFS = { approvalRequests: true, accessChanges: true };
-
-const RESET_TOKEN_PREFIX = "reset_";
-const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000;
-
-const VERIFY_TOKEN_PREFIX = "verify_";
-const VERIFY_TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 export interface SessionMeta {
   userAgent?: string;
@@ -63,34 +33,6 @@ function toPublicUser(user: {
   };
 }
 
-async function createAndSendSignupVerification(
-  email: string,
-  name: string,
-  passwordHash: string,
-  inviteToken?: string | null
-) {
-  const rawToken = VERIFY_TOKEN_PREFIX + crypto.randomBytes(32).toString("base64url");
-  const tokenHash = sha256Hex(rawToken);
-  const expiresAt = new Date(Date.now() + VERIFY_TOKEN_EXPIRY_MS);
-
-  await prisma.pendingSignup.upsert({
-    where: { email },
-    create: { email, name, passwordHash, tokenHash, expiresAt, inviteToken },
-    update: { name, passwordHash, tokenHash, expiresAt, inviteToken },
-  });
-
-  const link = `${env.CORS_ORIGIN}/verify-email/${rawToken}${inviteToken ? `?invite=${inviteToken}` : ""}`;
-
-  if (isEmailConfigured()) {
-    const { sent } = await sendEmail({ to: email, ...verificationEmail(link) });
-    if (sent) {
-      return { sent: true, verifyToken: null as string | null };
-    }
-  }
-
-  return { sent: false, verifyToken: rawToken };
-}
-
 export async function issueSession(userId: string, email: string, meta: SessionMeta) {
   const accessToken = signAccessToken({ sub: userId, email });
   const refreshToken = generateRefreshToken();
@@ -106,81 +48,6 @@ export async function issueSession(userId: string, email: string, meta: SessionM
   });
 
   return { accessToken, refreshToken };
-}
-
-export async function signup(input: SignupInput) {
-  const existing = await prisma.user.findUnique({ where: { email: input.email } });
-
-  if (existing) {
-    throw new ConflictError("An account with this email already exists");
-  }
-
-  const passwordHash = await hashPassword(input.password);
-  return createAndSendSignupVerification(input.email, input.name, passwordHash, input.invite);
-}
-
-export async function resendSignupVerification(email: string) {
-  const pending = await prisma.pendingSignup.findUnique({ where: { email } });
-
-  if (!pending) {
-    return { sent: false, verifyToken: null as string | null };
-  }
-
-  return createAndSendSignupVerification(
-    pending.email,
-    pending.name,
-    pending.passwordHash,
-    pending.inviteToken
-  );
-}
-
-export async function verifySignup(rawToken: string) {
-  const tokenHash = sha256Hex(rawToken);
-
-  const pending = await prisma.pendingSignup.findUnique({ where: { tokenHash } });
-
-  if (!pending || pending.expiresAt < new Date()) {
-    throw new UnauthorizedError("This verification link is invalid or has expired");
-  }
-
-  const user = await prisma.$transaction(async (tx) => {
-    const existing = await tx.user.findUnique({ where: { email: pending.email } });
-    if (existing) {
-      await tx.pendingSignup.delete({ where: { id: pending.id } });
-      throw new ConflictError("An account with this email already exists");
-    }
-
-    const created = await tx.user.create({
-      data: {
-        name: pending.name,
-        email: pending.email,
-        passwordHash: pending.passwordHash,
-        authProvider: "PASSWORD",
-        emailVerifiedAt: new Date(),
-      },
-    });
-    await tx.pendingSignup.delete({ where: { id: pending.id } });
-    return created;
-  });
-
-  return toPublicUser(user);
-}
-
-export async function login(input: LoginInput, meta: SessionMeta) {
-  const user = await prisma.user.findUnique({ where: { email: input.email } });
-
-  if (!user || !user.passwordHash) {
-    throw new UnauthorizedError("Invalid email or password");
-  }
-
-  const valid = await verifyPassword(user.passwordHash, input.password);
-
-  if (!valid) {
-    throw new UnauthorizedError("Invalid email or password");
-  }
-
-  const tokens = await issueSession(user.id, user.email, meta);
-  return { user: toPublicUser(user), ...tokens };
 }
 
 export async function refresh(rawRefreshToken: string, meta: SessionMeta) {
@@ -267,46 +134,6 @@ export async function updateProfile(userId: string, input: UpdateProfileInput) {
   return toPublicUser(user);
 }
 
-export async function changePassword(
-  userId: string,
-  input: ChangePasswordInput,
-  currentSessionId?: string
-) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-
-  if (!user) {
-    throw new UnauthorizedError();
-  }
-
-  if (!user.passwordHash) {
-    throw new BadRequestError("This account signs in via an external provider and has no password to change");
-  }
-
-  const valid = await verifyPassword(user.passwordHash, input.currentPassword);
-
-  if (!valid) {
-    throw new UnauthorizedError("Current password is incorrect");
-  }
-
-  const newHash = await hashPassword(input.newPassword);
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash: newHash },
-  });
-
-  await prisma.session.updateMany({
-    where: {
-      userId,
-      revokedAt: null,
-      ...(currentSessionId ? { id: { not: currentSessionId } } : {}),
-    },
-    data: { revokedAt: new Date() },
-  });
-
-  notifyUserSessionsRevoked(userId);
-}
-
 export async function findSessionByRefreshToken(rawRefreshToken: string) {
   const tokenHash = hashRefreshToken(rawRefreshToken);
   return prisma.session.findFirst({ where: { refreshTokenHash: tokenHash } });
@@ -333,64 +160,6 @@ export async function getMe(userId: string, restrictToOrgId?: string) {
       role: m.role,
     })),
   };
-}
-
-export async function requestPasswordReset(input: ForgotPasswordInput) {
-  const user = await prisma.user.findUnique({ where: { email: input.email } });
-
-  if (!user || user.authProvider !== "PASSWORD") {
-    return { resetToken: null };
-  }
-
-  const rawToken = RESET_TOKEN_PREFIX + crypto.randomBytes(32).toString("base64url");
-  const tokenHash = sha256Hex(rawToken);
-
-  await prisma.passwordResetToken.create({
-    data: {
-      userId: user.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + RESET_TOKEN_EXPIRY_MS),
-    },
-  });
-
-  if (isEmailConfigured()) {
-    const link = `${env.CORS_ORIGIN}/reset-password/${rawToken}`;
-    const { sent } = await sendEmail({ to: user.email, ...passwordResetEmail(link) });
-    if (sent) {
-      return { resetToken: null };
-    }
-  }
-
-  return { resetToken: rawToken };
-}
-
-export async function resetPassword(input: ResetPasswordInput) {
-  const tokenHash = sha256Hex(input.token);
-
-  const resetToken = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
-
-  if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
-    throw new UnauthorizedError("This reset link is invalid or has expired");
-  }
-
-  const newHash = await hashPassword(input.newPassword);
-
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: resetToken.userId },
-      data: { passwordHash: newHash },
-    }),
-    prisma.passwordResetToken.update({
-      where: { id: resetToken.id },
-      data: { usedAt: new Date() },
-    }),
-    prisma.session.updateMany({
-      where: { userId: resetToken.userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    }),
-  ]);
-
-  notifyUserSessionsRevoked(resetToken.userId);
 }
 
 export async function deleteAccount(userId: string, input: DeleteAccountInput) {

@@ -16,11 +16,10 @@ enum AuthProvider {
 model User {
   id              String       @id @default(cuid())
   email           String       @unique
-  passwordHash    String?
   name            String
   avatarUrl       String?      @db.Text
   notificationPrefs Json?
-  authProvider    AuthProvider @default(PASSWORD)
+  authProvider    AuthProvider @default(GOOGLE)
   providerId      String?
   emailVerifiedAt DateTime?
   createdAt       DateTime     @default(now())
@@ -36,7 +35,6 @@ model User {
   invitesSent             OrgInvite[]     @relation("InviteInviter")
   invitesAccepted         OrgInvite[]     @relation("InviteAcceptor")
   invitesApproved         OrgInvite[]     @relation("InviteApprover")
-  passwordResetTokens     PasswordResetToken[]
   projectAccess           ProjectMembership[] @relation("ProjectMember")
   projectAccessGranted    ProjectMembership[] @relation("ProjectAccessGrantor")
   autoApproveRulesAsInviter InviteAutoApproveRule[] @relation("AutoApproveInviter")
@@ -346,32 +344,6 @@ model InviteAutoApproveRule {
   // deleting any existing blanket row before inserting a new one.
   @@unique([orgId, inviterId])
   @@index([orgId])
-}
-
-model PasswordResetToken {
-  id        String    @id @default(cuid())
-  userId    String
-  tokenHash String    @unique
-  createdAt DateTime  @default(now())
-  expiresAt DateTime
-  usedAt    DateTime?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model PendingSignup {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  inviteToken  String?
-  tokenHash    String   @unique
-  createdAt    DateTime @default(now())
-  expiresAt    DateTime
-
-  @@index([email])
 }
 
 enum AccessRequestStatus {

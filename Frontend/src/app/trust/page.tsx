@@ -13,7 +13,7 @@ const PILLARS = [
   {
     icon: "vpn_key",
     title: "Authentication",
-    body: "Passwords are hashed with argon2id (OWASP's current recommendation). Sessions use short-lived JWT access tokens plus a rotating, opaque refresh token — only its hash is ever stored. A revoked session is force-signed-out in real time, not on next reload.",
+    body: "Sign-in is Google-only — EnvSync never stores or verifies a password, since Google already verifies the account owner controls that email. Sessions use short-lived JWT access tokens plus a rotating, opaque refresh token — only its hash is ever stored. A revoked session is force-signed-out in real time, not on next reload.",
   },
   {
     icon: "admin_panel_settings",

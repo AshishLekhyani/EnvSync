@@ -5,7 +5,6 @@ import { env } from "../../config/env";
 import * as googleService from "./google.service";
 import { issueSession } from "./auth.service";
 import { setRefreshCookie, sessionMeta } from "./auth.controller";
-import { ConflictError } from "../../common/errors/AppError";
 
 const OAUTH_STATE_COOKIE = "googleOauthState";
 const OAUTH_STATE_COOKIE_PATH = "/api/auth/google";
@@ -71,10 +70,7 @@ export const callback = asyncHandler(async (req, res) => {
 
     const destination = parsed.invite ? `/invite/${parsed.invite}` : "/projects";
     return res.redirect(frontendUrl(destination));
-  } catch (err) {
-    if (err instanceof ConflictError) {
-      return res.redirect(frontendUrl("/login?error=email_in_use"));
-    }
+  } catch {
     return res.redirect(frontendUrl("/login?error=oauth_failed"));
   }
 });

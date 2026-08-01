@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
-import { api, ApiError, PublicInvite } from "@/lib/api";
+import { api, API_URL, ApiError, PublicInvite } from "@/lib/api";
 
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
@@ -124,18 +124,12 @@ export default function InvitePage() {
 
             {!user ? (
               <div className="flex flex-col gap-sm">
-                <Link
-                  href={`/signup?invite=${token}`}
+                <a
+                  href={`${API_URL}/auth/google?invite=${encodeURIComponent(token)}`}
                   className="w-full rounded-lg bg-primary-container px-md py-sm text-center font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90"
                 >
-                  Sign up to join
-                </Link>
-                <Link
-                  href={`/login?invite=${token}`}
-                  className="w-full rounded-lg border border-outline-variant px-md py-sm text-center font-label-md text-label-md text-on-surface"
-                >
-                  Log in
-                </Link>
+                  Continue with Google to join
+                </a>
               </div>
             ) : user.email.toLowerCase() !== invite.email.toLowerCase() ? (
               <div className="flex flex-col gap-md">

@@ -31,12 +31,6 @@ export function MarketingHeader() {
         <ThemeToggle />
         <Link
           href="/login"
-          className="px-md py-sm font-label-md text-label-md text-secondary transition-colors hover:text-primary"
-        >
-          Log in
-        </Link>
-        <Link
-          href="/signup"
           className="rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90 active:scale-95"
         >
           Get Started

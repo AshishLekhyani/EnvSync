@@ -1,7 +1,6 @@
 import { runExpiryScan } from "../src/modules/notifications/expiryScanner";
 import { findOrCreateGoogleUser } from "../src/modules/auth/google.service";
-import { changePassword as changePasswordDirect } from "../src/modules/auth/auth.service";
-import { BadRequestError, ConflictError } from "../src/common/errors/AppError";
+import { issueSession } from "../src/modules/auth/auth.service";
 import { isEmailConfigured } from "../src/modules/email/email.service";
 import { prisma } from "../src/db/prisma";
 
@@ -29,30 +28,17 @@ function fail(label: string, detail?: unknown): never {
   throw new Error(`smoke test failed: ${label}`);
 }
 
-async function signupAndVerify(name: string, email: string, password: string) {
-  let r = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password }),
-  });
-  const signupBody = await r.json();
-  if (r.status !== 200 || typeof signupBody.verifyToken !== "string") {
-    fail(`signup for ${email} should return a dev-mode verifyToken`, signupBody);
-  }
+async function signupAndVerify(name: string, email: string, _password?: string) {
+  const profile = { googleId: `su-${Math.random().toString(36).slice(2, 10)}`, email, name };
+  const user = await findOrCreateGoogleUser(profile);
+  const { accessToken, refreshToken } = await issueSession(user.id, user.email, {});
+  return { accessToken, user, refreshCookie: refreshToken, profile };
+}
 
-  r = await fetch(`${BASE}/auth/verify-email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: signupBody.verifyToken }),
-  });
-  const verifyBody = await r.json();
-  if (r.status !== 200) fail(`verify-email for ${email}`, verifyBody);
-
-  return {
-    accessToken: verifyBody.accessToken as string,
-    user: verifyBody.user,
-    refreshCookie: extractCookie(r.headers.get("set-cookie"), "refreshToken"),
-  };
+async function loginAgain(profile: { googleId: string; email: string; name: string }) {
+  const user = await findOrCreateGoogleUser(profile);
+  const { accessToken, refreshToken } = await issueSession(user.id, user.email, {});
+  return { accessToken, user, refreshCookie: refreshToken };
 }
 
 async function main() {
@@ -89,14 +75,24 @@ async function main() {
   if (gUser2.id !== gUser1.id) fail("find-not-recreate on repeat Google login", gUser2);
   ok("findOrCreateGoogleUser is idempotent for the same Google identity");
 
-  let googleCollided = false;
-  try {
-    await findOrCreateGoogleUser({ googleId: `gg-collide-${rand}`, email: ownerEmail, name: "Collider" });
-  } catch (err) {
-    googleCollided = err instanceof ConflictError;
+  const legacyEmail = `legacy-${rand}@example.com`;
+  const legacyUser = await prisma.user.create({
+    data: { email: legacyEmail, name: "Legacy Password User", authProvider: "PASSWORD" },
+  });
+  const linkedGoogleId = `gg-link-${rand}`;
+  const linkedUser = await findOrCreateGoogleUser({
+    googleId: linkedGoogleId,
+    email: legacyEmail,
+    name: "Legacy Password User",
+  });
+  if (
+    linkedUser.id !== legacyUser.id ||
+    linkedUser.authProvider !== "GOOGLE" ||
+    linkedUser.providerId !== linkedGoogleId
+  ) {
+    fail("Google login should link an existing account by verified email, not create a duplicate or reject", linkedUser);
   }
-  if (!googleCollided) fail("Google email collision with an existing PASSWORD account should throw ConflictError");
-  ok("findOrCreateGoogleUser rejects email collision with an existing PASSWORD account (no raw P2002 leak)");
+  ok("findOrCreateGoogleUser links an existing (e.g. legacy PASSWORD) account by verified email instead of rejecting");
 
   res = await fetch(`${BASE}/auth/sessions`, {
     headers: { ...authHeaders(ownerAccessToken), Cookie: `refreshToken=${ownerRefreshCookie}` },
@@ -638,15 +634,10 @@ async function main() {
   }
   ok("audit logs projectId filter returns only matching rows");
 
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: ownerEmail, password }),
-  });
-  const secondDeviceLogin = await res.json();
-  if (res.status !== 200) fail("owner second-device login", secondDeviceLogin);
-  ok("owner second-device login");
-  const secondRefreshCookie = extractCookie(res.headers.get("set-cookie"), "refreshToken");
+  const secondDeviceLogin = await loginAgain(ownerSignup.profile);
+  if (secondDeviceLogin.user.id !== ownerSignup.user.id) fail("owner second-device login", secondDeviceLogin);
+  ok("owner second-device login (Google, same account)");
+  const secondRefreshCookie = secondDeviceLogin.refreshCookie;
   if (!secondRefreshCookie) fail("capture second-device refresh cookie");
 
   res = await fetch(`${BASE}/auth/sessions`, {
@@ -1242,28 +1233,10 @@ async function main() {
   if (allNotifs.some((n: { read: boolean }) => !n.read)) fail("all notifications should be read after mark-all-read", allNotifs);
   ok("mark all notifications read (204, all subsequently read:true)");
 
-  let oauthPasswordChangeRejected = false;
-  try {
-    await changePasswordDirect(gUser1.id, {
-      currentPassword: "whatever",
-      newPassword: "newsupersecret123",
-    });
-  } catch (err) {
-    oauthPasswordChangeRejected = err instanceof BadRequestError;
-  }
-  if (!oauthPasswordChangeRejected) {
-    fail("changePassword on an OAuth-only account should reject with BadRequestError");
-  }
-  ok("changePassword rejects OAuth-only accounts (no password to change) (400)");
-
   const profileTestEmail = `profile-${rand}@example.com`;
-  const profileTestPassword = "supersecret123";
-
-  const profileSignup = await signupAndVerify("Profile Tester", profileTestEmail, profileTestPassword);
-  ok("signup + verify dedicated profile-test account");
+  const profileSignup = await signupAndVerify("Profile Tester", profileTestEmail);
+  ok("Google signup for dedicated profile-test account");
   const profileAccessToken: string = profileSignup.accessToken;
-  const profileRefreshCookie = profileSignup.refreshCookie;
-  if (!profileRefreshCookie) fail("capture profile-test refresh cookie");
 
   res = await fetch(`${BASE}/auth/me`, {
     method: "PATCH",
@@ -1273,255 +1246,6 @@ async function main() {
   const renamed = await res.json();
   if (res.status !== 200 || renamed.name !== "Renamed Tester") fail("update profile name", renamed);
   ok("PATCH /auth/me updates the user's display name");
-
-  res = await fetch(`${BASE}/auth/change-password`, {
-    method: "POST",
-    headers: authHeaders(profileAccessToken),
-    body: JSON.stringify({ currentPassword: "totally-wrong", newPassword: "newsupersecret456" }),
-  });
-  if (res.status !== 401) fail("change password with wrong current password should be 401", await res.text());
-  ok("change-password rejects an incorrect current password (401)");
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: profileTestEmail, password: profileTestPassword }),
-  });
-  const profileSecondLogin = await res.json();
-  if (res.status !== 200) fail("profile-test second-device login", profileSecondLogin);
-  ok("profile-test second-device login (for password-change session-revocation check)");
-
-  res = await fetch(`${BASE}/auth/sessions`, {
-    headers: { ...authHeaders(profileAccessToken), Cookie: `refreshToken=${profileRefreshCookie}` },
-  });
-  const beforePasswordChange = await res.json();
-  if (res.status !== 200 || beforePasswordChange.length !== 2) {
-    fail("expected 2 active sessions before password change", beforePasswordChange);
-  }
-  ok("2 active sessions exist before password change");
-
-  res = await fetch(`${BASE}/auth/change-password`, {
-    method: "POST",
-    headers: { ...authHeaders(profileAccessToken), Cookie: `refreshToken=${profileRefreshCookie}` },
-    body: JSON.stringify({ currentPassword: profileTestPassword, newPassword: "newsupersecret456" }),
-  });
-  if (res.status !== 204) fail("change password with correct current password should be 204", await res.text());
-  ok("change-password succeeds with the correct current password (204)");
-
-  res = await fetch(`${BASE}/auth/sessions`, {
-    headers: { ...authHeaders(profileAccessToken), Cookie: `refreshToken=${profileRefreshCookie}` },
-  });
-  const afterPasswordChange = await res.json();
-  if (res.status !== 200 || afterPasswordChange.length !== 1 || !afterPasswordChange[0].current) {
-    fail("after password change, only the requesting session should remain active", afterPasswordChange);
-  }
-  ok("changing password revokes every other active session but keeps the current one");
-
-  res = await fetch(`${BASE}/auth/forgot-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: `nonexistent-${rand}@example.com` }),
-  });
-  const nonexistentForgot = await res.json();
-  if (res.status !== 200 || nonexistentForgot.resetToken !== null) {
-    fail("forgot-password for a nonexistent email should still be 200 with resetToken:null", nonexistentForgot);
-  }
-  ok("forgot-password for a nonexistent email returns 200 with no token (no enumeration leak)");
-
-  res = await fetch(`${BASE}/auth/forgot-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: fakeGoogleProfile.email }),
-  });
-  const oauthForgot = await res.json();
-  if (res.status !== 200 || oauthForgot.resetToken !== null) {
-    fail("forgot-password for an OAuth-only account should return resetToken:null", oauthForgot);
-  }
-  ok("forgot-password for an OAuth-only account returns no token (nothing to reset)");
-
-  res = await fetch(`${BASE}/auth/forgot-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: profileTestEmail }),
-  });
-  const realForgot = await res.json();
-  if (res.status !== 200 || typeof realForgot.resetToken !== "string") {
-    fail("forgot-password for a real password account should return a resetToken", realForgot);
-  }
-  ok("forgot-password for a real password account returns a resetToken");
-
-  res = await fetch(`${BASE}/auth/reset-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: "reset_garbage-token-value", newPassword: "irrelevant123" }),
-  });
-  if (res.status !== 401) fail("reset-password with a garbage token should be 401", await res.text());
-  ok("reset-password rejects an invalid token (401)");
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: profileTestEmail, password: "newsupersecret456" }),
-  });
-  const preResetLogin = await res.json();
-  if (res.status !== 200) fail("login before reset should still succeed with the current password", preResetLogin);
-  const preResetRefreshCookie = extractCookie(res.headers.get("set-cookie"), "refreshToken");
-
-  const newResetPassword = "resetflowpassword789";
-  res = await fetch(`${BASE}/auth/reset-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: realForgot.resetToken, newPassword: newResetPassword }),
-  });
-  if (res.status !== 204) fail("reset-password with a valid token should be 204", await res.text());
-  ok("reset-password succeeds with a valid token (204)");
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: profileTestEmail, password: "newsupersecret456" }),
-  });
-  if (res.status !== 401) fail("login with the pre-reset password should now be rejected", await res.text());
-  ok("old password is rejected after reset");
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: profileTestEmail, password: newResetPassword }),
-  });
-  if (res.status !== 200) fail("login with the new post-reset password should succeed", await res.text());
-  ok("new password works after reset");
-
-  res = await fetch(`${BASE}/auth/refresh`, {
-    method: "POST",
-    headers: { Cookie: `refreshToken=${preResetRefreshCookie}` },
-  });
-  if (res.status !== 401) fail("a session that existed before the reset should be revoked", await res.text());
-  ok("resetting a password revokes every session that existed beforehand");
-
-  res = await fetch(`${BASE}/auth/reset-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: realForgot.resetToken, newPassword: "anothernewpassword123" }),
-  });
-  if (res.status !== 401) fail("reusing an already-used reset token should be 401", await res.text());
-  ok("an already-used reset token is rejected (401)");
-
-  res = await fetch(`${BASE}/auth/forgot-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: profileTestEmail }),
-  });
-  const secondForgot = await res.json();
-  await prisma.passwordResetToken.updateMany({
-    where: { userId: (await prisma.user.findUnique({ where: { email: profileTestEmail } }))!.id },
-    data: { expiresAt: new Date(Date.now() - 1000) },
-  });
-  res = await fetch(`${BASE}/auth/reset-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: secondForgot.resetToken, newPassword: "yetanotherpassword123" }),
-  });
-  if (res.status !== 401) fail("an expired reset token should be 401", await res.text());
-  ok("an expired reset token is rejected (401)");
-
-  // --- Email verification ---
-
-  const verifyTestEmail = `verify-${rand}@example.com`;
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Verify Test", email: verifyTestEmail, password }),
-  });
-  const signupResult = await res.json();
-  if (res.status !== 200 || typeof signupResult.verifyToken !== "string") {
-    fail("signup should return a dev-mode verifyToken (email unconfigured)", signupResult);
-  }
-  ok("signup returns a dev-mode verifyToken instead of creating an account immediately");
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: verifyTestEmail, password }),
-  });
-  if (res.status !== 401) fail("login before verification should be 401 (no account exists yet)", await res.text());
-  ok("no account exists until the email is verified");
-
-  res = await fetch(`${BASE}/auth/verify-email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: "verify_garbage-token-value" }),
-  });
-  if (res.status !== 401) fail("verify-email with a garbage token should be 401", await res.text());
-  ok("verify-email rejects an invalid token (401)");
-
-  res = await fetch(`${BASE}/auth/resend-verification`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: `no-pending-signup-${rand}@example.com` }),
-  });
-  const noopResend = await res.json();
-  if (res.status !== 200 || noopResend.sent !== false || noopResend.verifyToken !== null) {
-    fail("resend-verification for an email with no pending signup should be a silent no-op", noopResend);
-  }
-  ok("resend-verification for a nonexistent pending signup is a silent no-op (no enumeration leak)");
-
-  res = await fetch(`${BASE}/auth/resend-verification`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: verifyTestEmail }),
-  });
-  const resendResult = await res.json();
-  if (res.status !== 200 || typeof resendResult.verifyToken !== "string") {
-    fail("resend-verification should return a fresh dev-mode token for a pending signup", resendResult);
-  }
-  ok("resend-verification returns a fresh dev-mode token for a pending signup");
-
-  res = await fetch(`${BASE}/auth/verify-email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: signupResult.verifyToken }),
-  });
-  if (res.status !== 401) fail("the original token should be invalidated once resent", await res.text());
-  ok("resending verification invalidates the previous token");
-
-  res = await fetch(`${BASE}/auth/verify-email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: resendResult.verifyToken }),
-  });
-  const verifyResult = await res.json();
-  if (res.status !== 200 || verifyResult.user?.email !== verifyTestEmail || !verifyResult.accessToken) {
-    fail("verify-email with a valid token should create the account and log in", verifyResult);
-  }
-  if (typeof verifyResult.user.emailVerifiedAt !== "string") {
-    fail("the newly-created account should already be marked verified", verifyResult);
-  }
-  ok("verify-email creates the account, marks it verified, and logs in (200)");
-
-  res = await fetch(`${BASE}/auth/verify-email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: resendResult.verifyToken }),
-  });
-  if (res.status !== 401) fail("reusing an already-used verify token should be 401", await res.text());
-  ok("an already-used verify token is rejected (401)");
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: verifyTestEmail, password }),
-  });
-  if (res.status !== 200) fail("login should succeed once the account exists post-verification", await res.text());
-  ok("login succeeds normally after verification");
-
-  res = await fetch(`${BASE}/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Verify Test Again", email: verifyTestEmail, password }),
-  });
-  if (res.status !== 409) fail("signing up again with a now-real account's email should be 409", await res.text());
-  ok("signup rejects an email that's already a real account (409)");
 
   // --- Phase 12: role-assignment hierarchy, invite approval workflow, auto-approve, account deletion ---
 
@@ -1768,13 +1492,9 @@ async function main() {
   if (res.status !== 404) fail("the solo-owned org should be gone after its sole owner's account is deleted", await res.text());
   ok("the solo-owned org is cascade-deleted along with the account");
 
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: soloDeleteEmail, password }),
-  });
-  if (res.status !== 401) fail("logging in as a deleted account should fail (401)", await res.text());
-  ok("logging in as a deleted account fails (401) -- the account is truly gone");
+  res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(soloDeleteToken) });
+  if (res.status !== 401) fail("using a deleted account's access token should fail (401)", await res.text());
+  ok("a deleted account's access token is rejected (401) -- the account is truly gone");
 
   const blockedOwnerEmail = `blocked-owner-${rand}@example.com`;
   const blockedOwnerToken = await signupLogin("Blocked Owner", blockedOwnerEmail);
@@ -2071,13 +1791,7 @@ async function main() {
 
   // --- Audit log filters ---
 
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: ownerEmail, password }),
-  });
-  const ownerRelogin = await res.json();
-  if (res.status !== 200) fail("owner re-login for audit filter tests", ownerRelogin);
+  const ownerRelogin = await loginAgain(ownerSignup.profile);
   const ownerFreshToken: string = ownerRelogin.accessToken;
 
   res = await fetch(`${BASE}/auth/me`, { headers: authHeaders(ownerFreshToken) });
@@ -2537,14 +2251,6 @@ async function main() {
   if (res.status !== 403) fail("API token should not be able to PATCH /auth/me", await res.text());
   ok("API token cannot update the profile (403, session auth required)");
 
-  res = await fetch(`${BASE}/auth/change-password`, {
-    method: "POST",
-    headers: authHeaders(auditRawToken),
-    body: JSON.stringify({ currentPassword: "whatever", newPassword: "irrelevant123" }),
-  });
-  if (res.status !== 403) fail("API token should not be able to change the password", await res.text());
-  ok("API token cannot change the account password (403, session auth required)");
-
   res = await fetch(`${BASE}/auth/sessions`, { headers: authHeaders(auditRawToken) });
   if (res.status !== 403) fail("API token should not be able to list sessions", await res.text());
   ok("API token cannot list account sessions (403, session auth required)");
@@ -2663,58 +2369,22 @@ async function main() {
   if (res.status !== 400) fail("audit purge with a malformed date should be a clean 400", await res.text());
   ok("audit log purge rejects a malformed 'before' date with a clean 400 instead of a 500");
 
-  const hammerEmail = `hammer-${rand}@example.com`;
-  await signupAndVerify("Hammer", hammerEmail, password);
-
-  let loginRateLimited = false;
-  for (let i = 0; i < 20; i++) {
-    res = await fetch(`${BASE}/auth/login`, {
+  let refreshRateLimited = false;
+  for (let i = 0; i < 40; i++) {
+    res = await fetch(`${BASE}/auth/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: hammerEmail, password: "wrong-password" }),
+      headers: { Cookie: "refreshToken=not-a-real-token" },
     });
     if (res.status === 429) {
       const body = await res.json();
-      if (body?.error?.code !== "TOO_MANY_REQUESTS") fail("429 body shape", body);
-      loginRateLimited = true;
+      if (body?.error?.code !== "TOO_MANY_REQUESTS") fail("429 body shape (refresh)", body);
+      refreshRateLimited = true;
       break;
     }
-    if (res.status !== 401) fail(`unexpected status during login hammer (attempt ${i})`, await res.text());
+    if (res.status !== 401) fail(`unexpected status during refresh hammer (attempt ${i})`, await res.text());
   }
-  if (!loginRateLimited) fail("expected login rate limiter to trigger 429 within 20 failed attempts");
-  ok("repeated failed logins against one account trigger 429 (brute-force protection)");
-
-  res = await fetch(`${BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: ownerEmail, password }),
-  });
-  if (res.status !== 200) {
-    fail("a different account on the same IP should not be blocked by another account's exhausted limit", await res.text());
-  }
-  ok("a different account sharing the same IP is unaffected (email+IP keying confirmed, no NAT lockout)");
-
-  let signupRateLimited = false;
-  for (let i = 0; i < 50; i++) {
-    res = await fetch(`${BASE}/auth/signup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "Hammer Signup",
-        email: `hammer-signup-${rand}-${i}@example.com`,
-        password,
-      }),
-    });
-    if (res.status === 429) {
-      const body = await res.json();
-      if (body?.error?.code !== "TOO_MANY_REQUESTS") fail("429 body shape (signup)", body);
-      signupRateLimited = true;
-      break;
-    }
-    if (res.status !== 200) fail(`unexpected status during signup hammer (attempt ${i})`, await res.text());
-  }
-  if (!signupRateLimited) fail("expected signup rate limiter to trigger 429 within 50 signups from one IP");
-  ok("repeated signups from one IP trigger 429 (signup abuse protection)");
+  if (!refreshRateLimited) fail("expected refresh rate limiter to trigger 429 within 40 attempts");
+  ok("repeated invalid refresh attempts trigger 429 (brute-force protection)");
 
   console.log(`\nAll smoke tests passed. orgId=${orgId} projectId=${projectId}`);
 }

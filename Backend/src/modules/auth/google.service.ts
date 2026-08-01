@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma";
 import { env } from "../../config/env";
-import { ConflictError, UnauthorizedError } from "../../common/errors/AppError";
+import { UnauthorizedError } from "../../common/errors/AppError";
 
 const GOOGLE_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -80,9 +80,14 @@ export async function findOrCreateGoogleUser(profile: GoogleProfile) {
 
   const existingByEmail = await prisma.user.findUnique({ where: { email: profile.email } });
   if (existingByEmail) {
-    throw new ConflictError(
-      "An account with this email already exists. Log in with your password."
-    );
+    return prisma.user.update({
+      where: { id: existingByEmail.id },
+      data: {
+        authProvider: "GOOGLE",
+        providerId: profile.googleId,
+        emailVerifiedAt: existingByEmail.emailVerifiedAt ?? new Date(),
+      },
+    });
   }
 
   return prisma.user.create({

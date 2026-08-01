@@ -8,8 +8,8 @@ This is the actual setup this project runs on: **backend on Render** (API), **da
 - A [Neon](https://neon.tech) account (free Postgres)
 - A [Render](https://render.com) account
 - A [Vercel](https://vercel.com) account
-- A [SendGrid](https://sendgrid.com) account for real password-reset/invite/verification emails (free tier, 100/day). Sent via SendGrid's HTTP API, not SMTP — Render (and many hosts) block outbound SMTP ports, so raw SMTP doesn't work here. Verify a single sender email under Settings → Sender Authentication → Single Sender Verification (no domain required), then create a restricted API key with only "Mail Send" permission. Optional: without it, those flows fall back to showing the link directly in the UI instead of emailing it.
-- If you want Google sign-in, a Google Cloud OAuth Client (optional — the button is hidden gracefully if unset).
+- A **Google Cloud OAuth Client** — required, not optional. Google is the only sign-in method; without this, nobody can log in.
+- Optional: a [SendGrid](https://sendgrid.com) account for real org-invite emails (free tier, 100/day). Sent via SendGrid's HTTP API, not SMTP — Render (and many hosts) block outbound SMTP ports, so raw SMTP doesn't work here. Verify a single sender email under Settings → Sender Authentication → Single Sender Verification (no domain required), then create a restricted API key with only "Mail Send" permission. Without it, invites fall back to showing the link directly in the UI instead of emailing it — sign-in itself doesn't depend on email at all.
 
 ## 1. Database → Neon
 
@@ -35,8 +35,8 @@ This is the actual setup this project runs on: **backend on Render** (API), **da
    | `ENCRYPTION_MASTER_KEY` | `base64:` + `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
    | `NODE_ENV` | `production` |
    | `CORS_ORIGIN` | your Vercel URL — fill this in **after** step 3 below, then redeploy |
-   | `SENDGRID_API_KEY` / `EMAIL_FROM` | your SendGrid API key and the verified sender address, e.g. `EnvSync <you@example.com>` |
-   | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional, if enabling Google login |
+   | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | required — Google is the only sign-in method |
+   | `SENDGRID_API_KEY` / `EMAIL_FROM` | optional, for real invite emails — your SendGrid API key and the verified sender address, e.g. `EnvSync <you@example.com>` |
 
    `PORT` doesn't need to be set — Render injects it and `Backend/src/index.ts` already listens on `env.PORT`.
 4. Deploy. Note the resulting URL (e.g. `https://envsync-api.onrender.com`).
@@ -61,10 +61,9 @@ Go back to Render and set the backend's `CORS_ORIGIN` to the Vercel URL from ste
 
 ## 5. Post-deploy checklist
 
-- Sign up with a real email → confirm the verification email arrives and clicking it actually creates the account (no account exists until verified)
-- Use "Forgot password" → confirm the reset email arrives and the link works
-- Invite a teammate → confirm the invite email arrives
-- If Google OAuth is configured, confirm the button works
+- Click "Continue with Google" → confirm sign-in works and creates a new account for a fresh email
+- Sign in with Google again using an email that already has an account → confirm it logs into the same account rather than erroring or duplicating
+- Invite a teammate → confirm the invite email arrives if SendGrid is configured, or shows the copy-link fallback if not
 - `curl -I https://<your-vercel-domain>` → confirm security headers are present (`X-Frame-Options`, `Content-Security-Policy`, etc.)
 - **Do not** run `Backend/scripts/smoke-test.ts` against production — it freely creates throwaway orgs, users, and secrets, and requires email sending to be *unconfigured* to read back dev-mode tokens. Keep it to local dev only.
 
