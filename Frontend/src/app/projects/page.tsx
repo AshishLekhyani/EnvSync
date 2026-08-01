@@ -648,6 +648,7 @@ function ProjectsPageContent() {
                     No activity yet.
                   </p>
                 ) : (
+                  <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-left">
                     <thead className="border-b border-outline-variant bg-surface-container-low">
                       <tr>
@@ -702,6 +703,7 @@ function ProjectsPageContent() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
             </div>

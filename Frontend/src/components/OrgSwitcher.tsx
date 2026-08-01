@@ -110,7 +110,7 @@ export function OrgSwitcher() {
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-xs rounded-lg px-sm py-xs text-left transition-colors hover:bg-surface-container"
       >
-        <div className="max-w-[140px]">
+        <div className="max-w-20 sm:max-w-35">
           <div className="truncate font-label-md text-label-md font-bold leading-none text-on-surface">
             {activeOrg.name}
           </div>

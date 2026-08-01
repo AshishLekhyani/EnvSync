@@ -6,7 +6,7 @@ import { IntegrationSnippet } from "@/components/IntegrationSnippet";
 
 export default function AwsIntegrationPage() {
   return (
-    <AppShell showSearch={false} mainClassName="mx-auto w-full max-w-container-max flex-1 p-md lg:p-xl">
+    <AppShell showSearch={false} mainClassName="mx-auto w-full md:w-[calc(100%-16rem)] max-w-container-max flex-1 p-md lg:p-xl">
       <div className="mb-lg flex items-center gap-md">
         <Icon name="lock" className="text-primary" style={{ fontSize: 32 }} />
         <div>

@@ -412,7 +412,7 @@ export default function EnvironmentSecretsPage() {
           </div>
         ) : (
           <>
-            <div className="mb-lg flex items-end justify-between">
+            <div className="mb-lg flex flex-col gap-md sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <nav className="mb-xs flex items-center gap-xs font-body-sm text-body-sm text-secondary">
                   <Link href="/projects" className="hover:underline">
@@ -425,14 +425,14 @@ export default function EnvironmentSecretsPage() {
                   <Icon name="chevron_right" style={{ fontSize: 14 }} />
                   <span className="font-medium text-on-surface">{environment.name}</span>
                 </nav>
-                <h1 className="flex items-center gap-md font-h1 text-h1 text-on-surface">
+                <h1 className="flex flex-wrap items-center gap-md font-h1 text-h1 text-on-surface">
                   Environment Variables
                   <span className="rounded-full border border-primary/20 bg-primary/10 px-sm py-xs text-[10px] font-bold uppercase tracking-widest text-primary">
                     {environment.type}
                   </span>
                 </h1>
               </div>
-              <div className="flex items-center gap-sm">
+              <div className="flex flex-wrap items-center gap-sm">
                 <div className="flex items-center gap-xs rounded-lg border border-green-200 bg-green-50 px-md py-sm text-green-700 shadow-sm dark:border-[#40C463]/30 dark:bg-[#1F883D]/20 dark:text-[#40C463]">
                   <Icon
                     name="lock"

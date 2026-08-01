@@ -4,7 +4,7 @@ export function SettingsPageShell({ children }: { children: React.ReactNode }) {
   return (
     <AppShell
       showSearch={false}
-      mainClassName="mx-auto w-full max-w-container-max flex-1 p-md lg:p-xl"
+      mainClassName="mx-auto w-full md:w-[calc(100%-16rem)] max-w-container-max flex-1 p-md lg:p-xl"
     >
       <div className="mb-lg">
         <h1 className="font-h1 text-h1 text-on-surface">Settings</h1>

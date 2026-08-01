@@ -140,11 +140,11 @@ export function TopNav({
   };
 
   return (
-    <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-xl">
-      <div className="flex items-center gap-md">
+    <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface px-md sm:px-xl">
+      <div className="flex min-w-0 items-center gap-sm sm:gap-md">
         <Link
           href="/projects"
-          className="font-h2 text-h2 font-black text-primary"
+          className="shrink-0 font-h2 text-h2 font-black text-primary"
         >
           EnvSync
         </Link>
@@ -181,7 +181,7 @@ export function TopNav({
         </nav>
       </div>
 
-      <div className="flex items-center gap-md">
+      <div className="flex items-center gap-xs sm:gap-md">
         {showSearch && (
           <div className="relative hidden sm:block">
             <Icon
