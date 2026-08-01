@@ -510,7 +510,7 @@ export const api = {
       body: JSON.stringify({ membershipId }),
     }),
 
-  requestProjectAccess: (orgId: string, projectId: string, requestedRole?: ProjectRole) =>
+  requestProjectAccess: (orgId: string, projectId: string, requestedRole: ProjectRole) =>
     request<{ id: string }>(`/orgs/${orgId}/projects/${projectId}/access-requests`, {
       method: "POST",
       body: JSON.stringify({ requestedRole }),

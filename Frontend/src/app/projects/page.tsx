@@ -111,10 +111,10 @@ function PendingProjectRequests({ orgId }: { orgId: string }) {
 
 function ProjectCreateAutoApprove({
   orgId,
-  admins,
+  members: candidates,
 }: {
   orgId: string;
-  admins: { membershipId: string; user: { id: string; name: string; email: string } }[];
+  members: { membershipId: string; user: { id: string; name: string; email: string } }[];
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +146,7 @@ function ProjectCreateAutoApprove({
     }
   };
 
-  if (admins.length === 0) return null;
+  if (candidates.length === 0) return null;
 
   return (
     <div className="github-card mb-xl overflow-hidden rounded-lg">
@@ -155,8 +155,8 @@ function ProjectCreateAutoApprove({
           Auto-Approve Project Creation
         </h3>
         <p className="mt-xs font-body-sm text-[11px] text-on-surface-variant">
-          Admin-created projects normally need your approval. Turn this on for an Admin you
-          trust to skip that step for them.
+          Projects created by anyone other than you normally need your approval. Turn this on
+          for a member you trust to skip that step for them.
         </p>
       </div>
       <div className="flex flex-col divide-y divide-outline-variant p-md">
@@ -165,7 +165,7 @@ function ProjectCreateAutoApprove({
             {error}
           </p>
         )}
-        {admins.map((m) => {
+        {candidates.map((m) => {
           const enabled = enabledIds.has(m.user.id);
           return (
             <label
@@ -223,7 +223,7 @@ function ProjectsPageContent() {
   const [search, setSearch] = useState("");
 
   const canCreateProject = !!org;
-  const admins = members.filter((m) => m.role !== "OWNER");
+  const nonOwnerMembers = members.filter((m) => m.role !== "OWNER");
 
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(true);
@@ -238,14 +238,14 @@ function ProjectsPageContent() {
 
   const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
   const [requestingProjectId, setRequestingProjectId] = useState<string | null>(null);
-  const [requestRole, setRequestRole] = useState<ProjectRole | "">("");
-  const onRequestAccess = async (projectId: string, role?: ProjectRole) => {
+  const [requestRole, setRequestRole] = useState<ProjectRole>("VIEWER");
+  const onRequestAccess = async (projectId: string, role: ProjectRole) => {
     if (!org) return;
     try {
-      await api.requestProjectAccess(org.id, projectId, role || undefined);
+      await api.requestProjectAccess(org.id, projectId, role);
       setRequestedIds((prev) => new Set(prev).add(projectId));
       setRequestingProjectId(null);
-      setRequestRole("");
+      setRequestRole("VIEWER");
     } catch {
       /* the button just stays clickable to retry */
     }
@@ -387,7 +387,7 @@ function ProjectsPageContent() {
 
         {org && org.role === "OWNER" && <PendingProjectRequests orgId={org.id} />}
         {org && org.role === "OWNER" && (
-          <ProjectCreateAutoApprove orgId={org.id} admins={admins} />
+          <ProjectCreateAutoApprove orgId={org.id} members={nonOwnerMembers} />
         )}
 
         {!org && !showCreateOrg && (
@@ -547,17 +547,19 @@ function ProjectsPageContent() {
                             value={requestRole}
                             onChange={(e) => setRequestRole(e.target.value as ProjectRole)}
                           >
-                            <option value="">Just view access</option>
-                            {assignableRoles("OWNER").map((r) => (
-                              <option key={r} value={r}>
-                                {r.charAt(0) + r.slice(1).toLowerCase()}
-                              </option>
-                            ))}
+                            <option value="VIEWER">Just view access</option>
+                            {assignableRoles("OWNER")
+                              .filter((r) => r !== "VIEWER")
+                              .map((r) => (
+                                <option key={r} value={r}>
+                                  {r.charAt(0) + r.slice(1).toLowerCase()}
+                                </option>
+                              ))}
                           </Select>
                           <div className="flex gap-sm">
                             <button
                               type="button"
-                              onClick={() => onRequestAccess(project.id, requestRole || undefined)}
+                              onClick={() => onRequestAccess(project.id, requestRole)}
                               className="flex-1 rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary transition-colors hover:opacity-90"
                             >
                               Send Request
@@ -566,7 +568,7 @@ function ProjectsPageContent() {
                               type="button"
                               onClick={() => {
                                 setRequestingProjectId(null);
-                                setRequestRole("");
+                                setRequestRole("VIEWER");
                               }}
                               className="rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface"
                             >

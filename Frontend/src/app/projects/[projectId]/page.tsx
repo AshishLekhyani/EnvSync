@@ -19,7 +19,7 @@ import {
   ProjectRole,
 } from "@/lib/api";
 import { roleBadgeClass } from "@/lib/roleBadge";
-import { assignableRoles } from "@/lib/roles";
+import { assignableRoles, rolesAboveCurrent } from "@/lib/roles";
 
 const ENV_ICON: Record<EnvironmentType, string> = {
   DEVELOPMENT: "code",
@@ -238,6 +238,11 @@ export default function ProjectDetailPage() {
   const [nameInput, setNameInput] = useState("");
   const [savingName, setSavingName] = useState(false);
 
+  const [requestingUpgrade, setRequestingUpgrade] = useState(false);
+  const [upgradeRole, setUpgradeRole] = useState<ProjectRole>("VIEWER");
+  const [upgradeSubmitting, setUpgradeSubmitting] = useState(false);
+  const [upgradeRequested, setUpgradeRequested] = useState(false);
+
   const onStartRename = () => {
     if (!project) return;
     setNameInput(project.name);
@@ -315,6 +320,28 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const upgradeOptions = rolesAboveCurrent(project?.myRole);
+
+  const onStartRequestUpgrade = () => {
+    setUpgradeRole(upgradeOptions[0] ?? "VIEWER");
+    setRequestingUpgrade(true);
+  };
+
+  const onRequestUpgrade = async () => {
+    if (!org) return;
+    setUpgradeSubmitting(true);
+    setError(null);
+    try {
+      await api.requestProjectAccess(org.id, projectId, upgradeRole);
+      setUpgradeRequested(true);
+      setRequestingUpgrade(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to send request");
+    } finally {
+      setUpgradeSubmitting(false);
+    }
+  };
+
   return (
     <AppShell searchPlaceholder="Search environments..." onSearch={setSearch}>
       <div className="mx-auto max-w-container-max pb-xl">
@@ -388,6 +415,47 @@ export default function ProjectDetailPage() {
                 </p>
               </div>
               <div className="flex items-center gap-sm">
+                {org && org.role !== "OWNER" && upgradeOptions.length > 0 && !requestingUpgrade && (
+                  <button
+                    type="button"
+                    disabled={upgradeRequested}
+                    onClick={onStartRequestUpgrade}
+                    className="flex items-center gap-xs rounded border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Icon name="upgrade" style={{ fontSize: 18 }} />
+                    {upgradeRequested ? "Role Requested" : "Request a Different Role"}
+                  </button>
+                )}
+                {requestingUpgrade && (
+                  <div className="flex items-center gap-sm">
+                    <Select
+                      wrapperClassName="w-40"
+                      value={upgradeRole}
+                      onChange={(e) => setUpgradeRole(e.target.value as ProjectRole)}
+                    >
+                      {upgradeOptions.map((r) => (
+                        <option key={r} value={r}>
+                          {r.charAt(0) + r.slice(1).toLowerCase()}
+                        </option>
+                      ))}
+                    </Select>
+                    <button
+                      type="button"
+                      disabled={upgradeSubmitting}
+                      onClick={onRequestUpgrade}
+                      className="rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
+                    >
+                      {upgradeSubmitting ? "Sending..." : "Send Request"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRequestingUpgrade(false)}
+                      className="rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
                 {org && org.role !== "OWNER" && (
                   <button
                     type="button"

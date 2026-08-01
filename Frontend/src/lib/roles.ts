@@ -17,3 +17,10 @@ export function assignableRoles(actorRole: ProjectRole): ProjectRole[] {
   return ALL_ROLES.filter((r) => ROLE_WEIGHT[r] < ROLE_WEIGHT[actorRole]);
 }
 
+// Roles a member could request as an upgrade from their current project role —
+// mirrors the backend's createAccessRequest weight check (requested > current).
+export function rolesAboveCurrent(currentRole: ProjectRole | null | undefined): ProjectRole[] {
+  const currentWeight = currentRole ? ROLE_WEIGHT[currentRole] : 0;
+  return ALL_ROLES.filter((r) => r !== "OWNER" && ROLE_WEIGHT[r] > currentWeight);
+}
+

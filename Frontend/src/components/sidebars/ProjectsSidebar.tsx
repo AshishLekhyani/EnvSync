@@ -196,7 +196,7 @@ export function ProjectsSidebar() {
   const onRequestAccess = async (projectId: string) => {
     if (!org) return;
     try {
-      await api.requestProjectAccess(org.id, projectId);
+      await api.requestProjectAccess(org.id, projectId, "VIEWER");
       setRequestedIds((prev) => new Set(prev).add(projectId));
     } catch {
       /* the button just stays clickable to retry */
