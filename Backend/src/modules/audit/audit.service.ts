@@ -40,6 +40,13 @@ export type AuditAction =
   | "project_access.request"
   | "project_access.approve"
   | "project_access.reject"
+  | "role_change.request"
+  | "role_change.approve"
+  | "role_change.reject"
+  | "secret.restore_deleted"
+  | "project_creation.request"
+  | "project_creation.approve"
+  | "project_creation.reject"
   | "audit_log.purge";
 
 interface WriteAuditLogInput {

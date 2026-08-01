@@ -142,7 +142,10 @@ export interface Project {
   updatedAt: string;
   hasAccess?: boolean;
   hasPendingAccessRequest?: boolean;
+  myRole?: OrgRole | null;
 }
+
+export type EnvironmentAccess = "none" | "read" | "write";
 
 export interface EnvironmentSummary {
   id: string;
@@ -151,6 +154,7 @@ export interface EnvironmentSummary {
   name: string;
   createdAt: string;
   updatedAt: string;
+  access: EnvironmentAccess;
 }
 
 export interface SecretMetadata {
@@ -169,8 +173,32 @@ export interface MemberSummary {
   role: OrgRole;
   user: { id: string; name: string; email: string; avatarUrl?: string | null };
   canViewAllProjects?: boolean;
-  projectAccess?: { id: string; name: string }[];
+  projectAccess?: { id: string; name: string; role: OrgRole }[];
 }
+
+export interface ProjectMemberSummary {
+  role: OrgRole;
+  user: { id: string; name: string; email: string; avatarUrl?: string | null };
+}
+
+export interface ProjectCreationRequestSummary {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  requestedBy: { id: string; name: string; email: string };
+  createdAt: string;
+}
+
+export interface ProjectCreateAutoApproveRuleSummary {
+  id: string;
+  admin: { id: string; name: string; email: string };
+  createdAt: string;
+}
+
+export type CreateProjectResult =
+  | { status: "created"; project: Project }
+  | { status: "pending"; request: ProjectCreationRequestSummary };
 
 export interface AuditLogEntry {
   id: string;
@@ -286,7 +314,20 @@ export interface ProjectAccessRequestSummary {
   id: string;
   project: { id: string; name: string };
   requestedBy: { id: string; name: string; email: string };
+  requestedRole: OrgRole | null;
   createdAt: string;
+}
+
+export interface RoleChangeRequestSummary {
+  id: string;
+  user: { id: string; name: string; email: string };
+  requestedRole: OrgRole;
+  createdAt: string;
+}
+
+export interface DeletedSecretMetadata extends SecretMetadata {
+  deletedAt: string;
+  purgesAt: string;
 }
 
 export const api = {
@@ -337,13 +378,44 @@ export const api = {
 
   getProject: (projectId: string) => request<Project>(`/projects/${projectId}`),
 
+  listProjectMembers: (projectId: string) =>
+    request<ProjectMemberSummary[]>(`/projects/${projectId}/members`),
+
   createProject: (
     orgId: string,
     input: { name: string; slug: string; description?: string }
   ) =>
-    request<Project>(`/orgs/${orgId}/projects`, {
+    request<CreateProjectResult>(`/orgs/${orgId}/projects`, {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+
+  listProjectCreationRequests: (orgId: string) =>
+    request<ProjectCreationRequestSummary[]>(`/orgs/${orgId}/project-creation-requests`),
+
+  approveProjectCreationRequest: (orgId: string, requestId: string) =>
+    request<Project>(`/orgs/${orgId}/project-creation-requests/${requestId}/approve`, {
+      method: "POST",
+    }),
+
+  rejectProjectCreationRequest: (orgId: string, requestId: string) =>
+    request<void>(`/orgs/${orgId}/project-creation-requests/${requestId}/reject`, {
+      method: "POST",
+    }),
+
+  listCreateAutoApproveRules: (orgId: string) =>
+    request<ProjectCreateAutoApproveRuleSummary[]>(
+      `/orgs/${orgId}/project-create-auto-approve`
+    ),
+
+  enableCreateAutoApprove: (orgId: string, adminId: string) =>
+    request<void>(`/orgs/${orgId}/project-create-auto-approve/${adminId}`, {
+      method: "POST",
+    }),
+
+  disableCreateAutoApprove: (orgId: string, adminId: string) =>
+    request<void>(`/orgs/${orgId}/project-create-auto-approve/${adminId}`, {
+      method: "DELETE",
     }),
 
   updateProject: (projectId: string, input: { name: string; description?: string }) =>
@@ -403,18 +475,18 @@ export const api = {
   deleteSecret: (secretId: string) =>
     request<void>(`/secrets/${secretId}`, { method: "DELETE" }),
 
+  listDeletedSecrets: (environmentId: string) =>
+    request<DeletedSecretMetadata[]>(`/environments/${environmentId}/secrets/deleted`),
+
+  restoreDeletedSecret: (secretId: string) =>
+    request<SecretMetadata>(`/secrets/${secretId}/restore`, { method: "POST" }),
+
   listMembers: (orgId: string) => request<MemberSummary[]>(`/orgs/${orgId}/members`),
 
   checkEmailExists: (orgId: string, email: string) =>
     request<{ exists: boolean }>(
       `/orgs/${orgId}/members/check-email?email=${encodeURIComponent(email)}`
     ),
-
-  addMember: (orgId: string, input: { email: string; role: OrgRole; projectId?: string }) =>
-    request<MemberSummary>(`/orgs/${orgId}/members`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
 
   updateMemberRole: (orgId: string, membershipId: string, role: OrgRole) =>
     request<{ id: string; role: OrgRole }>(`/orgs/${orgId}/members/${membershipId}`, {
@@ -425,9 +497,10 @@ export const api = {
   removeMember: (orgId: string, membershipId: string) =>
     request<void>(`/orgs/${orgId}/members/${membershipId}`, { method: "DELETE" }),
 
-  grantProjectAccess: (orgId: string, membershipId: string, projectId: string) =>
+  grantProjectAccess: (orgId: string, membershipId: string, projectId: string, role: OrgRole) =>
     request<void>(`/orgs/${orgId}/members/${membershipId}/projects/${projectId}`, {
       method: "POST",
+      body: JSON.stringify({ role }),
     }),
 
   revokeProjectAccess: (orgId: string, membershipId: string, projectId: string) =>
@@ -456,9 +529,10 @@ export const api = {
       body: JSON.stringify({ membershipId }),
     }),
 
-  requestProjectAccess: (orgId: string, projectId: string) =>
+  requestProjectAccess: (orgId: string, projectId: string, requestedRole?: OrgRole) =>
     request<{ id: string }>(`/orgs/${orgId}/projects/${projectId}/access-requests`, {
       method: "POST",
+      body: JSON.stringify({ requestedRole }),
     }),
 
   listAccessRequests: (orgId: string) =>
@@ -471,6 +545,28 @@ export const api = {
 
   rejectAccessRequest: (orgId: string, requestId: string) =>
     request<void>(`/orgs/${orgId}/project-access-requests/${requestId}/reject`, {
+      method: "POST",
+    }),
+
+  requestRoleChange: (orgId: string, requestedRole: OrgRole) =>
+    request<{ id: string }>(`/orgs/${orgId}/role-change-requests`, {
+      method: "POST",
+      body: JSON.stringify({ requestedRole }),
+    }),
+
+  getMyRoleChangeRequest: (orgId: string) =>
+    request<RoleChangeRequestSummary | null>(`/orgs/${orgId}/role-change-requests/mine`),
+
+  listRoleChangeRequests: (orgId: string) =>
+    request<RoleChangeRequestSummary[]>(`/orgs/${orgId}/role-change-requests`),
+
+  approveRoleChangeRequest: (orgId: string, requestId: string) =>
+    request<void>(`/orgs/${orgId}/role-change-requests/${requestId}/approve`, {
+      method: "POST",
+    }),
+
+  rejectRoleChangeRequest: (orgId: string, requestId: string) =>
+    request<void>(`/orgs/${orgId}/role-change-requests/${requestId}/reject`, {
       method: "POST",
     }),
 

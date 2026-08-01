@@ -45,18 +45,20 @@ async function getEnvironmentWithOrg(environmentId: string) {
   return environment;
 }
 
-async function getSecretWithEnvironment(secretId: string) {
+async function getSecretWithEnvironment(secretId: string, includeDeleted = false) {
   const secret = await prisma.secret.findUnique({
     where: { id: secretId },
     include: { environment: { include: { project: true } } },
   });
 
-  if (!secret) {
+  if (!secret || (!includeDeleted && secret.deletedAt)) {
     throw new NotFoundError("Secret not found");
   }
 
   return secret;
 }
+
+const RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export async function createSecret(
   environmentId: string,
@@ -70,7 +72,7 @@ export async function createSecret(
     where: { environmentId_key: { environmentId, key: input.key } },
   });
 
-  if (existing) {
+  if (existing && !existing.deletedAt) {
     throw new ConflictError(
       `Secret "${input.key}" already exists in this environment`
     );
@@ -80,6 +82,10 @@ export async function createSecret(
   const { ciphertext, iv, authTag } = encryptWithDek(input.value, dek);
 
   const secret = await prisma.$transaction(async (tx) => {
+    if (existing && existing.deletedAt) {
+      await tx.secret.delete({ where: { id: existing.id } });
+    }
+
     const created = await tx.secret.create({
       data: {
         environmentId,
@@ -157,11 +163,27 @@ export async function listSecrets(environmentId: string) {
   await getEnvironmentWithOrg(environmentId);
 
   const secrets = await prisma.secret.findMany({
-    where: { environmentId },
+    where: { environmentId, deletedAt: null },
     orderBy: { key: "asc" },
   });
 
   return secrets.map(toMetadata);
+}
+
+export async function listDeletedSecrets(environmentId: string) {
+  await getEnvironmentWithOrg(environmentId);
+
+  const cutoff = new Date(Date.now() - RECOVERY_WINDOW_MS);
+  const secrets = await prisma.secret.findMany({
+    where: { environmentId, deletedAt: { not: null, gte: cutoff } },
+    orderBy: { deletedAt: "desc" },
+  });
+
+  return secrets.map((secret) => ({
+    ...toMetadata(secret),
+    deletedAt: secret.deletedAt,
+    purgesAt: new Date(secret.deletedAt!.getTime() + RECOVERY_WINDOW_MS),
+  }));
 }
 
 export async function getSecret(secretId: string) {
@@ -379,8 +401,46 @@ export async function deleteSecret(
       ipAddress,
     });
 
-    await tx.secret.delete({ where: { id: secretId } });
+    await tx.secret.update({ where: { id: secretId }, data: { deletedAt: new Date() } });
   });
+}
+
+export async function restoreDeletedSecret(
+  secretId: string,
+  actorId: string,
+  ipAddress?: string
+) {
+  const secret = await getSecretWithEnvironment(secretId, true);
+
+  if (!secret.deletedAt) {
+    throw new ConflictError("This secret isn't deleted");
+  }
+
+  const restored = await prisma.$transaction(async (tx) => {
+    const updated = await tx.secret.update({
+      where: { id: secretId },
+      data: { deletedAt: null },
+    });
+
+    await writeAuditLog(tx, {
+      orgId: secret.environment.project.orgId,
+      actorId,
+      action: "secret.restore_deleted",
+      targetType: "Secret",
+      targetId: secretId,
+      projectId: secret.environment.projectId,
+      metadata: {
+        key: secret.key,
+        environmentName: secret.environment.name,
+        environmentType: secret.environment.type,
+      },
+      ipAddress,
+    });
+
+    return updated;
+  });
+
+  return toMetadata(restored);
 }
 
 export async function listSecretVersions(secretId: string) {

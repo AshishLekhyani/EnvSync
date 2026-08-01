@@ -6,19 +6,19 @@ export const metadata = { title: "Roles & Permissions — EnvSync Docs" };
 const ROLES = [
   {
     role: "Owner",
-    desc: "Full access everywhere, always. Owner access can't be overridden by the permission matrix below — an org can never accidentally lock itself out of managing itself.",
+    desc: "Full access to every project in the org, always — no per-project grant needed. Owner access can't be overridden by the permission matrix below — an org can never accidentally lock itself out of managing itself.",
   },
   {
     role: "Admin",
-    desc: "Full access by default, same as Owner, but overridable per environment tier via the permission matrix. Can manage members, tokens, and org settings.",
+    desc: "Full access by default within a project they've been granted Admin on, overridable per environment tier via the permission matrix. Can manage that project's members and create new projects (subject to Owner approval).",
   },
   {
     role: "Developer",
-    desc: "Read/write on Development, Testing, and Staging by default; read-only on Production by default.",
+    desc: "Within a project they've been granted Developer on: read/write on Development, Testing, and Staging by default, read-only on Production by default.",
   },
   {
     role: "Viewer",
-    desc: "Read-only on Development, Testing, and Staging by default; no access to Production by default.",
+    desc: "Within a project they've been granted Viewer on: read-only on Development, Testing, and Staging by default, no access to Production by default.",
   },
 ];
 
@@ -30,7 +30,9 @@ export default function PermissionsDocsPage() {
       </p>
       <h1 className="mb-md font-h1 text-h1 text-on-surface">Roles &amp; Permissions</h1>
       <p className="mb-xl font-body-lg text-body-lg text-secondary">
-        A four-role hierarchy, plus a configurable matrix for the exceptions.
+        Roles are per-project, not org-wide: being an Admin on one project doesn&apos;t give you
+        Admin (or any access at all) on another. The Owner is the one exception, with unconditional
+        full access to every project in the org.
       </p>
 
       <div className="mb-xl flex flex-col divide-y divide-outline-variant rounded-xl border border-outline-variant bg-white dark:bg-surface-container-lowest">
@@ -71,33 +73,43 @@ export default function PermissionsDocsPage() {
       <section className="mb-lg">
         <h2 className="mb-sm font-h3 text-h3 text-on-surface">Project-level access</h2>
         <p className="mb-sm font-body-md text-body-md text-secondary">
-          The role×environment-tier matrix above governs depth of access inside a project you
-          can already see. A separate, independent gate controls which projects you can see at
-          all: the Owner always sees every project; everyone else needs an explicit grant on a
-          project (from Team → Members) or the org-wide &quot;view all projects&quot; override
-          (Settings → Organization, Owner-only).
+          Being a member of an org doesn&apos;t give you a role in any particular project — a
+          role is granted per project (from that project&apos;s Members panel), and it&apos;s
+          that project-level role, not any org-wide standing, that the environment-tier matrix
+          above is evaluated against. The Owner is the only exception: full access to every
+          project, with no grant needed.
         </p>
         <p className="font-body-md text-body-md text-secondary">
-          Admins and Developers without access to a given project can still browse the full
-          project list and request access to one — an Owner or an Admin who already has access
-          to that project can approve or reject the request. Viewers never browse: without an
-          explicit grant, a project simply doesn&apos;t appear for them.
+          Anyone in the org — including a member with no project grants at all — can browse the
+          full project list and request access to a specific project, optionally naming the
+          role they&apos;re requesting. An Owner, or an Admin who already has access to that
+          project, can approve or reject the request.
         </p>
       </section>
 
       <section>
         <h2 className="mb-sm font-h3 text-h3 text-on-surface">Inviting and changing roles</h2>
         <p className="mb-sm font-body-md text-body-md text-secondary">
-          Assigning a role — by invite or by changing an existing member&apos;s role — is capped
-          strictly below your own: an Admin can reach Developer or Viewer but never another Admin
-          or Owner, a Developer can only ever reach Viewer, and a Viewer can&apos;t assign any
-          role at all. Only the Owner can assign any role, including Owner (via a direct, immediate
-          ownership transfer on the Team page).
+          Inviting someone as Admin or Developer requires picking a project up front — that&apos;s
+          the project they&apos;ll actually have that role in, not every project in the org. A
+          Viewer invite can skip the project entirely and join org-only, since Viewer&apos;s
+          browse-and-request path doesn&apos;t need one.
+        </p>
+        <p className="mb-sm font-body-md text-body-md text-secondary">
+          Assigning an org-level role — by invite or by changing an existing member&apos;s role —
+          is capped strictly below your own: an Admin can reach Developer or Viewer but never
+          another Admin or Owner, a Developer can only ever reach Viewer, and a Viewer can&apos;t
+          assign any role at all. Only the Owner can assign any role, including Owner (via a
+          direct, immediate ownership transfer on the Team page). Anyone can also self-service
+          request a role upgrade (Settings → Profile), routed to whoever has the authority to
+          grant it.
         </p>
         <p className="font-body-md text-body-md text-secondary">
           An invite created by a Developer needs Admin approval before it&apos;s usable, unless
           an Admin has set up an auto-approve rule for that Developer or for the org as a whole
-          (Team → Invites). Invites created by an Admin or Owner are usable immediately.
+          (Team → Invites). Invites created by an Admin or Owner are usable immediately. Likewise,
+          a project created by an Admin needs Owner approval unless the Owner has turned on
+          auto-approve for that Admin — a project created by the Owner is immediate.
         </p>
       </section>
     </DocsShell>

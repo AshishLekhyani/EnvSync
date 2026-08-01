@@ -33,6 +33,20 @@ export const listSecrets = asyncHandler(async (req, res) => {
   res.status(200).json(secrets);
 });
 
+export const listDeletedSecrets = asyncHandler(async (req, res) => {
+  const secrets = await secretService.listDeletedSecrets(req.params.environmentId);
+  res.status(200).json(secrets);
+});
+
+export const restoreDeletedSecret = asyncHandler(async (req, res) => {
+  const secret = await secretService.restoreDeletedSecret(
+    req.params.secretId,
+    req.user!.id,
+    req.ip
+  );
+  res.status(200).json(secret);
+});
+
 export const getSecret = asyncHandler(async (req, res) => {
   const secret = await secretService.getSecret(req.params.secretId);
   res.status(200).json(secret);

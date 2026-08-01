@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "./auth-context";
 import { useConfirm } from "./confirm-context";
-import { api, ApiError } from "./api";
+import { api, ApiError, OrgSummary } from "./api";
 import { queryKeys } from "./query-keys";
 
-export function useLeaveOrganization() {
-  const { activeOrg: org, organizations, refreshMe, switchOrg } = useAuth();
+export function useLeaveOrganization(target?: OrgSummary) {
+  const { activeOrg, activeOrgId, organizations, refreshMe, switchOrg } = useAuth();
+  const org = target ?? activeOrg;
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -35,10 +36,13 @@ export function useLeaveOrganization() {
       const remaining = organizations.filter((o) => o.id !== org.id);
       await refreshMe();
       await queryClient.invalidateQueries({ queryKey: queryKeys.orgProjects(org.id) });
-      if (remaining[0]) {
-        switchOrg(remaining[0].id);
+
+      if (org.id === activeOrgId) {
+        if (remaining[0]) {
+          switchOrg(remaining[0].id);
+        }
+        router.push("/projects");
       }
-      router.push("/projects");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to leave organization");
       setLeaving(false);

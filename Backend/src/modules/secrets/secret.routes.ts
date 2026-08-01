@@ -35,6 +35,11 @@ environmentSecretsRouter.post(
   validate({ body: bulkUpsertSecretsSchema }),
   secretController.bulkUpsertSecrets
 );
+environmentSecretsRouter.get(
+  "/deleted",
+  requireEnvironmentAccess("read", environmentIdFromParam()),
+  secretController.listDeletedSecrets
+);
 
 export const secretRouter = Router();
 secretRouter.use(requireAuth);
@@ -59,6 +64,11 @@ secretRouter.delete(
   "/:secretId",
   requireEnvironmentAccess("write", environmentIdFromSecretParam()),
   secretController.deleteSecret
+);
+secretRouter.post(
+  "/:secretId/restore",
+  requireEnvironmentAccess("write", environmentIdFromSecretParam()),
+  secretController.restoreDeletedSecret
 );
 secretRouter.patch(
   "/:secretId/expiry",

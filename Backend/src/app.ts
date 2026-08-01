@@ -9,7 +9,12 @@ import { notFoundHandler } from "./common/middleware/notFoundHandler";
 import { apiRateLimiter } from "./common/middleware/rateLimit";
 import { authRouter } from "./modules/auth/auth.routes";
 import { orgRouter } from "./modules/orgs/org.routes";
-import { orgProjectsRouter, projectRouter } from "./modules/projects/project.routes";
+import {
+  orgProjectCreateAutoApproveRouter,
+  orgProjectCreationRequestsRouter,
+  orgProjectsRouter,
+  projectRouter,
+} from "./modules/projects/project.routes";
 import {
   environmentRouter,
   projectEnvironmentsRouter,
@@ -27,6 +32,7 @@ import {
   createAccessRequestRouter,
   orgAccessRequestsRouter,
 } from "./modules/projectAccessRequests/projectAccessRequest.routes";
+import { orgRoleChangeRequestsRouter } from "./modules/roleChangeRequests/roleChangeRequest.routes";
 
 let cliVersionCache: { version: string | null; fetchedAt: number } | null = null;
 const CLI_VERSION_CACHE_MS = 60 * 60 * 1000;
@@ -67,6 +73,11 @@ export function createApp() {
   app.use("/api/auth", authRouter);
   app.use("/api/orgs", orgRouter);
   app.use("/api/orgs/:orgId/projects", orgProjectsRouter);
+  app.use("/api/orgs/:orgId/project-creation-requests", orgProjectCreationRequestsRouter);
+  app.use(
+    "/api/orgs/:orgId/project-create-auto-approve",
+    orgProjectCreateAutoApproveRouter
+  );
   app.use("/api/projects", projectRouter);
   app.use("/api/projects/:projectId/environments", projectEnvironmentsRouter);
   app.use("/api/environments", environmentRouter);
@@ -83,6 +94,7 @@ export function createApp() {
     createAccessRequestRouter
   );
   app.use("/api/orgs/:orgId/project-access-requests", orgAccessRequestsRouter);
+  app.use("/api/orgs/:orgId/role-change-requests", orgRoleChangeRequestsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

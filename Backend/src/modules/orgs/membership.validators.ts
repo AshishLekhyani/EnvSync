@@ -6,13 +6,6 @@ export const checkEmailQuerySchema = z.object({
 });
 export type CheckEmailQuery = z.infer<typeof checkEmailQuerySchema>;
 
-export const addMemberSchema = z.object({
-  email: z.string().email(),
-  role: z.nativeEnum(OrgRole).default("VIEWER"),
-  projectId: z.string().min(1).optional(),
-});
-export type AddMemberInput = z.infer<typeof addMemberSchema>;
-
 export const updateMemberRoleSchema = z.object({
   role: z.nativeEnum(OrgRole),
 });
@@ -27,3 +20,8 @@ export const transferOwnershipSchema = z.object({
   membershipId: z.string().min(1),
 });
 export type TransferOwnershipInput = z.infer<typeof transferOwnershipSchema>;
+
+export const grantProjectAccessSchema = z.object({
+  role: z.enum(["ADMIN", "DEVELOPER", "VIEWER"]),
+});
+export type GrantProjectAccessInput = z.infer<typeof grantProjectAccessSchema>;

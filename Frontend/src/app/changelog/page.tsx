@@ -6,6 +6,23 @@ export const metadata = { title: "Changelog — EnvSync" };
 
 const ENTRIES = [
   {
+    version: "v0.19",
+    date: "August 2026",
+    title: "Roles become project-scoped; project creation requires approval",
+    items: [
+      "Roles (Admin/Developer/Viewer) are now granted per project, not org-wide — being Admin on one project no longer implies any access to another. The Owner is the only exception, with unconditional access to every project.",
+      "Inviting someone as Admin or Developer now requires picking the project that role applies to; a Viewer invite can still stay org-only.",
+      "Every org member — including one with zero project grants — can browse the full project list and request access to a specific project, optionally naming the role they're requesting.",
+      "Project creation by an Admin now needs Owner approval, unless the Owner has turned on auto-approve for that specific Admin (Projects page, Owner-only). Owner-created projects are still immediate.",
+      "Removed the \"already have an account? add them directly\" shortcut — it silently created org membership with no acceptance step. Everyone now goes through invite-and-accept, whether or not they already have an account.",
+      "Deleted secrets are now recoverable for 24 hours (a \"Recently Deleted\" panel on the environment page) before being permanently purged.",
+      "The org-wide member list now always shows every org member; each project has its own separate member list showing only who actually has access there.",
+      "Added a self-service \"request a role upgrade\" control (Settings → Profile), routed to whoever has the authority to grant it.",
+      "The environment page now only shows edit/delete/rotate controls to members who actually have write access, instead of showing them to everyone and failing on click. \"Add Variable\" moved off the top navbar onto the page itself.",
+      "Project creation is now Admin/Owner-only (was Developer and above).",
+    ],
+  },
+  {
     version: "v0.18",
     date: "August 2026",
     title: "Google-only sign-in: password auth removed",

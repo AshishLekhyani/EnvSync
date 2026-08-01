@@ -7,6 +7,7 @@ import {
   projectIdFromParam,
   requireOrgRole,
   requireProjectAccess,
+  requireProjectRole,
 } from "../rbac/rbac.middleware";
 import { validate } from "../../common/validation/validate";
 import * as environmentController from "./environment.controller";
@@ -17,8 +18,8 @@ projectEnvironmentsRouter.use(requireAuth);
 
 projectEnvironmentsRouter.post(
   "/",
-  requireOrgRole("ADMIN", orgIdFromProjectParam()),
-  requireProjectAccess(projectIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromProjectParam()),
+  requireProjectRole("ADMIN", projectIdFromParam()),
   validate({ body: createEnvironmentSchema }),
   environmentController.createEnvironment
 );
@@ -40,7 +41,7 @@ environmentRouter.get(
 );
 environmentRouter.delete(
   "/:environmentId",
-  requireOrgRole("ADMIN", orgIdFromEnvironmentParam()),
-  requireProjectAccess(projectIdFromEnvironmentParam()),
+  requireOrgRole("VIEWER", orgIdFromEnvironmentParam()),
+  requireProjectRole("ADMIN", projectIdFromEnvironmentParam()),
   environmentController.deleteEnvironment
 );

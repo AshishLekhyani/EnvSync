@@ -14,33 +14,39 @@ enum AuthProvider {
 }
 
 model User {
-  id              String       @id @default(cuid())
-  email           String       @unique
-  name            String
-  avatarUrl       String?      @db.Text
+  id                String       @id @default(cuid())
+  email             String       @unique
+  name              String
+  avatarUrl         String?      @db.Text
   notificationPrefs Json?
-  authProvider    AuthProvider @default(GOOGLE)
-  providerId      String?
-  emailVerifiedAt DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  authProvider      AuthProvider @default(GOOGLE)
+  providerId        String?
+  emailVerifiedAt   DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
-  memberships            OrgMembership[]
-  membershipsInvited     OrgMembership[] @relation("MembershipInviter")
-  sessions               Session[]
-  auditLogs               AuditLog[]      @relation("ActorUser")
-  secretVersionsAuthored  SecretVersion[] @relation("SecretVersionAuthor")
-  apiTokensCreated        ApiToken[]      @relation("ApiTokenCreator")
-  notifications           Notification[]  @relation("NotificationRecipient")
-  invitesSent             OrgInvite[]     @relation("InviteInviter")
-  invitesAccepted         OrgInvite[]     @relation("InviteAcceptor")
-  invitesApproved         OrgInvite[]     @relation("InviteApprover")
-  projectAccess           ProjectMembership[] @relation("ProjectMember")
-  projectAccessGranted    ProjectMembership[] @relation("ProjectAccessGrantor")
-  autoApproveRulesAsInviter InviteAutoApproveRule[] @relation("AutoApproveInviter")
-  autoApproveRulesCreated   InviteAutoApproveRule[] @relation("AutoApproveCreatedBy")
-  projectAccessRequested    ProjectAccessRequest[]  @relation("ProjectAccessRequester")
-  projectAccessDecided      ProjectAccessRequest[]  @relation("ProjectAccessDecider")
+  memberships                     OrgMembership[]
+  membershipsInvited              OrgMembership[]                @relation("MembershipInviter")
+  sessions                        Session[]
+  auditLogs                       AuditLog[]                     @relation("ActorUser")
+  secretVersionsAuthored          SecretVersion[]                @relation("SecretVersionAuthor")
+  apiTokensCreated                ApiToken[]                     @relation("ApiTokenCreator")
+  notifications                   Notification[]                 @relation("NotificationRecipient")
+  invitesSent                     OrgInvite[]                    @relation("InviteInviter")
+  invitesAccepted                 OrgInvite[]                    @relation("InviteAcceptor")
+  invitesApproved                 OrgInvite[]                    @relation("InviteApprover")
+  projectAccess                   ProjectMembership[]            @relation("ProjectMember")
+  projectAccessGranted            ProjectMembership[]            @relation("ProjectAccessGrantor")
+  autoApproveRulesAsInviter       InviteAutoApproveRule[]        @relation("AutoApproveInviter")
+  autoApproveRulesCreated         InviteAutoApproveRule[]        @relation("AutoApproveCreatedBy")
+  projectAccessRequested          ProjectAccessRequest[]         @relation("ProjectAccessRequester")
+  projectAccessDecided            ProjectAccessRequest[]         @relation("ProjectAccessDecider")
+  roleChangeRequested             RoleChangeRequest[]            @relation("RoleChangeRequester")
+  roleChangeDecided               RoleChangeRequest[]            @relation("RoleChangeDecider")
+  projectCreationRequested        ProjectCreationRequest[]       @relation("ProjectCreationRequester")
+  projectCreationDecided          ProjectCreationRequest[]       @relation("ProjectCreationDecider")
+  projectCreateAutoApproveAsAdmin ProjectCreateAutoApproveRule[] @relation("ProjectCreateAutoApproveAdmin")
+  projectCreateAutoApproveCreated ProjectCreateAutoApproveRule[] @relation("ProjectCreateAutoApproveCreatedBy")
 
   @@unique([authProvider, providerId])
 }
@@ -59,16 +65,19 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships         OrgMembership[]
-  projects            Project[]
-  encryptionKey       OrgEncryptionKey?
-  auditLogs           AuditLog[]
-  apiTokens           ApiToken[]
-  notifications       Notification[]
-  invites             OrgInvite[]
-  permissionOverrides OrgEnvironmentPermission[]
-  inviteAutoApproveRules InviteAutoApproveRule[]
-  projectAccessRequests  ProjectAccessRequest[]
+  memberships                   OrgMembership[]
+  projects                      Project[]
+  encryptionKey                 OrgEncryptionKey?
+  auditLogs                     AuditLog[]
+  apiTokens                     ApiToken[]
+  notifications                 Notification[]
+  invites                       OrgInvite[]
+  permissionOverrides           OrgEnvironmentPermission[]
+  inviteAutoApproveRules        InviteAutoApproveRule[]
+  projectAccessRequests         ProjectAccessRequest[]
+  roleChangeRequests            RoleChangeRequest[]
+  projectCreationRequests       ProjectCreationRequest[]
+  projectCreateAutoApproveRules ProjectCreateAutoApproveRule[]
 }
 
 model OrgMembership {
@@ -97,11 +106,11 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  org          Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  environments Environment[]
-  auditLogs    AuditLog[]
-  memberships  ProjectMembership[]
-  invites      OrgInvite[]
+  org            Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  environments   Environment[]
+  auditLogs      AuditLog[]
+  memberships    ProjectMembership[]
+  invites        OrgInvite[]
   accessRequests ProjectAccessRequest[]
 
   @@unique([orgId, slug])
@@ -111,6 +120,7 @@ model ProjectMembership {
   id          String   @id @default(cuid())
   userId      String
   projectId   String
+  role        OrgRole  @default(VIEWER)
   grantedById String
   createdAt   DateTime @default(now())
 
@@ -121,6 +131,46 @@ model ProjectMembership {
   @@unique([userId, projectId])
   @@index([projectId])
   @@index([userId])
+}
+
+enum ProjectCreationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ProjectCreationRequest {
+  id            String                @id @default(cuid())
+  orgId         String
+  name          String
+  slug          String
+  description   String?
+  requestedById String
+  status        ProjectCreationStatus @default(PENDING)
+  decidedById   String?
+  decidedAt     DateTime?
+  createdAt     DateTime              @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  requestedBy User         @relation("ProjectCreationRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  decidedBy   User?        @relation("ProjectCreationDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+}
+
+model ProjectCreateAutoApproveRule {
+  id          String   @id @default(cuid())
+  orgId       String
+  adminId     String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  admin     User         @relation("ProjectCreateAutoApproveAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  createdBy User         @relation("ProjectCreateAutoApproveCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, adminId])
+  @@index([orgId])
 }
 
 enum EnvironmentType {
@@ -145,25 +195,27 @@ model Environment {
 }
 
 model Secret {
-  id             String   @id @default(cuid())
-  environmentId  String
-  key            String
+  id            String @id @default(cuid())
+  environmentId String
+  key           String
 
   ciphertext     Bytes
   iv             Bytes
   authTag        Bytes
-  currentVersion Int      @default(1)
+  currentVersion Int       @default(1)
   expiresAt      DateTime?
+  deletedAt      DateTime?
 
-  createdById    String
-  updatedById    String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdById String
+  updatedById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   environment Environment     @relation(fields: [environmentId], references: [id], onDelete: Cascade)
   versions    SecretVersion[]
 
   @@unique([environmentId, key])
+  @@index([deletedAt])
 }
 
 enum SecretChangeType {
@@ -216,8 +268,8 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   org     Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
-  actor   User?        @relation("ActorUser", fields: [actorId], references: [id], onDelete: SetNull)
-  project Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  actor   User?         @relation("ActorUser", fields: [actorId], references: [id], onDelete: SetNull)
+  project Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([orgId, createdAt])
   @@index([projectId, createdAt])
@@ -353,14 +405,15 @@ enum AccessRequestStatus {
 }
 
 model ProjectAccessRequest {
-  id            String               @id @default(cuid())
+  id            String              @id @default(cuid())
   orgId         String
   projectId     String
   requestedById String
-  status        AccessRequestStatus  @default(PENDING)
+  requestedRole OrgRole?
+  status        AccessRequestStatus @default(PENDING)
   decidedById   String?
   decidedAt     DateTime?
-  createdAt     DateTime             @default(now())
+  createdAt     DateTime            @default(now())
 
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -369,4 +422,22 @@ model ProjectAccessRequest {
 
   @@index([orgId])
   @@index([projectId])
+}
+
+model RoleChangeRequest {
+  id            String              @id @default(cuid())
+  orgId         String
+  userId        String
+  requestedRole OrgRole
+  status        AccessRequestStatus @default(PENDING)
+  decidedById   String?
+  decidedAt     DateTime?
+  createdAt     DateTime            @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user      User         @relation("RoleChangeRequester", fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy User?        @relation("RoleChangeDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([userId])
 }

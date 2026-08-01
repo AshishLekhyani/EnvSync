@@ -260,7 +260,6 @@ export function InvitesSection() {
   const [decidingId, setDecidingId] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
-  const [directAddMode, setDirectAddMode] = useState(false);
   const [email, setEmail] = useState("");
   const [emailCheck, setEmailCheck] = useState<"idle" | "checking" | "found" | "not-found">("idle");
   const [role, setRole] = useState<OrgRole>("VIEWER");
@@ -268,8 +267,9 @@ export function InvitesSection() {
   const [submitting, setSubmitting] = useState(false);
   const [justCreated, setJustCreated] = useState<InviteCreated | null>(null);
   const [justApproved, setJustApproved] = useState<InviteCreated | null>(null);
-  const [directAddSuccess, setDirectAddSuccess] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
+
+  const projectRequired = role !== "VIEWER" && role !== "OWNER";
 
   useEffect(() => {
     if (roles.length > 0 && !roles.includes(role)) {
@@ -310,7 +310,7 @@ export function InvitesSection() {
   }, [org]);
 
   useEffect(() => {
-    if (!org || !directAddMode || !email.includes("@")) {
+    if (!org || !email.includes("@")) {
       setEmailCheck("idle");
       return;
     }
@@ -324,7 +324,7 @@ export function InvitesSection() {
     }, 400);
 
     return () => window.clearTimeout(timer);
-  }, [org, directAddMode, email]);
+  }, [org, email]);
 
   const copyText = async (text: string) => {
     try {
@@ -338,9 +338,7 @@ export function InvitesSection() {
 
   const closeForm = () => {
     setShowForm(false);
-    setDirectAddMode(false);
     setJustCreated(null);
-    setDirectAddSuccess(null);
     setEmail("");
     setProjectId("");
     setEmailCheck("idle");
@@ -384,32 +382,6 @@ export function InvitesSection() {
       setProjectId("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create invite");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const onDirectAdd = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!org) return;
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      const membership = await api.addMember(org.id, {
-        email,
-        role,
-        projectId: projectId || undefined,
-      });
-      setDirectAddSuccess(`${membership.user.name} was added directly and can log in now.`);
-      setEmail("");
-      setProjectId("");
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "Failed to add member. Make sure they already have an EnvSync account."
-      );
     } finally {
       setSubmitting(false);
     }
@@ -491,32 +463,13 @@ export function InvitesSection() {
         </div>
       )}
 
-      {showForm && directAddSuccess && (
-        <div className="github-card flex flex-col gap-md rounded-lg p-md">
-          <h2 className="font-h3 text-h3 text-on-surface">Member Added</h2>
-          <p className="font-body-sm text-body-sm text-secondary">{directAddSuccess}</p>
-          <button
-            type="button"
-            onClick={closeForm}
-            className="self-start font-label-md text-label-md text-xs text-primary hover:underline"
-          >
-            Done
-          </button>
-        </div>
-      )}
-
-      {showForm && !justCreated && !directAddSuccess && (
-        <form
-          onSubmit={directAddMode ? onDirectAdd : onInvite}
-          className="github-card flex flex-col gap-md rounded-lg p-md"
-        >
-          <h2 className="font-h3 text-h3 text-on-surface">
-            {directAddMode ? "Add Existing Member" : "Invite Member"}
-          </h2>
+      {showForm && !justCreated && (
+        <form onSubmit={onInvite} className="github-card flex flex-col gap-md rounded-lg p-md">
+          <h2 className="font-h3 text-h3 text-on-surface">Invite Member</h2>
           <p className="font-body-sm text-body-sm text-secondary">
-            {directAddMode
-              ? "They need an existing EnvSync account."
-              : "Anyone with the generated link can join with the selected role."}
+            Anyone with the generated link can join with the selected role — even if they
+            already have an EnvSync account, they still need to accept before they&apos;re a
+            member.
           </p>
           {org.role === "DEVELOPER" && (
             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-md py-sm font-body-sm text-body-sm text-amber-700 dark:text-amber-400">
@@ -537,22 +490,16 @@ export function InvitesSection() {
                 placeholder="teammate@example.com"
                 className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
               />
-              {directAddMode && emailCheck === "checking" && (
-                <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-on-surface-variant">
-                  <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 12 }} />
-                  Checking...
-                </span>
-              )}
-              {directAddMode && emailCheck === "found" && (
+              {emailCheck === "found" && (
                 <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-primary">
                   <Icon name="check_circle" style={{ fontSize: 14 }} />
-                  Account found
+                  Account found — they can accept and log in right away
                 </span>
               )}
-              {directAddMode && emailCheck === "not-found" && (
-                <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-[#CF222E] dark:text-red-400">
-                  <Icon name="cancel" style={{ fontSize: 14 }} />
-                  No EnvSync account with this email yet
+              {emailCheck === "not-found" && (
+                <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-on-surface-variant">
+                  <Icon name="info" style={{ fontSize: 14 }} />
+                  No EnvSync account yet — they&apos;ll sign in with Google to accept
                 </span>
               )}
             </label>
@@ -570,11 +517,14 @@ export function InvitesSection() {
             </Select>
           </div>
           <Select
-            label="Project access"
+            required={projectRequired}
+            label={projectRequired ? "Project access (required)" : "Project access"}
             value={projectId}
             onChange={(e) => setProjectId(e.target.value)}
           >
-            <option value="">No specific project (org-wide only)</option>
+            <option value="" disabled={projectRequired}>
+              {projectRequired ? "Choose a project" : "No specific project (org-wide only)"}
+            </option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -582,21 +532,17 @@ export function InvitesSection() {
             ))}
           </Select>
           <p className="-mt-xs font-body-sm text-[11px] text-on-surface-variant">
-            {directAddMode
-              ? "Optionally grant immediate access to one project. They'll only see this project unless given access to more later."
-              : "Optionally grant immediate access to one project when they accept. They'll only see this project unless given access to more later."}
+            {projectRequired
+              ? "Admins and Developers only get access to the project you pick here — they can request access to others later."
+              : "Viewers can join org-wide with no project yet, and request access to specific projects afterward."}
           </p>
           <div className="flex items-center gap-sm">
             <button
               type="submit"
-              disabled={submitting || (directAddMode && emailCheck === "not-found")}
+              disabled={submitting || (projectRequired && !projectId)}
               className="rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
             >
-              {submitting
-                ? "Please wait..."
-                : directAddMode
-                  ? "Add Member"
-                  : "Create Invite Link"}
+              {submitting ? "Please wait..." : "Create Invite Link"}
             </button>
             <button
               type="button"
@@ -604,15 +550,6 @@ export function InvitesSection() {
               className="rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface"
             >
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => setDirectAddMode((v) => !v)}
-              className="font-body-sm text-body-sm text-primary hover:underline"
-            >
-              {directAddMode
-                ? "Invite by link instead"
-                : "Already have an account? Add them directly instead"}
             </button>
           </div>
         </form>

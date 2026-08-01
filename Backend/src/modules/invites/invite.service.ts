@@ -327,11 +327,12 @@ export async function acceptInvite(
       const existingGrant = await tx.projectMembership.findUnique({
         where: { userId_projectId: { userId: user.id, projectId: invite.projectId } },
       });
-      if (!existingGrant) {
+      if (!existingGrant && invite.role !== "OWNER") {
         await tx.projectMembership.create({
           data: {
             userId: user.id,
             projectId: invite.projectId,
+            role: invite.role,
             grantedById: invite.invitedById,
           },
         });

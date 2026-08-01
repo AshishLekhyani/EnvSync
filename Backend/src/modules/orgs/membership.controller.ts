@@ -1,26 +1,20 @@
 import { asyncHandler } from "../../common/middleware/asyncHandler";
 import * as membershipService from "./membership.service";
-import { getAccessibleProjectIds } from "../rbac/projectAccess.service";
 import {
-  AddMemberInput,
   CheckEmailQuery,
+  GrantProjectAccessInput,
   SetCanViewAllProjectsInput,
   TransferOwnershipInput,
   UpdateMemberRoleInput,
 } from "./membership.validators";
 
 export const listMembers = asyncHandler(async (req, res) => {
-  const accessibleProjectIds = await getAccessibleProjectIds(
-    req.params.orgId,
-    req.user!.id,
-    req.membership!.role,
-    req.membership!
-  );
-  const members = await membershipService.listMembers(
-    req.params.orgId,
-    accessibleProjectIds,
-    req.user!.id
-  );
+  const members = await membershipService.listMembers(req.params.orgId, req.membership!.role);
+  res.status(200).json(members);
+});
+
+export const listProjectMembers = asyncHandler(async (req, res) => {
+  const members = await membershipService.listProjectMembers(req.params.projectId);
   res.status(200).json(members);
 });
 
@@ -28,16 +22,6 @@ export const checkEmailExists = asyncHandler(async (req, res) => {
   const query = req.query as unknown as CheckEmailQuery;
   const exists = await membershipService.checkEmailExists(query.email);
   res.status(200).json({ exists });
-});
-
-export const addMember = asyncHandler(async (req, res) => {
-  const membership = await membershipService.addMember(
-    req.params.orgId,
-    req.body as AddMemberInput,
-    { id: req.user!.id, role: req.membership!.role },
-    req.ip
-  );
-  res.status(201).json(membership);
 });
 
 export const updateMemberRole = asyncHandler(async (req, res) => {
@@ -62,10 +46,12 @@ export const removeMember = asyncHandler(async (req, res) => {
 });
 
 export const grantProjectAccess = asyncHandler(async (req, res) => {
+  const { role } = req.body as GrantProjectAccessInput;
   await membershipService.grantProjectAccess(
     req.params.orgId,
     req.params.membershipId,
     req.params.projectId,
+    role,
     req.membership!,
     req.ip
   );

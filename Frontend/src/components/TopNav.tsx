@@ -121,6 +121,22 @@ export function TopNav({
         } else {
           await api.rejectAccessRequest(orgId, requestId);
         }
+      } else if (n.type === "project_creation.requested") {
+        const requestId = n.metadata?.requestId as string | undefined;
+        if (!requestId) return;
+        if (decision === "approve") {
+          await api.approveProjectCreationRequest(orgId, requestId);
+        } else {
+          await api.rejectProjectCreationRequest(orgId, requestId);
+        }
+      } else if (n.type === "role_change.requested") {
+        const requestId = n.metadata?.requestId as string | undefined;
+        if (!requestId) return;
+        if (decision === "approve") {
+          await api.approveRoleChangeRequest(orgId, requestId);
+        } else {
+          await api.rejectRoleChangeRequest(orgId, requestId);
+        }
       }
       setApprovalResult((prev) => ({ ...prev, [n.id]: decision }));
       await onMarkRead(n.id);
@@ -262,7 +278,9 @@ export function TopNav({
                   notifications.map((n) => {
                     const isApprovalRequest =
                       n.type === "invite.approval_requested" ||
-                      n.type === "project_access.requested";
+                      n.type === "project_access.requested" ||
+                      n.type === "project_creation.requested" ||
+                      n.type === "role_change.requested";
                     const decided = approvalResult[n.id];
 
                     const dismissButton = (

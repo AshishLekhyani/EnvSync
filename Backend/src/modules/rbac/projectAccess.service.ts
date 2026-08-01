@@ -6,7 +6,7 @@ export function canViewAllProjects(role: OrgRole, membership: OrgMembership): bo
 }
 
 export function canBrowseAllProjects(role: OrgRole): boolean {
-  return role === "ADMIN" || role === "DEVELOPER";
+  return role === "ADMIN" || role === "DEVELOPER" || role === "VIEWER";
 }
 
 export async function getAccessibleProjectIds(
@@ -25,6 +25,20 @@ export async function getAccessibleProjectIds(
   });
 
   return grants.map((g) => g.projectId);
+}
+
+export async function getProjectRole(
+  userId: string,
+  projectId: string,
+  orgRole: OrgRole
+): Promise<OrgRole | null> {
+  if (orgRole === "OWNER") return "OWNER";
+
+  const grant = await prisma.projectMembership.findUnique({
+    where: { userId_projectId: { userId, projectId } },
+  });
+
+  return grant?.role ?? null;
 }
 
 export async function hasProjectAccess(

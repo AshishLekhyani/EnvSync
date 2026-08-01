@@ -7,8 +7,8 @@ import * as membershipController from "./membership.controller";
 import { checkEmailRateLimiter } from "./membership.rateLimit";
 import { createOrgSchema, updateOrgSchema } from "./org.validators";
 import {
-  addMemberSchema,
   checkEmailQuerySchema,
+  grantProjectAccessSchema,
   setCanViewAllProjectsSchema,
   transferOwnershipSchema,
   updateMemberRoleSchema,
@@ -55,12 +55,6 @@ orgRouter.get(
   validate({ query: checkEmailQuerySchema }),
   membershipController.checkEmailExists
 );
-orgRouter.post(
-  "/:orgId/members",
-  requireOrgRole("ADMIN", orgIdFromParam()),
-  validate({ body: addMemberSchema }),
-  membershipController.addMember
-);
 orgRouter.patch(
   "/:orgId/members/:membershipId",
   requireOrgRole("ADMIN", orgIdFromParam()),
@@ -74,12 +68,13 @@ orgRouter.delete(
 );
 orgRouter.post(
   "/:orgId/members/:membershipId/projects/:projectId",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
+  validate({ body: grantProjectAccessSchema }),
   membershipController.grantProjectAccess
 );
 orgRouter.delete(
   "/:orgId/members/:membershipId/projects/:projectId",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   membershipController.revokeProjectAccess
 );
 orgRouter.patch(

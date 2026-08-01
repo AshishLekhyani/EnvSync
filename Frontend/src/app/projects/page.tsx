@@ -14,8 +14,178 @@ import {
   ApiError,
   AuditLogEntry,
   Project,
+  ProjectCreateAutoApproveRuleSummary,
+  ProjectCreationRequestSummary,
 } from "@/lib/api";
 import { getActionDisplay } from "@/lib/auditActions";
+
+function PendingProjectRequests({ orgId }: { orgId: string }) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+
+  const requestsQuery = useQuery({
+    queryKey: queryKeys.orgProjectCreationRequests(orgId),
+    queryFn: () => api.listProjectCreationRequests(orgId),
+  });
+  const requests = requestsQuery.data ?? [];
+
+  const onDecision = async (requestId: string, decision: "approve" | "reject") => {
+    setDecidingId(requestId);
+    setError(null);
+    try {
+      if (decision === "approve") {
+        await api.approveProjectCreationRequest(orgId, requestId);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.orgProjects(orgId) });
+      } else {
+        await api.rejectProjectCreationRequest(orgId, requestId);
+      }
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.orgProjectCreationRequests(orgId),
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update request");
+    } finally {
+      setDecidingId(null);
+    }
+  };
+
+  if (!requestsQuery.isPending && requests.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="github-card mb-xl overflow-hidden rounded-lg">
+      <div className="border-b border-outline-variant bg-surface-container-low px-md py-sm">
+        <h3 className="font-label-md text-label-md font-bold text-on-surface">
+          Pending Project Requests
+          <span className="ml-sm rounded bg-outline-variant px-base py-[2px] text-[10px] text-on-surface-variant">
+            {requests.length}
+          </span>
+        </h3>
+      </div>
+      <div className="flex flex-col divide-y divide-outline-variant">
+        {error && (
+          <p className="p-md font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
+            {error}
+          </p>
+        )}
+        {requests.map((r: ProjectCreationRequestSummary) => (
+          <div key={r.id} className="flex items-center justify-between gap-md px-md py-sm">
+            <div>
+              <p className="font-body-sm text-body-sm text-on-surface">
+                <span className="font-bold">{r.requestedBy.name}</span> wants to create{" "}
+                <span className="font-bold">{r.name}</span>
+              </p>
+              <p className="font-body-sm text-[11px] text-on-surface-variant">
+                {r.requestedBy.email} · {new Date(r.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+            <div className="flex flex-shrink-0 gap-sm">
+              <button
+                type="button"
+                disabled={decidingId === r.id}
+                onClick={() => onDecision(r.id, "approve")}
+                className="rounded-lg bg-primary-container px-sm py-1 font-label-md text-[11px] text-on-primary disabled:opacity-50"
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                disabled={decidingId === r.id}
+                onClick={() => onDecision(r.id, "reject")}
+                className="rounded-lg border border-outline-variant px-sm py-1 font-label-md text-[11px] text-on-surface disabled:opacity-50"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProjectCreateAutoApprove({
+  orgId,
+  admins,
+}: {
+  orgId: string;
+  admins: { membershipId: string; user: { id: string; name: string; email: string } }[];
+}) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const rulesQuery = useQuery({
+    queryKey: queryKeys.orgProjectCreateAutoApprove(orgId),
+    queryFn: () => api.listCreateAutoApproveRules(orgId),
+  });
+  const rules = rulesQuery.data ?? [];
+  const enabledIds = new Set(rules.map((r: ProjectCreateAutoApproveRuleSummary) => r.admin.id));
+
+  const toggle = async (adminId: string, enabled: boolean) => {
+    setPendingId(adminId);
+    setError(null);
+    try {
+      if (enabled) {
+        await api.disableCreateAutoApprove(orgId, adminId);
+      } else {
+        await api.enableCreateAutoApprove(orgId, adminId);
+      }
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.orgProjectCreateAutoApprove(orgId),
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update");
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  if (admins.length === 0) return null;
+
+  return (
+    <div className="github-card mb-xl overflow-hidden rounded-lg">
+      <div className="border-b border-outline-variant bg-surface-container-low px-md py-sm">
+        <h3 className="font-label-md text-label-md font-bold text-on-surface">
+          Auto-Approve Project Creation
+        </h3>
+        <p className="mt-xs font-body-sm text-[11px] text-on-surface-variant">
+          Admin-created projects normally need your approval. Turn this on for an Admin you
+          trust to skip that step for them.
+        </p>
+      </div>
+      <div className="flex flex-col divide-y divide-outline-variant p-md">
+        {error && (
+          <p className="pb-sm font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
+            {error}
+          </p>
+        )}
+        {admins.map((m) => {
+          const enabled = enabledIds.has(m.user.id);
+          return (
+            <label
+              key={m.membershipId}
+              className="flex items-center justify-between gap-md py-sm"
+            >
+              <span className="font-body-sm text-body-sm text-on-surface">
+                {m.user.name} <span className="text-on-surface-variant">({m.user.email})</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={enabled}
+                disabled={pendingId === m.user.id}
+                onChange={() => toggle(m.user.id, enabled)}
+                className="rounded border-outline-variant text-primary-container focus:ring-primary-container"
+              />
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function slugify(value: string) {
   return value
@@ -46,7 +216,11 @@ function ProjectsPageContent() {
   const members = membersQuery.data ?? [];
   const loading = projectsQuery.isPending || membersQuery.isPending;
   const [error, setError] = useState<string | null>(null);
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+
+  const canCreateProject = org?.role === "OWNER" || org?.role === "ADMIN";
+  const admins = members.filter((m) => m.role === "ADMIN");
 
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(true);
@@ -110,9 +284,10 @@ function ProjectsPageContent() {
   const createFlag = searchParams.get("create");
 
   useEffect(() => {
-    if (createFlag === "1" && org) {
+    if (createFlag === "1" && org && canCreateProject) {
       setShowCreateProject(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createFlag, org]);
 
   const filteredProjects = search.trim()
@@ -132,17 +307,24 @@ function ProjectsPageContent() {
     }
     setCreatingProject(true);
     setError(null);
+    setPendingNotice(null);
 
     try {
-      const project = await api.createProject(org.id, {
+      const result = await api.createProject(org.id, {
         name: projectName,
         slug,
         description: projectDescription || undefined,
       });
-      queryClient.setQueryData<Project[]>(
-        queryKeys.orgProjects(org.id),
-        (prev) => [...(prev ?? []), project]
-      );
+      if (result.status === "created") {
+        queryClient.setQueryData<Project[]>(
+          queryKeys.orgProjects(org.id),
+          (prev) => [...(prev ?? []), result.project]
+        );
+      } else {
+        setPendingNotice(
+          `"${result.request.name}" needs owner approval before it's created.`
+        );
+      }
       setProjectName("");
       setProjectDescription("");
       setShowCreateProject(false);
@@ -170,7 +352,7 @@ function ProjectsPageContent() {
                 : "Create an organization to start managing environment variables."}
             </p>
           </div>
-          {org && (
+          {org && canCreateProject && (
             <div className="flex gap-sm">
               <button
                 type="button"
@@ -188,6 +370,17 @@ function ProjectsPageContent() {
           <div className="mb-md rounded-lg border border-[#CF222E]/30 bg-[#FFEBE9] px-md py-sm font-body-sm text-body-sm text-[#CF222E] dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
             {error}
           </div>
+        )}
+
+        {pendingNotice && (
+          <div className="mb-md rounded-lg border border-amber-500/30 bg-amber-500/10 px-md py-sm font-body-sm text-body-sm text-amber-700 dark:text-amber-400">
+            {pendingNotice}
+          </div>
+        )}
+
+        {org && org.role === "OWNER" && <PendingProjectRequests orgId={org.id} />}
+        {org && org.role === "OWNER" && (
+          <ProjectCreateAutoApprove orgId={org.id} admins={admins} />
         )}
 
         {!org && !showCreateOrg && (
@@ -372,18 +565,20 @@ function ProjectsPageContent() {
                   )
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => setShowCreateProject(true)}
-                  className="github-card group flex min-h-[180px] cursor-pointer flex-col items-center justify-center gap-sm rounded-lg border-dashed p-md text-secondary transition-all hover:border-primary hover:text-primary"
-                >
-                  <Icon
-                    name="add_circle"
-                    className="transition-transform group-hover:scale-110"
-                    style={{ fontSize: 48 }}
-                  />
-                  <span className="font-label-md text-label-md">New Project Container</span>
-                </button>
+                {canCreateProject && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateProject(true)}
+                    className="github-card group flex min-h-[180px] cursor-pointer flex-col items-center justify-center gap-sm rounded-lg border-dashed p-md text-secondary transition-all hover:border-primary hover:text-primary"
+                  >
+                    <Icon
+                      name="add_circle"
+                      className="transition-transform group-hover:scale-110"
+                      style={{ fontSize: 48 }}
+                    />
+                    <span className="font-label-md text-label-md">New Project Container</span>
+                  </button>
+                )}
               </div>
             )}
 

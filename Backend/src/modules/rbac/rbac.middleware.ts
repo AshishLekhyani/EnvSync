@@ -113,6 +113,39 @@ export function requireProjectAccess(resolveProjectId: ProjectIdResolver) {
   });
 }
 
+/** Checks the caller's role scoped to a specific project (Owner bypasses). Must run after requireOrgRole. */
+export function requireProjectRole(minRole: OrgRole, resolveProjectId: ProjectIdResolver) {
+  return asyncHandler(async (req, _res, next) => {
+    if (!req.user || !req.membership) {
+      throw new UnauthorizedError();
+    }
+
+    const projectId = await resolveProjectId(req);
+    if (!projectId) {
+      throw new NotFoundError();
+    }
+
+    if (req.membership.role === "OWNER") {
+      next();
+      return;
+    }
+
+    const grant = await prisma.projectMembership.findUnique({
+      where: { userId_projectId: { userId: req.user.id, projectId } },
+    });
+
+    if (!grant) {
+      throw new NotFoundError();
+    }
+
+    if (!hasAtLeastRole(grant.role, minRole)) {
+      throw new ForbiddenError();
+    }
+
+    next();
+  });
+}
+
 export function projectIdFromParam(paramName = "projectId"): ProjectIdResolver {
   return async (req) => req.params[paramName] ?? null;
 }
@@ -182,6 +215,8 @@ export function requireEnvironmentAccess(
 
     const effective = await getEffectiveAccess(
       environment.project.orgId,
+      environment.projectId,
+      req.user.id,
       membership.role,
       environment.type
     );

@@ -15,7 +15,11 @@ import {
   ApiError,
   EnvironmentSummary,
   EnvironmentType,
+  OrgRole,
+  ProjectMemberSummary,
 } from "@/lib/api";
+import { roleBadgeClass } from "@/lib/roleBadge";
+import { assignableRoles } from "@/lib/roles";
 
 const ENV_ICON: Record<EnvironmentType, string> = {
   DEVELOPMENT: "code",
@@ -37,6 +41,170 @@ const ALL_ENV_TYPES: EnvironmentType[] = [
   "STAGING",
   "PRODUCTION",
 ];
+
+function ProjectMembers({
+  projectId,
+  orgId,
+  canManage,
+}: {
+  projectId: string;
+  orgId: string;
+  canManage: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedRole, setSelectedRole] = useState<OrgRole>("VIEWER");
+  const [granting, setGranting] = useState(false);
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const confirm = useConfirm();
+
+  const projectMembersQuery = useQuery({
+    queryKey: queryKeys.projectMembers(projectId),
+    queryFn: () => api.listProjectMembers(projectId),
+  });
+  const orgMembersQuery = useQuery({
+    queryKey: queryKeys.orgMembers(orgId),
+    queryFn: () => api.listMembers(orgId),
+    enabled: canManage,
+  });
+
+  const projectMembers = projectMembersQuery.data ?? [];
+  const orgMembers = orgMembersQuery.data ?? [];
+  const projectMemberIds = new Set(projectMembers.map((m: ProjectMemberSummary) => m.user.id));
+  const addableMembers = orgMembers.filter(
+    (m) => m.role !== "OWNER" && !projectMemberIds.has(m.user.id)
+  );
+
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+
+  const onGrant = async () => {
+    if (!selectedUserId) return;
+    const membership = orgMembers.find((m) => m.user.id === selectedUserId);
+    if (!membership) return;
+    setGranting(true);
+    setError(null);
+    try {
+      await api.grantProjectAccess(orgId, membership.membershipId, projectId, selectedRole);
+      await refresh();
+      setSelectedUserId("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to grant access");
+    } finally {
+      setGranting(false);
+    }
+  };
+
+  const onRevoke = async (userId: string) => {
+    const membership = orgMembers.find((m) => m.user.id === userId);
+    if (!membership) return;
+    if (!(await confirm("Remove this person's access to this project?"))) return;
+    setBusyUserId(userId);
+    setError(null);
+    try {
+      await api.revokeProjectAccess(orgId, membership.membershipId, projectId);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to revoke access");
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
+  return (
+    <div className="github-card mt-xl overflow-hidden rounded-lg">
+      <div className="border-b border-outline-variant bg-surface-container-low px-md py-sm">
+        <h3 className="font-label-md text-label-md font-bold text-on-surface">
+          Project Members
+          <span className="ml-sm rounded bg-outline-variant px-base py-[2px] text-[10px] text-on-surface-variant">
+            {projectMembers.length}
+          </span>
+        </h3>
+      </div>
+      <div className="flex flex-col divide-y divide-outline-variant">
+        {error && (
+          <p className="p-md font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
+            {error}
+          </p>
+        )}
+        {projectMembersQuery.isPending ? (
+          <div className="flex justify-center py-lg text-secondary">
+            <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 20 }} />
+          </div>
+        ) : (
+          projectMembers.map((m: ProjectMemberSummary) => (
+            <div
+              key={m.user.id}
+              className="flex items-center justify-between gap-md px-md py-sm"
+            >
+              <div>
+                <p className="font-body-sm text-body-sm text-on-surface">{m.user.name}</p>
+                <p className="font-body-sm text-[11px] text-on-surface-variant">
+                  {m.user.email}
+                </p>
+              </div>
+              <div className="flex flex-shrink-0 items-center gap-sm">
+                <span
+                  className={`rounded-full px-sm py-[1px] text-[10px] font-bold uppercase ${roleBadgeClass(m.role)}`}
+                >
+                  {m.role}
+                </span>
+                {canManage && m.role !== "OWNER" && (
+                  <button
+                    type="button"
+                    disabled={busyUserId === m.user.id}
+                    onClick={() => onRevoke(m.user.id)}
+                    className="rounded-lg border border-outline-variant px-sm py-1 font-label-md text-[11px] text-on-surface disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      {canManage && addableMembers.length > 0 && (
+        <div className="flex flex-col gap-sm border-t border-outline-variant p-md sm:flex-row sm:items-end">
+          <Select
+            label="Add member"
+            wrapperClassName="flex-1"
+            value={selectedUserId}
+            onChange={(e) => setSelectedUserId(e.target.value)}
+          >
+            <option value="">Choose a member</option>
+            {addableMembers.map((m) => (
+              <option key={m.user.id} value={m.user.id}>
+                {m.user.name} ({m.user.email})
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Role"
+            wrapperClassName="sm:w-40"
+            value={selectedRole}
+            onChange={(e) => setSelectedRole(e.target.value as OrgRole)}
+          >
+            {assignableRoles("OWNER").map((r) => (
+              <option key={r} value={r}>
+                {r.charAt(0) + r.slice(1).toLowerCase()}
+              </option>
+            ))}
+          </Select>
+          <button
+            type="button"
+            disabled={!selectedUserId || granting}
+            onClick={onGrant}
+            className="rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
+          >
+            {granting ? "Adding..." : "Add"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -61,6 +229,7 @@ export default function ProjectDetailPage() {
   const environments = environmentsQuery.data ?? [];
   const loading = projectQuery.isPending || environmentsQuery.isPending;
   const [error, setError] = useState<string | null>(null);
+  const canManageProject = project?.myRole === "OWNER" || project?.myRole === "ADMIN";
 
   const [showNewEnv, setShowNewEnv] = useState(false);
   const [newEnvType, setNewEnvType] = useState<EnvironmentType | "">("");
@@ -149,7 +318,7 @@ export default function ProjectDetailPage() {
                     {leaving ? "Leaving..." : "Leave Project"}
                   </button>
                 )}
-                {availableTypes.length > 0 && (
+                {availableTypes.length > 0 && canManageProject && (
                   <button
                     type="button"
                     onClick={() => setShowNewEnv((v) => !v)}
@@ -237,6 +406,10 @@ export default function ProjectDetailPage() {
                 </div>
               )}
             </div>
+
+            {org && (
+              <ProjectMembers orgId={org.id} projectId={project.id} canManage={canManageProject} />
+            )}
           </>
         )}
       </div>

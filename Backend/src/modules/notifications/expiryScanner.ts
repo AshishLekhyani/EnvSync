@@ -7,7 +7,7 @@ export async function runExpiryScan() {
   const warningThreshold = new Date(Date.now() + WARNING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   const expiringSecrets = await prisma.secret.findMany({
-    where: { expiresAt: { not: null, lte: warningThreshold } },
+    where: { expiresAt: { not: null, lte: warningThreshold }, deletedAt: null },
     include: { environment: { include: { project: true } } },
   });
 

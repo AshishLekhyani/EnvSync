@@ -9,11 +9,64 @@ import { useAuth } from "@/lib/auth-context";
 import { roleBadgeClass } from "@/lib/roleBadge";
 import { useOutsideClick } from "@/lib/useOutsideClick";
 import { useLeaveOrganization } from "@/lib/useLeaveOrganization";
+import { OrgSummary } from "@/lib/api";
+
+function OrgRow({
+  org,
+  active,
+  onSwitch,
+}: {
+  org: OrgSummary;
+  active: boolean;
+  onSwitch: (orgId: string) => void;
+}) {
+  const { leave, leaving, canLeave } = useLeaveOrganization(org);
+
+  return (
+    <div
+      className={`flex w-full items-center justify-between gap-sm px-md py-sm transition-colors hover:bg-surface-container-low ${
+        active ? "bg-primary/5" : ""
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => onSwitch(org.id)}
+        className="flex min-w-0 flex-1 items-center gap-sm text-left"
+      >
+        <div className="min-w-0">
+          <div className="truncate font-body-md text-body-md text-on-surface">{org.name}</div>
+          <div className="truncate font-body-sm text-[11px] text-secondary">{org.slug}</div>
+        </div>
+      </button>
+      <div className="flex flex-shrink-0 items-center gap-xs">
+        <span
+          className={`rounded-full px-sm py-[1px] text-[10px] font-bold uppercase ${roleBadgeClass(org.role)}`}
+        >
+          {org.role}
+        </span>
+        {active && <Icon name="check" className="text-primary" style={{ fontSize: 16 }} />}
+        {canLeave && (
+          <button
+            type="button"
+            title={`Leave ${org.name}`}
+            disabled={leaving}
+            onClick={(e) => {
+              e.stopPropagation();
+              leave();
+            }}
+            className="rounded p-[2px] text-secondary transition-colors hover:text-error disabled:opacity-50"
+          >
+            <Icon name="logout" style={{ fontSize: 15 }} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function OrgSwitcher() {
   const { organizations, activeOrgId, activeOrg, switchOrg, refreshMe } = useAuth();
   const router = useRouter();
-  const { leave, leaving, canLeave } = useLeaveOrganization();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -78,33 +131,7 @@ export function OrgSwitcher() {
           </div>
           <div className="max-h-64 overflow-y-auto py-xs">
             {organizations.map((org) => (
-              <button
-                key={org.id}
-                type="button"
-                onClick={() => onSwitch(org.id)}
-                className={`flex w-full items-center justify-between gap-sm px-md py-sm text-left transition-colors hover:bg-surface-container-low ${
-                  org.id === activeOrgId ? "bg-primary/5" : ""
-                }`}
-              >
-                <div className="min-w-0">
-                  <div className="truncate font-body-md text-body-md text-on-surface">
-                    {org.name}
-                  </div>
-                  <div className="truncate font-body-sm text-[11px] text-secondary">
-                    {org.slug}
-                  </div>
-                </div>
-                <div className="flex flex-shrink-0 items-center gap-xs">
-                  <span
-                    className={`rounded-full px-sm py-[1px] text-[10px] font-bold uppercase ${roleBadgeClass(org.role)}`}
-                  >
-                    {org.role}
-                  </span>
-                  {org.id === activeOrgId && (
-                    <Icon name="check" className="text-primary" style={{ fontSize: 16 }} />
-                  )}
-                </div>
-              </button>
+              <OrgRow key={org.id} org={org} active={org.id === activeOrgId} onSwitch={onSwitch} />
             ))}
           </div>
           <div className="flex flex-col gap-xs border-t border-outline-variant p-md">
@@ -119,22 +146,6 @@ export function OrgSwitcher() {
               <Icon name="add" style={{ fontSize: 18 }} />
               <span className="hover:underline">Create Organization</span>
             </button>
-            {canLeave && (
-              <button
-                type="button"
-                disabled={leaving}
-                onClick={() => {
-                  setOpen(false);
-                  leave();
-                }}
-                className="flex w-full items-center gap-xs font-label-md text-label-md text-secondary transition-colors hover:text-error disabled:opacity-50"
-              >
-                <Icon name="logout" style={{ fontSize: 18 }} />
-                <span className="hover:underline">
-                  {leaving ? "Leaving..." : `Leave ${activeOrg.name}`}
-                </span>
-              </button>
-            )}
           </div>
         </div>
       )}

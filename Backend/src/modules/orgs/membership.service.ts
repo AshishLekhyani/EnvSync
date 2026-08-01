@@ -1,12 +1,11 @@
 import { OrgMembership, OrgRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
-import { ROLE_WEIGHT } from "../rbac/roles";
-import { hasProjectAccess } from "../rbac/projectAccess.service";
+import { ROLE_WEIGHT, hasAtLeastRole } from "../rbac/roles";
 import { writeAuditLog } from "../audit/audit.service";
 import { notifyUserAccessChanged, notifyUserNotificationCreated } from "../auth/sse";
 import { shouldNotify } from "../notifications/notification.service";
-import { AddMemberInput, UpdateMemberRoleInput } from "./membership.validators";
+import { UpdateMemberRoleInput } from "./membership.validators";
 
 export interface Actor {
   id: string;
@@ -20,33 +19,15 @@ export function assertCanAssignRole(actorRole: OrgRole, targetRole: OrgRole) {
   }
 }
 
-export async function listMembers(
-  orgId: string,
-  accessibleProjectIds: "all" | string[],
-  userId: string
-) {
-  const canSeeAll = accessibleProjectIds === "all";
-
+export async function listMembers(orgId: string, requesterRole: OrgRole) {
   const memberships = await prisma.orgMembership.findMany({
-    where: canSeeAll
-      ? { orgId }
-      : {
-          orgId,
-          OR: [
-            { role: "OWNER" },
-            { canViewAllProjects: true },
-            { userId },
-            {
-              user: {
-                projectAccess: { some: { projectId: { in: accessibleProjectIds } } },
-              },
-            },
-          ],
-        },
+    where: { orgId },
     include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
+    orderBy: { createdAt: "asc" },
   });
 
-  if (!canSeeAll) {
+  const canManage = requesterRole === "OWNER" || requesterRole === "ADMIN";
+  if (!canManage) {
     return memberships.map((m) => ({
       membershipId: m.id,
       role: m.role,
@@ -58,10 +39,10 @@ export async function listMembers(
     where: { project: { orgId } },
     include: { project: { select: { id: true, name: true } } },
   });
-  const grantsByUser = new Map<string, { id: string; name: string }[]>();
+  const grantsByUser = new Map<string, { id: string; name: string; role: OrgRole }[]>();
   for (const g of grants) {
     const list = grantsByUser.get(g.userId) ?? [];
-    list.push(g.project);
+    list.push({ ...g.project, role: g.role });
     grantsByUser.set(g.userId, list);
   }
 
@@ -74,10 +55,37 @@ export async function listMembers(
   }));
 }
 
+export async function listProjectMembers(projectId: string) {
+  const grants = await prisma.projectMembership.findMany({
+    where: { projectId },
+    include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { orgId: true },
+  });
+  if (!project) {
+    throw new NotFoundError("Project not found");
+  }
+
+  const owners = await prisma.orgMembership.findMany({
+    where: { orgId: project.orgId, role: "OWNER" },
+    include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
+  });
+
+  return [
+    ...owners.map((o) => ({ role: "OWNER" as OrgRole, user: o.user })),
+    ...grants.map((g) => ({ role: g.role, user: g.user })),
+  ];
+}
+
 export async function grantProjectAccess(
   orgId: string,
   membershipId: string,
   projectId: string,
+  role: OrgRole,
   actorMembership: OrgMembership,
   ipAddress?: string
 ) {
@@ -95,22 +103,19 @@ export async function grantProjectAccess(
   }
 
   if (actorMembership.role !== "OWNER") {
-    const allowed = await hasProjectAccess(
-      orgId,
-      actorMembership.userId,
-      projectId,
-      actorMembership.role,
-      actorMembership
-    );
-    if (!allowed) {
+    const actorGrant = await prisma.projectMembership.findUnique({
+      where: { userId_projectId: { userId: actorMembership.userId, projectId } },
+    });
+    if (!actorGrant) {
       throw new ForbiddenError("You don't have access to this project yourself");
     }
+    assertCanAssignRole(actorGrant.role, role);
   }
 
   await prisma.projectMembership.upsert({
     where: { userId_projectId: { userId: membership.userId, projectId } },
-    create: { userId: membership.userId, projectId, grantedById: actorMembership.userId },
-    update: {},
+    create: { userId: membership.userId, projectId, role, grantedById: actorMembership.userId },
+    update: { role },
   });
 
   await writeAuditLog(prisma, {
@@ -125,11 +130,12 @@ export async function grantProjectAccess(
       targetUserEmail: membership.user.email,
       projectId,
       projectName: project.name,
+      role,
     },
     ipAddress,
   });
 
-  notifyUserAccessChanged(membership.userId, orgId);
+  notifyUserAccessChanged(membership.userId, orgId, projectId);
 }
 
 export async function revokeProjectAccess(
@@ -150,15 +156,11 @@ export async function revokeProjectAccess(
   const project = await prisma.project.findUnique({ where: { id: projectId } });
 
   if (actorMembership.role !== "OWNER") {
-    const allowed = await hasProjectAccess(
-      orgId,
-      actorMembership.userId,
-      projectId,
-      actorMembership.role,
-      actorMembership
-    );
-    if (!allowed) {
-      throw new ForbiddenError("You don't have access to this project yourself");
+    const actorGrant = await prisma.projectMembership.findUnique({
+      where: { userId_projectId: { userId: actorMembership.userId, projectId } },
+    });
+    if (!actorGrant || !hasAtLeastRole(actorGrant.role, "ADMIN")) {
+      throw new ForbiddenError("You need Admin access to this project to revoke access");
     }
   }
 
@@ -182,7 +184,7 @@ export async function revokeProjectAccess(
     ipAddress,
   });
 
-  notifyUserAccessChanged(membership.userId, orgId);
+  notifyUserAccessChanged(membership.userId, orgId, projectId);
 }
 
 export async function setCanViewAllProjects(
@@ -233,61 +235,6 @@ export async function checkEmailExists(email: string): Promise<boolean> {
   return !!user;
 }
 
-export async function addMember(
-  orgId: string,
-  input: AddMemberInput,
-  actor: Actor,
-  ipAddress?: string
-) {
-  assertCanAssignRole(actor.role, input.role);
-
-  if (input.projectId) {
-    const project = await prisma.project.findUnique({ where: { id: input.projectId } });
-    if (!project || project.orgId !== orgId) {
-      throw new NotFoundError("Project not found");
-    }
-  }
-
-  const user = await prisma.user.findUnique({ where: { email: input.email } });
-
-  if (!user) {
-    throw new NotFoundError("No registered user with this email");
-  }
-
-  const existing = await prisma.orgMembership.findUnique({
-    where: { userId_orgId: { userId: user.id, orgId } },
-  });
-
-  if (existing) {
-    throw new ConflictError("User is already a member of this organization");
-  }
-
-  return prisma.$transaction(async (tx) => {
-    const membership = await tx.orgMembership.create({
-      data: { userId: user.id, orgId, role: input.role, invitedById: actor.id },
-      include: { user: { select: { id: true, name: true, email: true } } },
-    });
-
-    if (input.projectId) {
-      await tx.projectMembership.create({
-        data: { userId: user.id, projectId: input.projectId, grantedById: actor.id },
-      });
-    }
-
-    await writeAuditLog(tx, {
-      orgId,
-      actorId: actor.id,
-      action: "member.add",
-      targetType: "OrgMembership",
-      targetId: membership.id,
-      projectId: input.projectId,
-      metadata: { email: user.email, role: input.role, projectId: input.projectId ?? null },
-      ipAddress,
-    });
-
-    return membership;
-  });
-}
 
 export async function updateMemberRole(
   orgId: string,
@@ -373,6 +320,9 @@ export async function removeMember(
       ipAddress,
     });
 
+    await tx.projectMembership.deleteMany({
+      where: { userId: membership.userId, project: { orgId } },
+    });
     await tx.orgMembership.delete({ where: { id: membershipId } });
   });
 
@@ -428,6 +378,9 @@ export async function leaveOrganization(orgId: string, userId: string, ipAddress
       ipAddress,
     });
 
+    await tx.projectMembership.deleteMany({
+      where: { userId, project: { orgId } },
+    });
     await tx.orgMembership.delete({ where: { id: membership.id } });
   });
   notifyUserAccessChanged(userId, orgId);
@@ -463,6 +416,8 @@ export async function transferOwnership(
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
   const notifyNewOwner = await shouldNotify(targetMembership.userId, "accessChanges");
 
+  const orgProjects = await prisma.project.findMany({ where: { orgId }, select: { id: true } });
+
   await prisma.$transaction(async (tx) => {
     await tx.orgMembership.update({
       where: { id: actorMembership.id },
@@ -472,6 +427,14 @@ export async function transferOwnership(
       where: { id: targetMembership.id },
       data: { role: "OWNER" },
     });
+
+    for (const project of orgProjects) {
+      await tx.projectMembership.upsert({
+        where: { userId_projectId: { userId: actorId, projectId: project.id } },
+        create: { userId: actorId, projectId: project.id, role: "ADMIN", grantedById: actorId },
+        update: { role: "ADMIN" },
+      });
+    }
 
     await writeAuditLog(tx, {
       orgId,

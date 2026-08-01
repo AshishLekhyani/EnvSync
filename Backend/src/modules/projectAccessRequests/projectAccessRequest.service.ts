@@ -1,11 +1,12 @@
-import { OrgMembership } from "@prisma/client";
+import { OrgMembership, OrgRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
 import { canBrowseAllProjects, hasProjectAccess } from "../rbac/projectAccess.service";
 import { writeAuditLog } from "../audit/audit.service";
 import { notifyUserAccessChanged, notifyUserNotificationCreated } from "../auth/sse";
 import { shouldNotify } from "../notifications/notification.service";
-import { Actor } from "../orgs/membership.service";
+import { Actor, assertCanAssignRole } from "../orgs/membership.service";
+import { ROLE_WEIGHT } from "../rbac/roles";
 
 async function resolveApprovers(orgId: string, projectId: string): Promise<string[]> {
   const owners = await prisma.orgMembership.findMany({
@@ -30,10 +31,15 @@ export async function createAccessRequest(
   orgId: string,
   projectId: string,
   actor: Actor,
+  requestedRole: OrgRole | null,
   ipAddress?: string
 ) {
   if (!canBrowseAllProjects(actor.role)) {
     throw new ForbiddenError("Your role can't request project access");
+  }
+
+  if (requestedRole && !(ROLE_WEIGHT[requestedRole] > ROLE_WEIGHT[actor.role])) {
+    throw new ForbiddenError("The requested role must be above your current role");
   }
 
   const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -49,7 +55,7 @@ export async function createAccessRequest(
   }
 
   const request = await prisma.projectAccessRequest.create({
-    data: { orgId, projectId, requestedById: actor.id },
+    data: { orgId, projectId, requestedById: actor.id, requestedRole: requestedRole ?? undefined },
   });
 
   await writeAuditLog(prisma, {
@@ -59,7 +65,7 @@ export async function createAccessRequest(
     targetType: "ProjectAccessRequest",
     targetId: request.id,
     projectId,
-    metadata: { projectName: project.name },
+    metadata: { projectName: project.name, requestedRole: requestedRole ?? null },
     ipAddress,
   });
 
@@ -74,12 +80,13 @@ export async function createAccessRequest(
       where: { id: actor.id },
       select: { name: true },
     });
+    const roleSuffix = requestedRole ? ` as ${requestedRole}` : "";
     await prisma.notification.createMany({
       data: approverIds.map((recipientId) => ({
         orgId,
         recipientId,
         type: "project_access.requested",
-        message: `${requester.name} requested access to ${project.name}`,
+        message: `${requester.name} requested access to ${project.name}${roleSuffix}`,
         targetType: "ProjectAccessRequest",
         targetId: request.id,
         metadata: { orgId, requestId: request.id, projectId, projectName: project.name },
@@ -110,17 +117,27 @@ async function getPendingRequest(orgId: string, requestId: string) {
   return request;
 }
 
-async function assertCanDecide(orgId: string, projectId: string, actorMembership: OrgMembership) {
-  if (actorMembership.role === "OWNER") return;
-  const allowed = await hasProjectAccess(
-    orgId,
-    actorMembership.userId,
-    projectId,
-    actorMembership.role,
-    actorMembership
-  );
-  if (!allowed) {
-    throw new ForbiddenError("You don't have access to this project yourself");
+async function assertCanDecide(
+  orgId: string,
+  projectId: string,
+  actorMembership: OrgMembership,
+  requestedRole: OrgRole | null
+) {
+  if (actorMembership.role !== "OWNER") {
+    const allowed = await hasProjectAccess(
+      orgId,
+      actorMembership.userId,
+      projectId,
+      actorMembership.role,
+      actorMembership
+    );
+    if (!allowed) {
+      throw new ForbiddenError("You don't have access to this project yourself");
+    }
+  }
+
+  if (requestedRole) {
+    assertCanAssignRole(actorMembership.role, requestedRole);
   }
 }
 
@@ -131,8 +148,14 @@ export async function approveAccessRequest(
   ipAddress?: string
 ) {
   const request = await getPendingRequest(orgId, requestId);
-  await assertCanDecide(orgId, request.projectId, actorMembership);
+  await assertCanDecide(orgId, request.projectId, actorMembership, request.requestedRole);
   const notify = await shouldNotify(request.requestedById, "accessChanges");
+
+  const requesterMembership = await prisma.orgMembership.findUniqueOrThrow({
+    where: { userId_orgId: { userId: request.requestedById, orgId } },
+  });
+  const roleChanged =
+    !!request.requestedRole && request.requestedRole !== requesterMembership.role;
 
   await prisma.$transaction(async (tx) => {
     await tx.projectMembership.upsert({
@@ -146,6 +169,27 @@ export async function approveAccessRequest(
       },
       update: {},
     });
+
+    if (roleChanged) {
+      await tx.orgMembership.update({
+        where: { id: requesterMembership.id },
+        data: { role: request.requestedRole! },
+      });
+
+      await writeAuditLog(tx, {
+        orgId,
+        actorId: actorMembership.userId,
+        action: "member.role_change",
+        targetType: "OrgMembership",
+        targetId: requesterMembership.id,
+        metadata: {
+          email: request.requestedBy.email,
+          previousRole: requesterMembership.role,
+          newRole: request.requestedRole,
+        },
+        ipAddress,
+      });
+    }
 
     await tx.projectAccessRequest.update({
       where: { id: request.id },
@@ -162,17 +206,19 @@ export async function approveAccessRequest(
       metadata: {
         projectName: request.project.name,
         requesterEmail: request.requestedBy.email,
+        grantedRole: roleChanged ? request.requestedRole : null,
       },
       ipAddress,
     });
 
     if (notify) {
+      const roleNote = roleChanged ? ` (now ${request.requestedRole})` : "";
       await tx.notification.create({
         data: {
           orgId,
           recipientId: request.requestedById,
           type: "project_access.approved",
-          message: `Your request for access to ${request.project.name} was approved`,
+          message: `Your request for access to ${request.project.name} was approved${roleNote}`,
           targetType: "Project",
           targetId: request.projectId,
           metadata: { orgId, requestId: request.id, projectId: request.projectId },
@@ -192,7 +238,7 @@ export async function rejectAccessRequest(
   ipAddress?: string
 ) {
   const request = await getPendingRequest(orgId, requestId);
-  await assertCanDecide(orgId, request.projectId, actorMembership);
+  await assertCanDecide(orgId, request.projectId, actorMembership, null);
   const notify = await shouldNotify(request.requestedById, "accessChanges");
 
   await prisma.$transaction(async (tx) => {
@@ -247,6 +293,7 @@ export async function listAccessRequests(orgId: string) {
     id: r.id,
     project: r.project,
     requestedBy: r.requestedBy,
+    requestedRole: r.requestedRole,
     createdAt: r.createdAt,
   }));
 }

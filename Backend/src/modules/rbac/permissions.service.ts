@@ -20,7 +20,7 @@ function toUpperAccess(access: EnvironmentAccess): EnvironmentAccessLevel {
   return access.toUpperCase() as EnvironmentAccessLevel;
 }
 
-export async function getEffectiveAccess(
+async function getEffectiveAccessForRole(
   orgId: string,
   role: OrgRole,
   environmentType: EnvironmentType
@@ -38,6 +38,32 @@ export async function getEffectiveAccess(
   }
 
   return getEnvironmentAccess(role, environmentType);
+}
+
+/**
+ * Environment access is project-scoped: an org role alone grants nothing inside a
+ * specific project. Only the OWNER's org-wide role bypasses this (auto-admin everywhere).
+ */
+export async function getEffectiveAccess(
+  orgId: string,
+  projectId: string,
+  userId: string,
+  orgRole: OrgRole,
+  environmentType: EnvironmentType
+): Promise<EnvironmentAccess> {
+  if (orgRole === "OWNER") {
+    return "write";
+  }
+
+  const grant = await prisma.projectMembership.findUnique({
+    where: { userId_projectId: { userId, projectId } },
+  });
+
+  if (!grant) {
+    return "none";
+  }
+
+  return getEffectiveAccessForRole(orgId, grant.role, environmentType);
 }
 
 export async function getPermissionMatrix(orgId: string) {

@@ -10,6 +10,7 @@ import { useConfirm } from "@/lib/confirm-context";
 import {
   api,
   ApiError,
+  DeletedSecretMetadata,
   EnvironmentSummary,
   MemberSummary,
   SecretMetadata,
@@ -94,6 +95,13 @@ export default function EnvironmentSecretsPage() {
   const [savingExpiry, setSavingExpiry] = useState(false);
 
   const [showCopyToast, setShowCopyToast] = useState(false);
+
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [deletedSecrets, setDeletedSecrets] = useState<DeletedSecretMetadata[]>([]);
+  const [deletedLoading, setDeletedLoading] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  const canWrite = environment?.access === "write";
 
   const copyText = async (text: string) => {
     try {
@@ -210,14 +218,57 @@ export default function EnvironmentSecretsPage() {
   };
 
   const onDelete = async (secretId: string) => {
-    if (!(await confirm({ message: "Delete this secret? This cannot be undone.", danger: true })))
+    if (
+      !(await confirm({
+        message: "Delete this secret? It can be recovered within 24 hours, then it's gone for good.",
+        danger: true,
+      }))
+    )
       return;
     setError(null);
     try {
       await api.deleteSecret(secretId);
       setSecrets((prev) => prev.filter((s) => s.id !== secretId));
+      if (showDeleted) {
+        loadDeleted();
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to delete secret");
+    }
+  };
+
+  const loadDeleted = async () => {
+    setDeletedLoading(true);
+    setError(null);
+    try {
+      const list = await api.listDeletedSecrets(environmentId);
+      setDeletedSecrets(list);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load recently deleted secrets");
+    } finally {
+      setDeletedLoading(false);
+    }
+  };
+
+  const onToggleDeleted = () => {
+    const next = !showDeleted;
+    setShowDeleted(next);
+    if (next) {
+      loadDeleted();
+    }
+  };
+
+  const onRestoreDeleted = async (secretId: string) => {
+    setRestoringId(secretId);
+    setError(null);
+    try {
+      const restored = await api.restoreDeletedSecret(secretId);
+      setSecrets((prev) => [...prev, restored]);
+      setDeletedSecrets((prev) => prev.filter((s) => s.id !== secretId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to restore secret");
+    } finally {
+      setRestoringId(null);
     }
   };
 
@@ -346,18 +397,6 @@ export default function EnvironmentSecretsPage() {
     <AppShell
       searchPlaceholder="Search for secrets..."
       onSearch={setSearch}
-      trailing={
-        environment && (
-          <button
-            type="button"
-            onClick={() => setShowAdd((v) => !v)}
-            className="flex items-center gap-xs rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary shadow-sm transition-all hover:bg-opacity-90 active:scale-95"
-          >
-            <Icon name="add" style={{ fontSize: 18 }} />
-            Add Variable
-          </button>
-        )
-      }
       mainClassName="flex-1 overflow-y-auto p-xl"
       showMobileNav={false}
     >
@@ -393,13 +432,25 @@ export default function EnvironmentSecretsPage() {
                   </span>
                 </h1>
               </div>
-              <div className="flex items-center gap-xs rounded-lg border border-green-200 bg-green-50 px-md py-sm text-green-700 shadow-sm dark:border-[#40C463]/30 dark:bg-[#1F883D]/20 dark:text-[#40C463]">
-                <Icon
-                  name="lock"
-                  filled
-                  style={{ fontSize: 16, fontVariationSettings: "'FILL' 1" }}
-                />
-                <span className="font-label-md text-label-md font-bold">AES-256 Encrypted</span>
+              <div className="flex items-center gap-sm">
+                <div className="flex items-center gap-xs rounded-lg border border-green-200 bg-green-50 px-md py-sm text-green-700 shadow-sm dark:border-[#40C463]/30 dark:bg-[#1F883D]/20 dark:text-[#40C463]">
+                  <Icon
+                    name="lock"
+                    filled
+                    style={{ fontSize: 16, fontVariationSettings: "'FILL' 1" }}
+                  />
+                  <span className="font-label-md text-label-md font-bold">AES-256 Encrypted</span>
+                </div>
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAdd((v) => !v)}
+                    className="flex items-center gap-xs rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary shadow-sm transition-all hover:bg-opacity-90 active:scale-95"
+                  >
+                    <Icon name="add" style={{ fontSize: 18 }} />
+                    Add Variable
+                  </button>
+                )}
               </div>
             </div>
 
@@ -535,7 +586,7 @@ export default function EnvironmentSecretsPage() {
                           </span>
                         </td>
                         <td className="px-md py-sm">
-                          {editingId === secret.id ? (
+                          {editingId === secret.id && canWrite ? (
                             <div className="flex items-center gap-sm">
                               <input
                                 autoFocus
@@ -601,7 +652,7 @@ export default function EnvironmentSecretsPage() {
                           {memberName(secret.updatedById)}
                         </td>
                         <td className="px-md py-sm">
-                          {editingExpiryId === secret.id ? (
+                          {editingExpiryId === secret.id && canWrite ? (
                             <div className="flex items-center gap-sm">
                               <input
                                 autoFocus
@@ -631,7 +682,7 @@ export default function EnvironmentSecretsPage() {
                           ) : (
                             (() => {
                               const badge = expiryBadge(secret.expiresAt);
-                              return (
+                              return canWrite ? (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -644,6 +695,8 @@ export default function EnvironmentSecretsPage() {
                                 >
                                   {badge.label}
                                 </button>
+                              ) : (
+                                <span className={badge.className}>{badge.label}</span>
                               );
                             })()
                           )}
@@ -660,38 +713,42 @@ export default function EnvironmentSecretsPage() {
                             >
                               <Icon name="history" style={{ fontSize: 18 }} />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingId(secret.id);
-                                setEditValue("");
-                              }}
-                              className="text-secondary transition-colors hover:text-primary"
-                              aria-label="Edit value"
-                            >
-                              <Icon name="edit" style={{ fontSize: 18 }} />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={rotatingId === secret.id}
-                              onClick={() => onRotate(secret.id)}
-                              className="text-secondary transition-colors hover:text-primary disabled:opacity-50"
-                              aria-label="Rotate value"
-                            >
-                              <Icon
-                                name="autorenew"
-                                className={rotatingId === secret.id ? "animate-spin" : ""}
-                                style={{ fontSize: 18 }}
-                              />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onDelete(secret.id)}
-                              className="text-secondary transition-colors hover:text-[#CF222E]"
-                              aria-label="Delete secret"
-                            >
-                              <Icon name="delete" style={{ fontSize: 18 }} />
-                            </button>
+                            {canWrite && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingId(secret.id);
+                                    setEditValue("");
+                                  }}
+                                  className="text-secondary transition-colors hover:text-primary"
+                                  aria-label="Edit value"
+                                >
+                                  <Icon name="edit" style={{ fontSize: 18 }} />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={rotatingId === secret.id}
+                                  onClick={() => onRotate(secret.id)}
+                                  className="text-secondary transition-colors hover:text-primary disabled:opacity-50"
+                                  aria-label="Rotate value"
+                                >
+                                  <Icon
+                                    name="autorenew"
+                                    className={rotatingId === secret.id ? "animate-spin" : ""}
+                                    style={{ fontSize: 18 }}
+                                  />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onDelete(secret.id)}
+                                  className="text-secondary transition-colors hover:text-[#CF222E]"
+                                  aria-label="Delete secret"
+                                >
+                                  <Icon name="delete" style={{ fontSize: 18 }} />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -776,7 +833,7 @@ export default function EnvironmentSecretsPage() {
                                             style={{ fontSize: 18 }}
                                           />
                                         </button>
-                                        {!isCurrent && (
+                                        {!isCurrent && canWrite && (
                                           <button
                                             type="button"
                                             disabled={restoringVersionKey === versionKey}
@@ -829,6 +886,80 @@ export default function EnvironmentSecretsPage() {
                 </table>
               </div>
             </div>
+
+            {canWrite && (
+              <div className="mt-xl">
+                <button
+                  type="button"
+                  onClick={onToggleDeleted}
+                  className="flex items-center gap-xs font-label-md text-label-md text-secondary transition-colors hover:text-primary"
+                >
+                  <Icon
+                    name={showDeleted ? "expand_less" : "expand_more"}
+                    style={{ fontSize: 18 }}
+                  />
+                  Recently Deleted
+                  {deletedSecrets.length > 0 && (
+                    <span className="rounded-full bg-outline-variant px-sm py-[1px] text-[10px] text-on-surface-variant">
+                      {deletedSecrets.length}
+                    </span>
+                  )}
+                </button>
+                {showDeleted && (
+                  <div className="mt-sm overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm dark:bg-surface-container-lowest">
+                    {deletedLoading ? (
+                      <div className="flex justify-center py-lg text-secondary">
+                        <Icon
+                          name="progress_activity"
+                          className="animate-spin"
+                          style={{ fontSize: 20 }}
+                        />
+                      </div>
+                    ) : deletedSecrets.length === 0 ? (
+                      <p className="px-md py-lg text-center font-body-sm text-body-sm text-secondary">
+                        Nothing deleted in the last 24 hours.
+                      </p>
+                    ) : (
+                      <div className="divide-y divide-outline-variant">
+                        {deletedSecrets.map((secret) => {
+                          const hoursLeft = Math.max(
+                            0,
+                            Math.ceil(
+                              (new Date(secret.purgesAt).getTime() - Date.now()) /
+                                (60 * 60 * 1000)
+                            )
+                          );
+                          return (
+                            <div
+                              key={secret.id}
+                              className="flex items-center justify-between gap-md px-md py-sm"
+                            >
+                              <div>
+                                <span className="rounded border border-outline-variant bg-surface-container px-xs py-[2px] font-code-md text-code-md text-on-surface">
+                                  {secret.key}
+                                </span>
+                                <span className="ml-sm font-body-sm text-[11px] text-on-surface-variant">
+                                  Deleted {new Date(secret.deletedAt).toLocaleString()} ·
+                                  permanently gone in {hoursLeft}h
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={restoringId === secret.id}
+                                onClick={() => onRestoreDeleted(secret.id)}
+                                className="rounded-lg border border-primary/40 px-sm py-1 font-label-md text-[11px] text-primary transition-colors hover:bg-primary/5 disabled:opacity-50"
+                              >
+                                {restoringId === secret.id ? "Restoring..." : "Restore"}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-xl">
               <h3 className="mb-md font-h3 text-h3 text-on-surface">Quick Access</h3>

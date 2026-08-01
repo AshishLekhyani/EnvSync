@@ -99,9 +99,10 @@ function ProjectAccessRow({
           projectAccess: (member.projectAccess ?? []).filter((p) => p.id !== projectId),
         });
       } else {
-        await api.grantProjectAccess(orgId, member.membershipId, projectId);
+        const role = member.role === "OWNER" ? "VIEWER" : member.role;
+        await api.grantProjectAccess(orgId, member.membershipId, projectId, role);
         onUpdate(member.membershipId, {
-          projectAccess: [...(member.projectAccess ?? []), { id: projectId, name: projectName }],
+          projectAccess: [...(member.projectAccess ?? []), { id: projectId, name: projectName, role }],
         });
       }
     } catch (err) {

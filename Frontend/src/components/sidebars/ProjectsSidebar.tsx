@@ -39,7 +39,7 @@ const ALL_ENV_TYPES: EnvironmentType[] = [
   "PRODUCTION",
 ];
 
-function EnvironmentList({ projectId }: { projectId: string }) {
+function EnvironmentList({ projectId, canManage }: { projectId: string; canManage: boolean }) {
   const params = useParams<{ environmentId?: string }>();
   const queryClient = useQueryClient();
 
@@ -107,7 +107,7 @@ function EnvironmentList({ projectId }: { projectId: string }) {
         );
       })}
 
-      {showNewEnv ? (
+      {canManage && showNewEnv ? (
         <form onSubmit={onCreateEnv} className="mt-xs flex flex-col gap-xs">
           <Select
             required
@@ -148,6 +148,7 @@ function EnvironmentList({ projectId }: { projectId: string }) {
           </div>
         </form>
       ) : (
+        canManage &&
         availableTypes.length > 0 && (
           <button
             type="button"
@@ -287,7 +288,12 @@ export function ProjectsSidebar() {
                       {project.environmentCount}
                     </span>
                   </div>
-                  {expanded && <EnvironmentList projectId={project.id} />}
+                  {expanded && (
+                    <EnvironmentList
+                      projectId={project.id}
+                      canManage={project.myRole === "OWNER" || project.myRole === "ADMIN"}
+                    />
+                  )}
                 </div>
               );
             })
