@@ -1,6 +1,6 @@
 {
   "name": "@ashishlekhyani/envsync-cli",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": false,
   "publishConfig": {
     "access": "public"
@@ -32,11 +32,13 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "cross-spawn": "^7.0.6"
+    "cross-spawn": "^7.0.6",
+    "prompts": "^2.4.2"
   },
   "devDependencies": {
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^20.17.16",
+    "@types/prompts": "^2.4.9",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   },

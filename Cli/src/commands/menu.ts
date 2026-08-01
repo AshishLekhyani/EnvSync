@@ -1,6 +1,6 @@
 import { apiRequest } from "../apiClient";
 import { readLink, writeLink } from "../link";
-import { askChoice, askYesNo, ask, closePrompt } from "../prompt";
+import { askChoice, askYesNo, ask } from "../prompt";
 import { requireSession } from "../session";
 import { runLogout } from "./logout";
 import { runPull } from "./pull";
@@ -67,42 +67,45 @@ async function pickProjectAndEnvironment(): Promise<{ projectId: string; environ
 }
 
 export async function runMenu(): Promise<void> {
-  try {
-    const { projectId, environmentId } = await pickProjectAndEnvironment();
-    const flags = ["--project", projectId, "--environment", environmentId];
+  if (!process.stdin.isTTY) {
+    console.error(
+      "The interactive menu needs a real terminal. Run `envsync --help` for the flag-based commands instead."
+    );
+    process.exit(1);
+  }
 
-    while (true) {
-      console.log("");
-      const action = await askChoice("What do you want to do?", [
-        { label: "Pull secrets into .env", value: "pull" },
-        { label: "Push .env back to the server", value: "push" },
-        { label: "Run a command with secrets injected", value: "run" },
-        { label: "Check status (diff against .env)", value: "status" },
-        { label: "Log out", value: "logout" },
-        { label: "Exit", value: "exit" },
-      ]);
+  const { projectId, environmentId } = await pickProjectAndEnvironment();
+  const flags = ["--project", projectId, "--environment", environmentId];
 
-      if (action === "exit") {
-        return;
-      }
+  while (true) {
+    console.log("");
+    const action = await askChoice("What do you want to do?", [
+      { label: "Pull secrets into .env", value: "pull" },
+      { label: "Push .env back to the server", value: "push" },
+      { label: "Run a command with secrets injected", value: "run" },
+      { label: "Check status (diff against .env)", value: "status" },
+      { label: "Log out", value: "logout" },
+      { label: "Exit", value: "exit" },
+    ]);
 
-      if (action === "logout") {
-        await runLogout();
-        return;
-      }
-
-      if (action === "run") {
-        const cmd = await ask("Command to run (e.g. npm start): ");
-        if (!cmd) continue;
-        await runRun([...flags, "--", ...cmd.split(" ")]);
-        continue;
-      }
-
-      if (action === "pull") await runPull(flags);
-      if (action === "push") await runPush(flags);
-      if (action === "status") await runStatus(flags);
+    if (action === "exit") {
+      return;
     }
-  } finally {
-    closePrompt();
+
+    if (action === "logout") {
+      await runLogout();
+      return;
+    }
+
+    if (action === "run") {
+      const cmd = await ask("Command to run (e.g. npm start): ");
+      if (!cmd) continue;
+      await runRun([...flags, "--", ...cmd.split(" ")]);
+      continue;
+    }
+
+    if (action === "pull") await runPull(flags);
+    if (action === "push") await runPush(flags);
+    if (action === "status") await runStatus(flags);
   }
 }
