@@ -6,6 +6,22 @@ export const metadata = { title: "Changelog — EnvSync" };
 
 const ENTRIES = [
   {
+    version: "v0.17",
+    date: "August 2026",
+    title: "CLI overhaul: interactive menu, project linking, real fixes",
+    items: [
+      "envsync (no arguments) now launches an interactive, arrow-key menu that picks your project, environment, and action for you — no IDs or flags needed.",
+      "envsync link remembers a project/environment for the current folder, so pull/push/run/status/environments no longer require --project/--environment.",
+      "envsync --version now actually works (previously silently fell back to the help text).",
+      "The CLI now retries and shows a \"waking up the server\" message during Render cold starts, matching the web app's own loading screen.",
+      "envsync status now shows each key's last-updated time and flags anything changed remotely since your last pull.",
+      "Fixed envsync run failing on Windows for npm/npx/yarn-based commands.",
+      "Fixed a security gap where an API token could list every organization its creator belongs to, instead of only the one it was scoped to.",
+      "Fixed several docs and in-app pages referencing the wrong CLI npm package name.",
+      "Investigated real email delivery (SendGrid) but reverted to the existing copy-the-link flow after persistent spam-folder and deliverability issues without a verified sending domain — password reset, invites, and verification remain fully functional either way.",
+    ],
+  },
+  {
     version: "v0.16",
     date: "July 2026",
     title: "Going live: real email, verified signup, Google-only OAuth",

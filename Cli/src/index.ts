@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
 import { runLink } from "./commands/link";
 import { runLogin } from "./commands/login";
 import { runLogout } from "./commands/logout";
@@ -12,6 +14,15 @@ import { runEnvironments } from "./commands/environments";
 import { ApiError } from "./apiClient";
 import { hasSession } from "./session";
 
+function getVersion(): string {
+  try {
+    const pkgPath = path.join(__dirname, "..", "package.json");
+    return JSON.parse(fs.readFileSync(pkgPath, "utf8")).version;
+  } catch {
+    return "unknown";
+  }
+}
+
 function printHelp() {
   console.log(`envsync <command> [options]
 
@@ -19,6 +30,7 @@ Run \`envsync\` with no command (once logged in) for an interactive menu that
 walks you through picking a project/environment and an action — no flags needed.
 
 Commands:
+  --version                                                 Print the installed CLI version
   login [token]                                             Authenticate with a service token (reads stdin if omitted)
   logout                                                    Remove local credentials
   menu                                                       Interactive: pick a project/environment, then an action
@@ -72,6 +84,11 @@ async function main() {
     case "--help":
     case "-h":
       printHelp();
+      break;
+    case "version":
+    case "--version":
+    case "-v":
+      console.log(getVersion());
       break;
     case undefined:
       if (hasSession()) {

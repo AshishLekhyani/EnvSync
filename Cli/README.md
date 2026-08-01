@@ -1,6 +1,6 @@
 # @ashishlekhyani/envsync-cli
 
-The command-line client for [EnvSync](https://github.com/AshishLekhyani/EnvSync) — a secrets manager for environment variables. Pull, push, and inject secrets without ever committing a `.env` file. One runtime dependency, [`cross-spawn`](https://www.npmjs.com/package/cross-spawn) (used only by `envsync run`, for correct cross-platform command execution — it has zero dependencies of its own and is the same package npm itself relies on internally).
+The command-line client for [EnvSync](https://github.com/AshishLekhyani/EnvSync) — a secrets manager for environment variables. Pull, push, and inject secrets without ever committing a `.env` file. Two small runtime dependencies: [`cross-spawn`](https://www.npmjs.com/package/cross-spawn) (used only by `envsync run`, for correct cross-platform command execution — the same package npm itself relies on internally) and [`prompts`](https://www.npmjs.com/package/prompts) (the arrow-key interactive menu — the same package behind `npm init`/`create-vite`'s own prompts).
 
 ## Install
 
@@ -17,7 +17,31 @@ npm install -g @ashishlekhyani/envsync-cli
    ```
    or pass it directly: `envsync login <token>`
 3. Run `envsync` with no arguments — it launches an interactive menu that picks your
-   project, environment, and action (pull/push/run/status) for you. No IDs or flags needed.
+   project, environment, and action (pull/push/run/status) for you. No IDs or flags needed:
+   ```
+   $ envsync
+   ? Project ›
+   ❯ Core API
+     Marketing Site
+
+   ? Environment ›
+   ❯ Production
+     Staging
+     Development
+
+   ? Link this folder to that project/environment for next time? › yes
+
+   ? What do you want to do? ›
+   ❯ Pull secrets into .env
+     Push .env back to the server
+     Run a command with secrets injected
+     Check status (diff against .env)
+     Log out
+     Exit
+
+   Pulled 6 secret(s) into ./.env
+   ```
+   (Illustrative — your real org/project/environment names will differ. Use arrow keys and Enter throughout.)
 
 Prefer flags/scripting instead? That works too:
 1. Find your project/environment IDs:

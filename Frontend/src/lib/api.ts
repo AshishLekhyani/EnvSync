@@ -290,6 +290,8 @@ export interface ProjectAccessRequestSummary {
 }
 
 export const api = {
+  getCliVersion: () => request<{ version: string | null }>("/meta/cli-version"),
+
   signup: (input: { name: string; email: string; password: string; invite?: string }) =>
     request<{ sent: boolean; verifyToken: string | null }>("/auth/signup", {
       method: "POST",

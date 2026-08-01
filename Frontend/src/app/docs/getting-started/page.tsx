@@ -75,7 +75,7 @@ export default function GettingStartedDocsPage() {
           <div className="overflow-hidden rounded-lg border border-[#30363D]">
             <div className="code-block-body p-md">
               <code className="font-code-md text-code-md text-[#E6EDF3]">
-                <span className="text-[#FF7B72]">npm</span> install -g envsync-cli
+                <span className="text-[#FF7B72]">npm</span> install -g @ashishlekhyani/envsync-cli
               </code>
             </div>
           </div>
@@ -93,15 +93,16 @@ export default function GettingStartedDocsPage() {
                 <span className="text-[#79C0FF]">&lt;your-token&gt;</span>
               </code>
               <code className="block font-code-md text-code-md text-[#E6EDF3]">
-                <span className="text-[#FF7B72]">envsync</span> pull --project{" "}
-                <span className="text-[#79C0FF]">&lt;id&gt;</span> --environment{" "}
-                <span className="text-[#79C0FF]">&lt;id&gt;</span>
+                <span className="text-[#FF7B72]">envsync</span>
               </code>
             </div>
           </div>
           <p className="mt-sm font-body-md text-body-md text-secondary">
-            That writes a real <code className="rounded bg-surface-container px-1 font-code-sm text-code-sm">.env</code> file to your working
-            directory. See the full{" "}
+            Running <code className="rounded bg-surface-container px-1 font-code-sm text-code-sm">envsync</code> with
+            no arguments launches an interactive menu that picks your project, environment, and
+            action (like pulling into a real{" "}
+            <code className="rounded bg-surface-container px-1 font-code-sm text-code-sm">.env</code> file) for
+            you — no IDs or flags needed. See the full{" "}
             <Link href="/docs/cli" className="text-primary hover:underline">
               CLI Reference
             </Link>{" "}

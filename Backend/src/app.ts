@@ -28,6 +28,9 @@ import {
   orgAccessRequestsRouter,
 } from "./modules/projectAccessRequests/projectAccessRequest.routes";
 
+let cliVersionCache: { version: string | null; fetchedAt: number } | null = null;
+const CLI_VERSION_CACHE_MS = 60 * 60 * 1000;
+
 export function createApp() {
   const app = express();
 
@@ -41,6 +44,22 @@ export function createApp() {
 
   app.get("/api/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
+  });
+
+  app.get("/api/meta/cli-version", async (_req, res) => {
+    const now = Date.now();
+    if (!cliVersionCache || now - cliVersionCache.fetchedAt > CLI_VERSION_CACHE_MS) {
+      try {
+        const npmRes = await fetch(
+          "https://registry.npmjs.org/@ashishlekhyani/envsync-cli/latest"
+        );
+        const data = npmRes.ok ? ((await npmRes.json()) as { version?: string }) : {};
+        cliVersionCache = { version: data.version ?? null, fetchedAt: now };
+      } catch {
+        cliVersionCache = { version: null, fetchedAt: now };
+      }
+    }
+    res.status(200).json({ version: cliVersionCache.version });
   });
 
   app.use("/api", apiRateLimiter);

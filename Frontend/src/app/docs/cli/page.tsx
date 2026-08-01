@@ -83,6 +83,45 @@ export default function CliDocsPage() {
         </p>
       </div>
 
+      <div className="mb-lg overflow-hidden rounded-lg border border-[#30363D]">
+        <div className="code-block-header flex items-center px-md py-sm">
+          <span className="font-code-sm text-code-sm text-[#8B949E]">
+            Example session (illustrative — your org/project names will differ)
+          </span>
+        </div>
+        <div className="code-block-body p-md">
+          <pre className="whitespace-pre-wrap font-code-sm text-code-sm text-[#E6EDF3]">
+{`$ envsync login <token>
+Logged in as jordan@example.com
+
+$ envsync
+? Project ›
+❯ Core API
+  Marketing Site
+
+? Environment ›
+❯ Production
+  Staging
+  Development
+
+? Link this folder to that project/environment for next time? › yes
+
+? What do you want to do? ›
+❯ Pull secrets into .env
+  Push .env back to the server
+  Run a command with secrets injected
+  Check status (diff against .env)
+  Log out
+  Exit
+
+Pulled 6 secret(s) into ./.env
+
+? What do you want to do? ›
+❯ Exit`}
+          </pre>
+        </div>
+      </div>
+
       <div className="flex flex-col divide-y divide-outline-variant rounded-xl border border-outline-variant bg-white dark:bg-surface-container-lowest">
         {COMMANDS.map((c) => (
           <div key={c.cmd} className="p-md">

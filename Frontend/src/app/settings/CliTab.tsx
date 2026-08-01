@@ -11,6 +11,7 @@ export function CliTab() {
   const confirm = useConfirm();
   const [showToast, setShowToast] = useState(false);
 
+  const [cliVersion, setCliVersion] = useState<string | null>(null);
   const [tokens, setTokens] = useState<ApiTokenSummary[]>([]);
   const [tokensLoading, setTokensLoading] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -18,6 +19,10 @@ export function CliTab() {
   const [creatingToken, setCreatingToken] = useState(false);
   const [justCreatedToken, setJustCreatedToken] = useState<ApiTokenCreated | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getCliVersion().then((result) => setCliVersion(result.version)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!org) {
@@ -105,9 +110,11 @@ export function CliTab() {
               <Icon name="download_for_offline" className="text-primary" />
               <h2 className="font-h3 text-h3 text-on-surface">1. Install CLI</h2>
             </div>
-            <span className="rounded bg-tertiary-container px-sm py-1 font-label-md text-label-md text-on-tertiary-container text-xs">
-              v1.0.3
-            </span>
+            {cliVersion && (
+              <span className="rounded bg-tertiary-container px-sm py-1 font-label-md text-label-md text-on-tertiary-container text-xs">
+                v{cliVersion}
+              </span>
+            )}
           </div>
           <div className="space-y-md p-md">
             <p className="font-body-md text-body-md text-on-surface-variant">
