@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { OrgRole } from "@prisma/client";
+import { OrgRole, ProjectRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { asyncHandler } from "../../common/middleware/asyncHandler";
 import {
@@ -114,7 +114,7 @@ export function requireProjectAccess(resolveProjectId: ProjectIdResolver) {
 }
 
 /** Checks the caller's role scoped to a specific project (Owner bypasses). Must run after requireOrgRole. */
-export function requireProjectRole(minRole: OrgRole, resolveProjectId: ProjectIdResolver) {
+export function requireProjectRole(minRole: ProjectRole, resolveProjectId: ProjectIdResolver) {
   return asyncHandler(async (req, _res, next) => {
     if (!req.user || !req.membership) {
       throw new UnauthorizedError();

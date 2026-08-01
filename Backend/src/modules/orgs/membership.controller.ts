@@ -5,7 +5,6 @@ import {
   GrantProjectAccessInput,
   SetCanViewAllProjectsInput,
   TransferOwnershipInput,
-  UpdateMemberRoleInput,
 } from "./membership.validators";
 
 export const listMembers = asyncHandler(async (req, res) => {
@@ -22,17 +21,6 @@ export const checkEmailExists = asyncHandler(async (req, res) => {
   const query = req.query as unknown as CheckEmailQuery;
   const exists = await membershipService.checkEmailExists(query.email);
   res.status(200).json({ exists });
-});
-
-export const updateMemberRole = asyncHandler(async (req, res) => {
-  const membership = await membershipService.updateMemberRole(
-    req.params.orgId,
-    req.params.membershipId,
-    req.body as UpdateMemberRoleInput,
-    { id: req.user!.id, role: req.membership!.role },
-    req.ip
-  );
-  res.status(200).json(membership);
 });
 
 export const removeMember = asyncHandler(async (req, res) => {

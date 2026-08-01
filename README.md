@@ -13,18 +13,17 @@ Live at [envsync-five.vercel.app](https://envsync-five.vercel.app). CLI publishe
 - Account deletion, with a solo-ownership check that blocks deleting an account that would silently orphan an organization
 
 **Organizations, roles & access**
-- Four-role hierarchy: OWNER > ADMIN > DEVELOPER > VIEWER
-- A configurable role × environment-tier permission matrix (sane defaults, overridable per org) governing read/write access to DEVELOPMENT / TESTING / STAGING / PRODUCTION independently
-- Project-level access control layered on top: who can even *see* a project is a separate gate from what they can do inside one they can see. Owner always sees everything; everyone else needs an explicit grant or an org-wide "view all projects" override
-- Admins/Developers without access to a project can still browse the full project list and request access; an Admin who already has access approves or rejects
+- Roles are project-scoped, not org-wide: an org has exactly one privileged tier, Owner, with unconditional access to every project; everyone else holds Admin, Developer, or Viewer independently per project, only where explicitly granted
+- A configurable role × environment-tier permission matrix (sane defaults, overridable org-wide by the Owner) governing read/write access to DEVELOPMENT / TESTING / STAGING / PRODUCTION independently
+- Project-level access control: who can even *see* a project is a separate gate from what they can do inside one they can see. Owner always sees everything; every other member can browse the full project list and request access to any project, or a different role in one they're already in — the Owner, or that project's own Admin, approves or rejects
 - Self-service: any member can leave an organization or a specific project on their own, no admin required
-- Direct, immediate ownership transfer (Owner-only)
-- Role assignment (via invite or promotion) is capped strictly below the assigner's own role — a Developer can only ever grant Viewer, an Admin can never grant Admin or Owner
+- Direct, immediate ownership transfer (Owner-only) — the outgoing Owner keeps Admin on every project they were already running, so stepping down doesn't lock them out
+- Only the Owner, or a project's own Admin, can invite someone to that project — an Admin can grant Developer or Viewer, never a peer Admin
 
 **Invites**
-- Shareable invite links, optionally scoped to a specific project, emailed automatically when email sending is configured
-- Invites created by a Developer require Admin approval before they're usable, unless an auto-approve rule exists (per-developer or org-wide)
-- A live notification tells the requester when their invite or access request is approved/rejected
+- Shareable invite links, either scoped to a specific project and role, or a plain org-only invite (any member can send one), emailed automatically when email sending is configured
+- Every project invite is usable immediately — the inviter already holds the exact authority they're granting, so there's no separate approval step
+- A live notification tells the requester when their access request is approved/rejected
 
 **Secrets**
 - AES-256-GCM envelope encryption: each org has its own Data Encryption Key, wrapped by a single server-held master key — rotating the master key never requires re-encrypting secret data

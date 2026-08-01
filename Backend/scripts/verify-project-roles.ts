@@ -114,13 +114,13 @@ async function main() {
   res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
     method: "POST",
     headers: authHeaders(ownerToken),
-    body: JSON.stringify({ email: `dev-${rand}@example.com`, role: "VIEWER" }),
+    body: JSON.stringify({ email: `dev-${rand}@example.com` }),
   });
   const viewerInvite = await res.json();
-  if (res.status === 201) {
-    ok("inviting a Viewer WITHOUT a projectId succeeds (org-only allowed for Viewer)");
+  if (res.status === 201 && viewerInvite.role === null) {
+    ok("org-only invite (no project) succeeds and carries no role");
   } else {
-    fail("viewer org-only invite should succeed", viewerInvite);
+    fail("org-only invite should succeed with a null role", viewerInvite);
   }
   res = await fetch(`${BASE}/invites/${viewerInvite.token}/accept`, {
     method: "POST",
@@ -275,7 +275,7 @@ async function main() {
   res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
     method: "POST",
     headers: authHeaders(ownerToken),
-    body: JSON.stringify({ email: `stale-${rand}@example.com`, role: "VIEWER" }),
+    body: JSON.stringify({ email: `stale-${rand}@example.com` }),
   });
   const rejoinInvite = await res.json();
   await fetch(`${BASE}/invites/${rejoinInvite.token}/accept`, {
@@ -289,10 +289,173 @@ async function main() {
     fail("stale project grant should have been cleared on removal", res.status, await res.text());
   }
 
+  res = await fetch(`${BASE}/projects/${projectId}/members`, { headers: authHeaders(ownerToken) });
+  const projectMembersNow = await res.json();
+  const ownerEntries = projectMembersNow.filter(
+    (m: { role: string; user: { email: string } }) => m.user.email === `owner-${rand}@example.com`
+  );
+  if (ownerEntries.length === 1 && ownerEntries[0].role === "OWNER") {
+    ok("owner appears exactly once in project members list (no duplicate ADMIN grant)");
+  } else {
+    fail("owner should appear exactly once in project members", ownerEntries);
+  }
+
+  const upgradeToken = await signup(`upgrade-${rand}@example.com`, "Upgrade");
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(ownerToken),
+    body: JSON.stringify({ email: `upgrade-${rand}@example.com`, role: "VIEWER", projectId }),
+  });
+  const upgradeInvite = await res.json();
+  await fetch(`${BASE}/invites/${upgradeInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(upgradeToken),
+  });
+  res = await fetch(`${BASE}/orgs/${orgId}/projects/${projectId}/access-requests`, {
+    method: "POST",
+    headers: authHeaders(upgradeToken),
+    body: JSON.stringify({ requestedRole: "DEVELOPER" }),
+  });
+  const upgradeRequest = await res.json();
+  if (res.status === 201) {
+    ok("existing VIEWER can request an upgrade to DEVELOPER on the same project");
+  } else {
+    fail("existing member should be able to request a role upgrade", upgradeRequest);
+  }
+
+  res = await fetch(`${BASE}/orgs/${orgId}/project-access-requests`, {
+    headers: authHeaders(ownerToken),
+  });
+  const pendingUpgrade = (await res.json()).find((r: { id: string }) => r.id === upgradeRequest.id);
+  res = await fetch(
+    `${BASE}/orgs/${orgId}/project-access-requests/${pendingUpgrade.id}/approve`,
+    { method: "POST", headers: authHeaders(ownerToken) }
+  );
+  if (res.status === 204) {
+    ok("owner approves the role-upgrade request");
+  } else {
+    fail("upgrade approval should succeed", await res.text());
+  }
+
+  res = await fetch(`${BASE}/projects/${projectId}`, { headers: authHeaders(upgradeToken) });
+  const upgradedProject = await res.json();
+  if (upgradedProject.myRole === "DEVELOPER") {
+    ok("approving the upgrade request actually changed the project role from VIEWER to DEVELOPER");
+  } else {
+    fail("project role should now be DEVELOPER", upgradedProject);
+  }
+
+  const devOnlyToken = await signup(`devonly-${rand}@example.com`, "DevOnly");
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(ownerToken),
+    body: JSON.stringify({ email: `devonly-${rand}@example.com`, role: "DEVELOPER", projectId }),
+  });
+  const devOnlyInvite = await res.json();
+  await fetch(`${BASE}/invites/${devOnlyInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(devOnlyToken),
+  });
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(devOnlyToken),
+    body: JSON.stringify({ email: `nobody-${rand}@example.com`, role: "VIEWER", projectId }),
+  });
+  if (res.status === 403) {
+    ok("a project Developer (not Admin) cannot invite anyone to that project");
+  } else {
+    fail("Developer-issued invite should be forbidden", res.status, await res.text());
+  }
+
+  res = await fetch(`${BASE}/orgs/${orgId}/audit-logs`, { headers: authHeaders(devOnlyToken) });
+  if (res.status === 200) {
+    ok("a non-owner member can view audit logs (scoped to their accessible projects)");
+  } else {
+    fail("non-owner should be able to view audit logs, not just Owner", res.status, await res.text());
+  }
+
+  const leaverToken = await signup(`leaver-${rand}@example.com`, "Leaver");
+  res = await fetch(`${BASE}/orgs/${orgId}/invites`, {
+    method: "POST",
+    headers: authHeaders(ownerToken),
+    body: JSON.stringify({ email: `leaver-${rand}@example.com` }),
+  });
+  const leaverInvite = await res.json();
+  await fetch(`${BASE}/invites/${leaverInvite.token}/accept`, {
+    method: "POST",
+    headers: authHeaders(leaverToken),
+  });
+  const leaverMembers = await (
+    await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(leaverToken) })
+  ).json();
+  const leaverMembership = leaverMembers.find(
+    (m: { user: { email: string } }) => m.user.email === `leaver-${rand}@example.com`
+  );
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members/${leaverMembership.membershipId}`, {
+    method: "DELETE",
+    headers: authHeaders(devOnlyToken),
+  });
+  if (res.status === 403) {
+    ok("a non-owner member cannot remove someone ELSE from the org (only self, or Owner)");
+  } else {
+    fail("non-owner removing another member should be forbidden", res.status, await res.text());
+  }
+
+  res = await fetch(`${BASE}/orgs/${orgId}/members/${leaverMembership.membershipId}`, {
+    method: "DELETE",
+    headers: authHeaders(leaverToken),
+  });
+  if (res.status === 204) {
+    ok("a non-owner member can remove (leave) themselves from the org via the members endpoint");
+  } else {
+    fail("self-leave via removeMember should succeed for a non-owner", res.status, await res.text());
+  }
+
+  res = await fetch(`${BASE}/orgs/${orgId}/tokens`, {
+    method: "POST",
+    headers: authHeaders(devOnlyToken),
+    body: JSON.stringify({ name: "dev's own CLI token" }),
+  });
+  const devToken2 = await res.json();
+  if (res.status === 201) {
+    ok("a non-owner (project Developer) can create their own API token");
+  } else {
+    fail("non-owner should be able to create their own token", res.status, devToken2);
+  }
+
+  res = await fetch(`${BASE}/orgs/${orgId}/tokens`, { headers: authHeaders(devOnlyToken) });
+  const devTokenList = await res.json();
+  const onlyOwnTokens = devTokenList.every(
+    (t: { createdBy: { email: string } }) => t.createdBy.email === `devonly-${rand}@example.com`
+  );
+  if (res.status === 200 && onlyOwnTokens && devTokenList.length >= 1) {
+    ok("a non-owner only sees their own tokens, not everyone else's");
+  } else {
+    fail("non-owner token list should be scoped to their own tokens", devTokenList);
+  }
+
+  res = await fetch(`${BASE}/orgs/${orgId}/tokens`, { headers: authHeaders(ownerToken) });
+  const ownerTokenList = await res.json();
+  if (
+    res.status === 200 &&
+    ownerTokenList.some((t: { createdBy: { email: string } }) => t.createdBy.email === `devonly-${rand}@example.com`)
+  ) {
+    ok("the Owner sees every token in the org, including ones created by other members");
+  } else {
+    fail("owner should see all tokens org-wide", ownerTokenList);
+  }
+
+  const membersForTransfer = await (
+    await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(ownerToken) })
+  ).json();
+  const adminMembership = membersForTransfer.find(
+    (m: { user: { email: string } }) => m.user.email === `admin-${rand}@example.com`
+  );
   res = await fetch(`${BASE}/orgs/${orgId}/transfer-ownership`, {
     method: "POST",
     headers: authHeaders(ownerToken),
-    body: JSON.stringify({ membershipId: (await (await fetch(`${BASE}/orgs/${orgId}/members`, { headers: authHeaders(ownerToken) })).json()).find((m: { role: string }) => m.role === "ADMIN").membershipId }),
+    body: JSON.stringify({ membershipId: adminMembership.membershipId }),
   });
   if (res.status === 200 || res.status === 204) {
     ok("ownership transfer succeeds");
@@ -306,6 +469,17 @@ async function main() {
     ok("the demoted former-owner keeps ADMIN access to projects they used to manage");
   } else {
     fail("former owner should retain project access after being demoted", res.status, demotedOwnerProject);
+  }
+
+  res = await fetch(`${BASE}/orgs/${orgId}/permissions`, {
+    method: "PATCH",
+    headers: authHeaders(ownerToken),
+    body: JSON.stringify({ role: "VIEWER", environmentType: "PRODUCTION", access: "READ" }),
+  });
+  if (res.status === 403) {
+    ok("the demoted former-owner's ORG role is a plain member, not ADMIN (rejected on an ADMIN-gated org route)");
+  } else {
+    fail("former owner's org role should be demoted to the plain-member placeholder, not ADMIN", res.status, await res.text());
   }
 
   console.log(failures === 0 ? "\nAll verification checks passed." : `\n${failures} check(s) failed.`);

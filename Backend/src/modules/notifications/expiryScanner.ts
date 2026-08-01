@@ -15,6 +15,7 @@ export async function runExpiryScan() {
 
   for (const secret of expiringSecrets) {
     const orgId = secret.environment.project.orgId;
+    const projectId = secret.environment.project.id;
     const isExpired = secret.expiresAt!.getTime() <= Date.now();
     const type = isExpired ? "secret.expired" : "secret.expiring_soon";
 
@@ -25,10 +26,15 @@ export async function runExpiryScan() {
 
     if (alreadyNotified) continue;
 
-    const recipients = await prisma.orgMembership.findMany({
-      where: { orgId, role: { in: ["OWNER", "ADMIN"] } },
+    const owners = await prisma.orgMembership.findMany({
+      where: { orgId, role: "OWNER" },
       select: { userId: true },
     });
+    const projectAdmins = await prisma.projectMembership.findMany({
+      where: { projectId, role: "ADMIN" },
+      select: { userId: true },
+    });
+    const recipients = [...new Map([...owners, ...projectAdmins].map((r) => [r.userId, r])).values()];
 
     if (recipients.length === 0) continue;
 

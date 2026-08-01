@@ -4,12 +4,10 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
-import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
 import { useConfirm } from "@/lib/confirm-context";
 import { queryKeys } from "@/lib/query-keys";
-import { assignableRoles } from "@/lib/roles";
-import { api, ApiError, MemberSummary, OrgRole } from "@/lib/api";
+import { api, ApiError, MemberSummary } from "@/lib/api";
 import { roleBadgeClass } from "@/lib/roleBadge";
 
 function ProjectAccessRow({
@@ -35,32 +33,10 @@ function ProjectAccessRow({
 
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [pendingViewAll, setPendingViewAll] = useState(false);
-  const [changingRole, setChangingRole] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const roleOptions = org ? assignableRoles(org.role) : [];
-  const canChangeRole = member.role !== "OWNER" && roleOptions.length > 0;
   const canRemove = member.role === "OWNER" ? member.user.id === user?.id : true;
-
-  const onChangeRole = async (nextRole: OrgRole) => {
-    if (nextRole === member.role) return;
-    if (
-      !(await confirm(`Change ${member.user.name}'s role from ${member.role} to ${nextRole}?`))
-    ) {
-      return;
-    }
-    setChangingRole(true);
-    setError(null);
-    try {
-      await api.updateMemberRole(orgId, member.membershipId, nextRole);
-      onUpdate(member.membershipId, { role: nextRole });
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to change role");
-    } finally {
-      setChangingRole(false);
-    }
-  };
 
   const onRemove = async () => {
     const isSelf = member.user.id === user?.id;
@@ -99,10 +75,12 @@ function ProjectAccessRow({
           projectAccess: (member.projectAccess ?? []).filter((p) => p.id !== projectId),
         });
       } else {
-        const role = member.role === "OWNER" ? "VIEWER" : member.role;
-        await api.grantProjectAccess(orgId, member.membershipId, projectId, role);
+        await api.grantProjectAccess(orgId, member.membershipId, projectId, "VIEWER");
         onUpdate(member.membershipId, {
-          projectAccess: [...(member.projectAccess ?? []), { id: projectId, name: projectName, role }],
+          projectAccess: [
+            ...(member.projectAccess ?? []),
+            { id: projectId, name: projectName, role: "VIEWER" },
+          ],
         });
       }
     } catch (err) {
@@ -132,28 +110,8 @@ function ProjectAccessRow({
         <p className="mb-sm font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">{error}</p>
       )}
 
-      {(canChangeRole || canRemove) && (
+      {canRemove && (
         <div className="mb-md flex flex-wrap items-center gap-md">
-          {canChangeRole && (
-            <Select
-              label="Role"
-              wrapperClassName="w-40"
-              value={member.role}
-              disabled={changingRole}
-              onChange={(e) => onChangeRole(e.target.value as OrgRole)}
-            >
-              <option value={member.role}>
-                {member.role.charAt(0) + member.role.slice(1).toLowerCase()}
-              </option>
-              {roleOptions
-                .filter((r) => r !== member.role)
-                .map((r) => (
-                  <option key={r} value={r}>
-                    {r.charAt(0) + r.slice(1).toLowerCase()}
-                  </option>
-                ))}
-            </Select>
-          )}
           {canRemove && (
             <button
               type="button"
@@ -265,7 +223,7 @@ export function MembersSection({ search }: { search: string }) {
     );
   }
 
-  const canManageAccess = org.role === "OWNER" || org.role === "ADMIN";
+  const canManageAccess = org.role === "OWNER";
 
   const onMemberUpdate = (membershipId: string, patch: Partial<MemberSummary>) => {
     setMembers((prev) =>
@@ -340,7 +298,7 @@ export function MembersSection({ search }: { search: string }) {
                           <span
                             className={`rounded-full px-sm py-[1px] text-[10px] font-bold uppercase ${roleBadgeClass(m.role)}`}
                           >
-                            {m.role}
+                            {m.role === "OWNER" ? "Owner" : "Member"}
                           </span>
                           {m.canViewAllProjects && m.role !== "OWNER" && (
                             <span className="rounded-full border border-primary/20 bg-primary/10 px-sm py-[1px] text-[10px] font-bold uppercase text-primary">

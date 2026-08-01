@@ -15,8 +15,8 @@ import {
   ApiError,
   EnvironmentSummary,
   EnvironmentType,
-  OrgRole,
   ProjectMemberSummary,
+  ProjectRole,
 } from "@/lib/api";
 import { roleBadgeClass } from "@/lib/roleBadge";
 import { assignableRoles } from "@/lib/roles";
@@ -46,15 +46,17 @@ function ProjectMembers({
   projectId,
   orgId,
   canManage,
+  myRole,
 }: {
   projectId: string;
   orgId: string;
   canManage: boolean;
+  myRole: ProjectRole | null | undefined;
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [selectedRole, setSelectedRole] = useState<OrgRole>("VIEWER");
+  const [selectedRole, setSelectedRole] = useState<ProjectRole>("VIEWER");
   const [granting, setGranting] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const confirm = useConfirm();
@@ -184,9 +186,9 @@ function ProjectMembers({
             label="Role"
             wrapperClassName="sm:w-40"
             value={selectedRole}
-            onChange={(e) => setSelectedRole(e.target.value as OrgRole)}
+            onChange={(e) => setSelectedRole(e.target.value as ProjectRole)}
           >
-            {assignableRoles("OWNER").map((r) => (
+            {assignableRoles(myRole === "OWNER" ? "OWNER" : "ADMIN").map((r) => (
               <option key={r} value={r}>
                 {r.charAt(0) + r.slice(1).toLowerCase()}
               </option>
@@ -229,7 +231,45 @@ export default function ProjectDetailPage() {
   const environments = environmentsQuery.data ?? [];
   const loading = projectQuery.isPending || environmentsQuery.isPending;
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const canManageProject = project?.myRole === "OWNER" || project?.myRole === "ADMIN";
+
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [savingName, setSavingName] = useState(false);
+
+  const onStartRename = () => {
+    if (!project) return;
+    setNameInput(project.name);
+    setEditingName(true);
+  };
+
+  const onSaveName = async () => {
+    if (!project || !nameInput.trim()) return;
+    setSavingName(true);
+    setError(null);
+    try {
+      const updated = await api.updateProject(project.id, {
+        name: nameInput.trim(),
+        description: project.description ?? undefined,
+      });
+      queryClient.setQueryData(queryKeys.project(project.id), {
+        ...updated,
+        myRole: project.myRole,
+      });
+      setEditingName(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to rename project");
+    } finally {
+      setSavingName(false);
+    }
+  };
+  const filteredEnvironments = search.trim()
+    ? environments.filter((env) => {
+        const q = search.trim().toLowerCase();
+        return env.name.toLowerCase().includes(q) || env.type.toLowerCase().includes(q);
+      })
+    : environments;
 
   const [showNewEnv, setShowNewEnv] = useState(false);
   const [newEnvType, setNewEnvType] = useState<EnvironmentType | "">("");
@@ -276,7 +316,7 @@ export default function ProjectDetailPage() {
   };
 
   return (
-    <AppShell searchPlaceholder="Search environments...">
+    <AppShell searchPlaceholder="Search environments..." onSearch={setSearch}>
       <div className="mx-auto max-w-container-max pb-xl">
         <nav className="mb-xs flex items-center gap-xs font-body-sm text-body-sm text-secondary">
           <Link href="/projects" className="hover:underline">
@@ -301,7 +341,48 @@ export default function ProjectDetailPage() {
           <>
             <div className="mb-xl flex flex-col justify-between gap-md md:flex-row md:items-center">
               <div>
-                <h1 className="font-h1 text-h1 text-on-surface">{project.name}</h1>
+                {editingName ? (
+                  <div className="flex items-center gap-sm">
+                    <input
+                      autoFocus
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      maxLength={100}
+                      className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-xs font-h1 text-h1 text-on-surface outline-none focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      disabled={savingName || !nameInput.trim()}
+                      onClick={onSaveName}
+                      className="text-primary disabled:opacity-40"
+                      aria-label="Save name"
+                    >
+                      <Icon name="check" style={{ fontSize: 22 }} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingName(false)}
+                      className="text-secondary"
+                      aria-label="Cancel"
+                    >
+                      <Icon name="close" style={{ fontSize: 22 }} />
+                    </button>
+                  </div>
+                ) : (
+                  <h1 className="group flex items-center gap-sm font-h1 text-h1 text-on-surface">
+                    {project.name}
+                    {canManageProject && (
+                      <button
+                        type="button"
+                        onClick={onStartRename}
+                        className="text-secondary opacity-0 transition-opacity hover:text-primary group-hover:opacity-100"
+                        aria-label="Rename project"
+                      >
+                        <Icon name="edit" style={{ fontSize: 18 }} />
+                      </button>
+                    )}
+                  </h1>
+                )}
                 <p className="mt-base font-body-md text-body-md text-secondary">
                   {project.description || "No description yet."}
                 </p>
@@ -379,23 +460,41 @@ export default function ProjectDetailPage() {
             )}
 
             <div className="grid grid-cols-1 gap-md md:grid-cols-2 xl:grid-cols-4">
-              {environments.map((env) => (
-                <Link
-                  key={env.id}
-                  href={`/projects/${project.id}/environments/${env.id}`}
-                  className="github-card flex flex-col gap-md rounded-lg p-md"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Icon name={ENV_ICON[env.type]} />
+              {filteredEnvironments.map((env) =>
+                env.access === "none" ? (
+                  <div
+                    key={env.id}
+                    title="You don't have access to this environment"
+                    className="github-card flex flex-col gap-md rounded-lg p-md opacity-60"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container-high text-secondary">
+                      <Icon name="lock" />
+                    </div>
+                    <div>
+                      <h3 className="flex items-center gap-xs font-h3 text-h3 text-on-surface">
+                        {env.name}
+                      </h3>
+                      <p className="font-body-sm text-body-sm text-secondary">No access</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-h3 text-h3 text-on-surface">{env.name}</h3>
-                    <p className="font-body-sm text-body-sm text-secondary">
-                      Created {new Date(env.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </Link>
-              ))}
+                ) : (
+                  <Link
+                    key={env.id}
+                    href={`/projects/${project.id}/environments/${env.id}`}
+                    className="github-card flex flex-col gap-md rounded-lg p-md"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Icon name={ENV_ICON[env.type]} />
+                    </div>
+                    <div>
+                      <h3 className="font-h3 text-h3 text-on-surface">{env.name}</h3>
+                      <p className="font-body-sm text-body-sm text-secondary">
+                        Created {new Date(env.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </Link>
+                )
+              )}
 
               {environments.length === 0 && (
                 <div className="github-card col-span-full flex flex-col items-center gap-sm rounded-lg p-xl text-center text-secondary">
@@ -405,10 +504,22 @@ export default function ProjectDetailPage() {
                   </p>
                 </div>
               )}
+              {environments.length > 0 && filteredEnvironments.length === 0 && (
+                <div className="github-card col-span-full flex flex-col items-center gap-sm rounded-lg p-xl text-center text-secondary">
+                  <p className="font-body-md text-body-md">
+                    No environments match &ldquo;{search}&rdquo;.
+                  </p>
+                </div>
+              )}
             </div>
 
             {org && (
-              <ProjectMembers orgId={org.id} projectId={project.id} canManage={canManageProject} />
+              <ProjectMembers
+                orgId={org.id}
+                projectId={project.id}
+                canManage={canManageProject}
+                myRole={project.myRole}
+              />
             )}
           </>
         )}

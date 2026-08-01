@@ -48,13 +48,13 @@ export default function PermissionsDocsPage() {
         <h2 className="mb-sm font-h3 text-h3 text-on-surface">The default matrix</h2>
         <p className="font-body-md text-body-md text-secondary">
           Every role×environment-tier combination above is a sensible default, not a hardcoded
-          rule. Admins can open a org&apos;s{" "}
+          rule. The Owner can open an org&apos;s{" "}
           <Link href="/team/permissions" className="text-primary hover:underline">
             Permission Matrix
           </Link>{" "}
-          and grant or restrict access per role, per tier — for example, giving Viewers
-          read-only access to Production for an incident review, without giving them write
-          access anywhere. Overrides are sparse: a role/tier combination with no explicit
+          and grant or restrict access per role, per tier, org-wide — for example, giving
+          Viewers read-only access to Production for an incident review, without giving them
+          write access anywhere. Overrides are sparse: a role/tier combination with no explicit
           override simply falls back to the default above, so most orgs never need to touch it.
         </p>
       </section>
@@ -64,9 +64,10 @@ export default function PermissionsDocsPage() {
         <p className="font-body-md text-body-md text-secondary">
           A CLI service token isn&apos;t independently scoped — it can only ever do what its
           creator can do, evaluated against their live role at request time, and it&apos;s
-          hard-locked to the single organization it was issued for. Token creation itself is
-          gated to Admins and above, as a governance control on who can mint long-lived
-          credentials, not because a token could otherwise exceed its creator&apos;s access.
+          hard-locked to the single organization it was issued for. Anyone can create a token
+          for themselves — since it can never exceed their own access, there&apos;s no
+          escalation risk in self-service creation. Non-owners only see and manage their own
+          tokens; the Owner can see and revoke any token in the org.
         </p>
       </section>
 
@@ -90,26 +91,24 @@ export default function PermissionsDocsPage() {
       <section>
         <h2 className="mb-sm font-h3 text-h3 text-on-surface">Inviting and changing roles</h2>
         <p className="mb-sm font-body-md text-body-md text-secondary">
-          Inviting someone as Admin or Developer requires picking a project up front — that&apos;s
-          the project they&apos;ll actually have that role in, not every project in the org. A
-          Viewer invite can skip the project entirely and join org-only, since Viewer&apos;s
-          browse-and-request path doesn&apos;t need one.
+          Only the Owner, or a project&apos;s own Admin, can invite someone to that project — and
+          only as Developer or Viewer if the inviter isn&apos;t the Owner (an Admin can&apos;t
+          create a peer Admin without the Owner doing it directly). Every project invite is
+          usable immediately; there&apos;s no separate approval step, since the inviter already
+          has the exact authority they&apos;re granting. A plain org-only invite (no project, no
+          role — just membership) can be sent by any existing member.
         </p>
         <p className="mb-sm font-body-md text-body-md text-secondary">
-          Assigning an org-level role — by invite or by changing an existing member&apos;s role —
-          is capped strictly below your own: an Admin can reach Developer or Viewer but never
-          another Admin or Owner, a Developer can only ever reach Viewer, and a Viewer can&apos;t
-          assign any role at all. Only the Owner can assign any role, including Owner (via a
-          direct, immediate ownership transfer on the Team page). Anyone can also self-service
-          request a role upgrade (Settings → Profile), routed to whoever has the authority to
-          grant it.
+          There&apos;s no org-level role to assign or change — the only org-wide distinction is
+          Owner vs. everyone else, and ownership only ever moves through a direct, immediate
+          transfer (Team → Permissions, Owner-only).
         </p>
         <p className="font-body-md text-body-md text-secondary">
-          An invite created by a Developer needs Admin approval before it&apos;s usable, unless
-          an Admin has set up an auto-approve rule for that Developer or for the org as a whole
-          (Team → Invites). Invites created by an Admin or Owner are usable immediately. Likewise,
-          a project created by an Admin needs Owner approval unless the Owner has turned on
-          auto-approve for that Admin — a project created by the Owner is immediate.
+          Anyone already in the org can request access to a project (or a different role in a
+          project they&apos;re already in) from the Projects page — an Owner, or that
+          project&apos;s own Admin, approves or rejects it. A project created by an Admin needs
+          Owner approval unless the Owner has turned on auto-approve for that Admin (Projects
+          page, Owner-only) — a project created by the Owner is immediate.
         </p>
       </section>
     </DocsShell>

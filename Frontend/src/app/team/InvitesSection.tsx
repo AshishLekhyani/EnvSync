@@ -7,7 +7,7 @@ import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
 import { queryKeys } from "@/lib/query-keys";
 import { assignableRoles } from "@/lib/roles";
-import { api, ApiError, InviteCreated, InviteSummary, MemberSummary, OrgRole } from "@/lib/api";
+import { api, ApiError, InviteCreated, InviteSummary, ProjectRole } from "@/lib/api";
 
 function PendingAccessRequests({ orgId }: { orgId: string }) {
   const queryClient = useQueryClient();
@@ -68,6 +68,12 @@ function PendingAccessRequests({ orgId }: { orgId: string }) {
                 <p className="font-body-sm text-body-sm text-on-surface">
                   <span className="font-bold">{r.requestedBy.name}</span> wants access to{" "}
                   <span className="font-bold">{r.project.name}</span>
+                  {r.requestedRole && (
+                    <>
+                      {" "}
+                      as <span className="font-bold">{r.requestedRole}</span>
+                    </>
+                  )}
                 </p>
                 <p className="font-body-sm text-[11px] text-on-surface-variant">
                   {r.requestedBy.email} · {new Date(r.createdAt).toLocaleDateString()}
@@ -99,132 +105,11 @@ function PendingAccessRequests({ orgId }: { orgId: string }) {
   );
 }
 
-function AutoApproveSettings({ orgId }: { orgId: string }) {
-  const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
-  const [pendingId, setPendingId] = useState<string | null>(null);
-
-  const membersQuery = useQuery({
-    queryKey: queryKeys.orgMembers(orgId),
-    queryFn: () => api.listMembers(orgId),
-  });
-  const rulesQuery = useQuery({
-    queryKey: queryKeys.orgAutoApproveRules(orgId),
-    queryFn: () => api.listAutoApproveRules(orgId),
-  });
-
-  const developers = (membersQuery.data ?? []).filter(
-    (m: MemberSummary) => m.role === "DEVELOPER"
-  );
-  const rules = rulesQuery.data ?? [];
-  const blanketRule = rules.find((r) => r.inviter === null);
-  const perInviterIds = new Set(rules.filter((r) => r.inviter !== null).map((r) => r.inviter!.id));
-
-  const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.orgAutoApproveRules(orgId) });
-
-  const toggleBlanket = async () => {
-    setPendingId("blanket");
-    setError(null);
-    try {
-      await api.setBlanketAutoApprove(orgId, !blanketRule);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update");
-    } finally {
-      setPendingId(null);
-    }
-  };
-
-  const toggleInviter = async (userId: string, enabled: boolean) => {
-    setPendingId(userId);
-    setError(null);
-    try {
-      if (enabled) {
-        await api.disableInviterAutoApprove(orgId, userId);
-      } else {
-        await api.enableInviterAutoApprove(orgId, userId);
-      }
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update");
-    } finally {
-      setPendingId(null);
-    }
-  };
-
-  if (developers.length === 0 && !blanketRule) {
-    return null;
-  }
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
-      <div className="border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
-        <h3 className="font-label-md text-label-md font-bold text-on-surface">
-          Auto-Approve Settings
-        </h3>
-        <p className="mt-xs font-body-sm text-[11px] text-on-surface-variant">
-          Developer-issued invites normally need an Admin or Owner to approve them. Turn
-          this on to skip that step for everyone, or for specific people.
-        </p>
-      </div>
-      <div className="flex flex-col divide-y divide-[#D0D7DE] dark:divide-outline-variant p-md">
-        {error && (
-          <p className="pb-sm font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">
-            {error}
-          </p>
-        )}
-        <label className="flex items-center justify-between gap-md py-sm">
-          <span className="font-body-sm text-body-sm text-on-surface">
-            Auto-approve all Developer invites org-wide
-          </span>
-          <input
-            type="checkbox"
-            checked={!!blanketRule}
-            disabled={pendingId === "blanket"}
-            onChange={toggleBlanket}
-            className="rounded border-outline-variant text-primary-container focus:ring-primary-container"
-          />
-        </label>
-        {developers.map((m) => {
-          const enabled = perInviterIds.has(m.user.id);
-          return (
-            <label key={m.membershipId} className="flex items-center justify-between gap-md py-sm">
-              <span className="font-body-sm text-body-sm text-on-surface">
-                {m.user.name} <span className="text-on-surface-variant">({m.user.email})</span>
-              </span>
-              <input
-                type="checkbox"
-                checked={enabled}
-                disabled={pendingId === m.user.id || !!blanketRule}
-                onChange={() => toggleInviter(m.user.id, enabled)}
-                className="rounded border-outline-variant text-primary-container focus:ring-primary-container"
-              />
-            </label>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function inviteStatus(invite: InviteSummary): { label: string; className: string } {
   if (invite.acceptedAt) {
     return {
       label: "Accepted",
       className: "bg-[#1A7F37]/10 text-[#1A7F37] dark:bg-green-500/10 dark:text-green-400",
-    };
-  }
-  if (invite.approvalStatus === "REJECTED") {
-    return {
-      label: "Rejected",
-      className: "bg-error/10 text-error",
-    };
-  }
-  if (invite.approvalStatus === "PENDING") {
-    return {
-      label: "Awaiting Approval",
-      className: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
     };
   }
   if (new Date(invite.expiresAt) < new Date()) {
@@ -254,22 +139,21 @@ export function InvitesSection() {
   const projects = projectsQuery.data ?? [];
   const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
 
-  const roles = org ? assignableRoles(org.role) : [];
-  const canInvite = roles.length > 0;
-  const canManageApprovals = org?.role === "OWNER" || org?.role === "ADMIN";
-  const [decidingId, setDecidingId] = useState<string | null>(null);
+  const isOwner = org?.role === "OWNER";
+  const manageableProjects = isOwner
+    ? projects
+    : projects.filter((p) => p.myRole === "ADMIN");
+  const canInvite = manageableProjects.length > 0 || isOwner;
+  const roles = isOwner ? assignableRoles("OWNER") : assignableRoles("ADMIN");
 
   const [showForm, setShowForm] = useState(false);
   const [email, setEmail] = useState("");
   const [emailCheck, setEmailCheck] = useState<"idle" | "checking" | "found" | "not-found">("idle");
-  const [role, setRole] = useState<OrgRole>("VIEWER");
   const [projectId, setProjectId] = useState("");
+  const [role, setRole] = useState<ProjectRole>(roles[0] ?? "VIEWER");
   const [submitting, setSubmitting] = useState(false);
   const [justCreated, setJustCreated] = useState<InviteCreated | null>(null);
-  const [justApproved, setJustApproved] = useState<InviteCreated | null>(null);
   const [showToast, setShowToast] = useState(false);
-
-  const projectRequired = role !== "VIEWER" && role !== "OWNER";
 
   useEffect(() => {
     if (roles.length > 0 && !roles.includes(role)) {
@@ -344,26 +228,6 @@ export function InvitesSection() {
     setEmailCheck("idle");
   };
 
-  const onDecision = async (inviteId: string, decision: "approve" | "reject") => {
-    if (!org) return;
-    setDecidingId(inviteId);
-    setError(null);
-    try {
-      if (decision === "approve") {
-        const updated = await api.approveInvite(org.id, inviteId);
-        setInvites((prev) => prev.map((i) => (i.id === inviteId ? updated : i)));
-        setJustApproved(updated);
-      } else {
-        const updated = await api.rejectInvite(org.id, inviteId);
-        setInvites((prev) => prev.map((i) => (i.id === inviteId ? updated : i)));
-      }
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update invite");
-    } finally {
-      setDecidingId(null);
-    }
-  };
-
   const onInvite = async (e: FormEvent) => {
     e.preventDefault();
     if (!org) return;
@@ -373,8 +237,8 @@ export function InvitesSection() {
     try {
       const invite = await api.createInvite(org.id, {
         email,
-        role,
         projectId: projectId || undefined,
+        role: projectId ? role : undefined,
       });
       setJustCreated(invite);
       setInvites((prev) => [invite, ...prev]);
@@ -400,7 +264,7 @@ export function InvitesSection() {
       <div className="flex items-center justify-end gap-sm">
         {!canInvite && (
           <span className="font-body-sm text-body-sm text-secondary">
-            Viewers can&apos;t invite anyone.
+            You need to be an Owner or a project&apos;s Admin to invite people.
           </span>
         )}
         <button
@@ -427,10 +291,10 @@ export function InvitesSection() {
             <>
               <p className="font-body-sm text-body-sm text-secondary">
                 Share this link with <strong>{justCreated.email}</strong> — anyone with it can
-                join as <strong>{justCreated.role}</strong>
+                join
                 {justCreated.projectId
-                  ? ` with access to ${projectNameById.get(justCreated.projectId) ?? "one project"}`
-                  : ", with no project access until one is granted"}
+                  ? ` as ${justCreated.role} on ${projectNameById.get(justCreated.projectId) ?? "the project"}`
+                  : " the organization"}
                 . It won&apos;t be shown again.
               </p>
               <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
@@ -467,79 +331,73 @@ export function InvitesSection() {
         <form onSubmit={onInvite} className="github-card flex flex-col gap-md rounded-lg p-md">
           <h2 className="font-h3 text-h3 text-on-surface">Invite Member</h2>
           <p className="font-body-sm text-body-sm text-secondary">
-            Anyone with the generated link can join with the selected role — even if they
+            Anyone with the generated link can join with the selected access — even if they
             already have an EnvSync account, they still need to accept before they&apos;re a
             member.
           </p>
-          {org.role === "DEVELOPER" && (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-md py-sm font-body-sm text-body-sm text-amber-700 dark:text-amber-400">
-              As a Developer, you can only invite Viewers, and it needs an Admin or Owner to
-              approve before the link works — unless they&apos;ve set up auto-approval for you.
-            </p>
-          )}
-          <div className="flex flex-col gap-md sm:flex-row">
-            <label className="block flex-1">
-              <span className="mb-xs block font-label-md text-label-md text-on-surface">
-                Email
+          <label className="block">
+            <span className="mb-xs block font-label-md text-label-md text-on-surface">
+              Email
+            </span>
+            <input
+              required
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="teammate@example.com"
+              className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
+            />
+            {emailCheck === "found" && (
+              <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-primary">
+                <Icon name="check_circle" style={{ fontSize: 14 }} />
+                Account found — they can accept and log in right away
               </span>
-              <input
-                required
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="teammate@example.com"
-                className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-md text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary-container"
-              />
-              {emailCheck === "found" && (
-                <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-primary">
-                  <Icon name="check_circle" style={{ fontSize: 14 }} />
-                  Account found — they can accept and log in right away
-                </span>
-              )}
-              {emailCheck === "not-found" && (
-                <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-on-surface-variant">
-                  <Icon name="info" style={{ fontSize: 14 }} />
-                  No EnvSync account yet — they&apos;ll sign in with Google to accept
-                </span>
-              )}
-            </label>
+            )}
+            {emailCheck === "not-found" && (
+              <span className="mt-xs flex items-center gap-xs font-body-sm text-[11px] text-on-surface-variant">
+                <Icon name="info" style={{ fontSize: 14 }} />
+                No EnvSync account yet — they&apos;ll sign in with Google to accept
+              </span>
+            )}
+          </label>
+          <div className="flex flex-col gap-md sm:flex-row">
             <Select
-              label="Role"
-              wrapperClassName="sm:w-40"
-              value={role}
-              onChange={(e) => setRole(e.target.value as OrgRole)}
+              label="Project (optional)"
+              wrapperClassName="flex-1"
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
             >
-              {roles.map((r) => (
-                <option key={r} value={r}>
-                  {r.charAt(0) + r.slice(1).toLowerCase()}
+              <option value="">No project — just join the org</option>
+              {manageableProjects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
                 </option>
               ))}
             </Select>
+            {projectId && (
+              <Select
+                label="Role on this project"
+                wrapperClassName="sm:w-40"
+                value={role}
+                onChange={(e) => setRole(e.target.value as ProjectRole)}
+              >
+                {roles.map((r) => (
+                  <option key={r} value={r}>
+                    {r.charAt(0) + r.slice(1).toLowerCase()}
+                  </option>
+                ))}
+              </Select>
+            )}
           </div>
-          <Select
-            required={projectRequired}
-            label={projectRequired ? "Project access (required)" : "Project access"}
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-          >
-            <option value="" disabled={projectRequired}>
-              {projectRequired ? "Choose a project" : "No specific project (org-wide only)"}
-            </option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
           <p className="-mt-xs font-body-sm text-[11px] text-on-surface-variant">
-            {projectRequired
-              ? "Admins and Developers only get access to the project you pick here — they can request access to others later."
-              : "Viewers can join org-wide with no project yet, and request access to specific projects afterward."}
+            {projectId
+              ? "They'll only have this role on this one project — they can request access to others later."
+              : "They'll join the org with no project access yet, and can browse and request access afterward."}
           </p>
           <div className="flex items-center gap-sm">
             <button
               type="submit"
-              disabled={submitting || (projectRequired && !projectId)}
+              disabled={submitting}
               className="rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary disabled:opacity-60"
             >
               {submitting ? "Please wait..." : "Create Invite Link"}
@@ -555,48 +413,7 @@ export function InvitesSection() {
         </form>
       )}
 
-      {justApproved && (
-        <div className="github-card flex flex-col gap-md rounded-lg p-md">
-          <h2 className="font-h3 text-h3 text-on-surface">Invite Approved</h2>
-          {justApproved.token ? (
-            <>
-              <p className="font-body-sm text-body-sm text-secondary">
-                No email provider is configured, so here&apos;s the link for{" "}
-                <strong>{justApproved.email}</strong> — share it directly. It won&apos;t be shown
-                again.
-              </p>
-              <div className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface-container-high p-md">
-                <span className="truncate pr-md font-code-md text-code-md text-on-surface">
-                  {typeof window !== "undefined" ? window.location.origin : ""}/invite/
-                  {justApproved.token}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => copyText(`${window.location.origin}/invite/${justApproved.token}`)}
-                  className="flex-shrink-0 rounded-md bg-primary-container p-sm text-on-primary-container transition-opacity hover:opacity-90"
-                >
-                  <Icon name="content_copy" />
-                </button>
-              </div>
-            </>
-          ) : (
-            <p className="font-body-sm text-body-sm text-secondary">
-              An invite email was sent to <strong>{justApproved.email}</strong>.
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={() => setJustApproved(null)}
-            className="self-start font-label-md text-label-md text-xs text-primary hover:underline"
-          >
-            Done
-          </button>
-        </div>
-      )}
-
-      {canManageApprovals && <PendingAccessRequests orgId={org.id} />}
-
-      {canManageApprovals && <AutoApproveSettings orgId={org.id} />}
+      {canInvite && <PendingAccessRequests orgId={org.id} />}
 
       <div className="overflow-hidden rounded-xl border border-[#D0D7DE] dark:border-outline-variant bg-white dark:bg-surface-container-lowest shadow-sm">
         <div className="border-b border-[#D0D7DE] dark:border-outline-variant bg-surface-container-low px-md py-sm">
@@ -637,33 +454,13 @@ export function InvitesSection() {
                       </span>
                     </div>
                     <div className="font-body-sm text-body-sm text-on-surface-variant">
-                      Invited as {invite.role}
-                      {invite.projectId &&
-                        ` · ${projectNameById.get(invite.projectId) ?? "a project"}`}
+                      {invite.projectId
+                        ? `${invite.role} on ${projectNameById.get(invite.projectId) ?? "a project"}`
+                        : "Org member (no project)"}
                       {" · "}
                       {new Date(invite.createdAt).toLocaleDateString()}
                     </div>
                   </div>
-                  {canManageApprovals && invite.approvalStatus === "PENDING" && (
-                    <div className="flex flex-shrink-0 gap-sm">
-                      <button
-                        type="button"
-                        disabled={decidingId === invite.id}
-                        onClick={() => onDecision(invite.id, "approve")}
-                        className="rounded-lg bg-primary-container px-sm py-1 font-label-md text-[11px] text-on-primary disabled:opacity-50"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        disabled={decidingId === invite.id}
-                        onClick={() => onDecision(invite.id, "reject")}
-                        className="rounded-lg border border-outline-variant px-sm py-1 font-label-md text-[11px] text-on-surface disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  )}
                 </div>
               );
             })}

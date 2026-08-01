@@ -7,8 +7,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { CreateOrgForm } from "@/components/CreateOrgForm";
 import { Icon } from "@/components/Icon";
+import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
 import { queryKeys } from "@/lib/query-keys";
+import { assignableRoles } from "@/lib/roles";
 import {
   api,
   ApiError,
@@ -16,6 +18,7 @@ import {
   Project,
   ProjectCreateAutoApproveRuleSummary,
   ProjectCreationRequestSummary,
+  ProjectRole,
 } from "@/lib/api";
 import { getActionDisplay } from "@/lib/auditActions";
 
@@ -219,8 +222,8 @@ function ProjectsPageContent() {
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const canCreateProject = org?.role === "OWNER" || org?.role === "ADMIN";
-  const admins = members.filter((m) => m.role === "ADMIN");
+  const canCreateProject = !!org;
+  const admins = members.filter((m) => m.role !== "OWNER");
 
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(true);
@@ -234,11 +237,15 @@ function ProjectsPageContent() {
   const [creatingProject, setCreatingProject] = useState(false);
 
   const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
-  const onRequestAccess = async (projectId: string) => {
+  const [requestingProjectId, setRequestingProjectId] = useState<string | null>(null);
+  const [requestRole, setRequestRole] = useState<ProjectRole | "">("");
+  const onRequestAccess = async (projectId: string, role?: ProjectRole) => {
     if (!org) return;
     try {
-      await api.requestProjectAccess(org.id, projectId);
+      await api.requestProjectAccess(org.id, projectId, role || undefined);
       setRequestedIds((prev) => new Set(prev).add(projectId));
+      setRequestingProjectId(null);
+      setRequestRole("");
     } catch {
       /* the button just stays clickable to retry */
     }
@@ -525,16 +532,57 @@ function ProjectsPageContent() {
                           You don&apos;t have access to this project yet.
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        disabled={project.hasPendingAccessRequest || requestedIds.has(project.id)}
-                        onClick={() => onRequestAccess(project.id)}
-                        className="rounded-lg border border-primary/40 px-md py-sm font-label-md text-label-md text-primary transition-colors hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {project.hasPendingAccessRequest || requestedIds.has(project.id)
-                          ? "Access Requested"
-                          : "Request Access"}
-                      </button>
+                      {project.hasPendingAccessRequest || requestedIds.has(project.id) ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="rounded-lg border border-primary/40 px-md py-sm font-label-md text-label-md text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Access Requested
+                        </button>
+                      ) : requestingProjectId === project.id ? (
+                        <div className="flex flex-col gap-sm">
+                          <Select
+                            wrapperClassName="w-full"
+                            value={requestRole}
+                            onChange={(e) => setRequestRole(e.target.value as ProjectRole)}
+                          >
+                            <option value="">Just view access</option>
+                            {assignableRoles("OWNER").map((r) => (
+                              <option key={r} value={r}>
+                                {r.charAt(0) + r.slice(1).toLowerCase()}
+                              </option>
+                            ))}
+                          </Select>
+                          <div className="flex gap-sm">
+                            <button
+                              type="button"
+                              onClick={() => onRequestAccess(project.id, requestRole || undefined)}
+                              className="flex-1 rounded-lg bg-primary-container px-md py-sm font-label-md text-label-md text-on-primary transition-colors hover:opacity-90"
+                            >
+                              Send Request
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRequestingProjectId(null);
+                                setRequestRole("");
+                              }}
+                              className="rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setRequestingProjectId(project.id)}
+                          className="rounded-lg border border-primary/40 px-md py-sm font-label-md text-label-md text-primary transition-colors hover:bg-primary/5"
+                        >
+                          Request Access
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <Link
@@ -591,7 +639,7 @@ function ProjectsPageContent() {
                   </div>
                 ) : auditForbidden ? (
                   <p className="px-md py-lg text-center font-body-sm text-body-sm text-secondary">
-                    Audit activity requires Developer access or higher.
+                    You don&apos;t have access to any project&apos;s audit activity yet.
                   </p>
                 ) : auditLogs.length === 0 ? (
                   <p className="px-md py-lg text-center font-body-sm text-body-sm text-secondary">

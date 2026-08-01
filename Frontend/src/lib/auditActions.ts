@@ -88,6 +88,36 @@ export const ACTION_DISPLAY: Record<string, ActionDisplay> = {
     label: "Rejected project access request",
     iconClass: "text-error",
   },
+  "secret.expiry_update": {
+    icon: "schedule",
+    label: "Changed secret expiry",
+    iconClass: "text-primary",
+  },
+  "secret.restore_deleted": {
+    icon: "restore_from_trash",
+    label: "Restored deleted secret",
+    iconClass: "text-primary",
+  },
+  "audit_log.purge": {
+    icon: "delete_sweep",
+    label: "Purged audit logs",
+    iconClass: "text-error",
+  },
+  "project_creation.request": {
+    icon: "front_hand",
+    label: "Requested project creation",
+    iconClass: "text-primary",
+  },
+  "project_creation.approve": {
+    icon: "check_circle",
+    label: "Approved project creation",
+    iconClass: "text-primary",
+  },
+  "project_creation.reject": {
+    icon: "cancel",
+    label: "Rejected project creation",
+    iconClass: "text-error",
+  },
 };
 
 const FALLBACK_DISPLAY: ActionDisplay = {
@@ -201,8 +231,29 @@ export function describeAuditLog(log: AuditLogLike): string | null {
     case "project_access.reject": {
       const project = asString(m.projectName);
       const email = asString(m.requesterEmail);
+      const role = asString(m.grantedRole) ?? asString(m.requestedRole);
       if (!project) return null;
-      return email ? `${project} for ${email}` : project;
+      const base = email ? `${project} for ${email}` : project;
+      return role ? `${base} as ${role}` : base;
+    }
+    case "secret.restore_deleted": {
+      const envName = asString(m.environmentName);
+      const envType = asString(m.environmentType);
+      return envName ? `in ${envName}${envType ? ` (${envType})` : ""}` : null;
+    }
+    case "audit_log.purge": {
+      const before = asString(m.beforeDate);
+      const count = typeof m.deletedCount === "number" ? m.deletedCount : undefined;
+      if (!before) return null;
+      return count !== undefined ? `${count} entries before ${before}` : `before ${before}`;
+    }
+    case "project_creation.request":
+    case "project_creation.approve":
+    case "project_creation.reject": {
+      const name = asString(m.name);
+      const email = asString(m.requesterEmail);
+      if (!name) return null;
+      return email ? `'${name}' for ${email}` : `'${name}'`;
     }
     default:
       return null;

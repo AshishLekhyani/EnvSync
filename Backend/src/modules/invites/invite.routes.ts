@@ -4,7 +4,7 @@ import { requireOrgRole, orgIdFromParam } from "../rbac/rbac.middleware";
 import { validate } from "../../common/validation/validate";
 import * as inviteController from "./invite.controller";
 import { inviteAcceptRateLimiter, inviteCreateRateLimiter } from "./invite.rateLimit";
-import { createInviteSchema, setBlanketAutoApproveSchema } from "./invite.validators";
+import { createInviteSchema } from "./invite.validators";
 
 export const orgInvitesRouter = Router({ mergeParams: true });
 orgInvitesRouter.use(requireAuth);
@@ -18,39 +18,8 @@ orgInvitesRouter.post(
 );
 orgInvitesRouter.get(
   "/",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   inviteController.listInvites
-);
-orgInvitesRouter.post(
-  "/:inviteId/approve",
-  requireOrgRole("ADMIN", orgIdFromParam()),
-  inviteController.approveInvite
-);
-orgInvitesRouter.post(
-  "/:inviteId/reject",
-  requireOrgRole("ADMIN", orgIdFromParam()),
-  inviteController.rejectInvite
-);
-orgInvitesRouter.get(
-  "/auto-approve",
-  requireOrgRole("ADMIN", orgIdFromParam()),
-  inviteController.listAutoApproveRules
-);
-orgInvitesRouter.patch(
-  "/auto-approve/blanket",
-  requireOrgRole("ADMIN", orgIdFromParam()),
-  validate({ body: setBlanketAutoApproveSchema }),
-  inviteController.setBlanketAutoApprove
-);
-orgInvitesRouter.post(
-  "/auto-approve/:userId",
-  requireOrgRole("ADMIN", orgIdFromParam()),
-  inviteController.enableInviterAutoApprove
-);
-orgInvitesRouter.delete(
-  "/auto-approve/:userId",
-  requireOrgRole("ADMIN", orgIdFromParam()),
-  inviteController.disableInviterAutoApprove
 );
 
 export const publicInvitesRouter = Router();

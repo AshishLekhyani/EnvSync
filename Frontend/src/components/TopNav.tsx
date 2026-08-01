@@ -105,15 +105,7 @@ export function TopNav({
 
     setApprovalPending(n.id);
     try {
-      if (n.type === "invite.approval_requested") {
-        const inviteId = n.metadata?.inviteId as string | undefined;
-        if (!inviteId) return;
-        if (decision === "approve") {
-          await api.approveInvite(orgId, inviteId);
-        } else {
-          await api.rejectInvite(orgId, inviteId);
-        }
-      } else if (n.type === "project_access.requested") {
+      if (n.type === "project_access.requested") {
         const requestId = n.metadata?.requestId as string | undefined;
         if (!requestId) return;
         if (decision === "approve") {
@@ -128,14 +120,6 @@ export function TopNav({
           await api.approveProjectCreationRequest(orgId, requestId);
         } else {
           await api.rejectProjectCreationRequest(orgId, requestId);
-        }
-      } else if (n.type === "role_change.requested") {
-        const requestId = n.metadata?.requestId as string | undefined;
-        if (!requestId) return;
-        if (decision === "approve") {
-          await api.approveRoleChangeRequest(orgId, requestId);
-        } else {
-          await api.rejectRoleChangeRequest(orgId, requestId);
         }
       }
       setApprovalResult((prev) => ({ ...prev, [n.id]: decision }));
@@ -277,10 +261,8 @@ export function TopNav({
                 ) : (
                   notifications.map((n) => {
                     const isApprovalRequest =
-                      n.type === "invite.approval_requested" ||
                       n.type === "project_access.requested" ||
-                      n.type === "project_creation.requested" ||
-                      n.type === "role_change.requested";
+                      n.type === "project_creation.requested";
                     const decided = approvalResult[n.id];
 
                     const dismissButton = (

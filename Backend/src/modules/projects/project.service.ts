@@ -1,4 +1,4 @@
-import { OrgRole } from "@prisma/client";
+import { OrgRole, ProjectRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
 import { writeAuditLog } from "../audit/audit.service";
@@ -29,6 +29,7 @@ async function createProjectRow(
   orgId: string,
   input: { name: string; slug: string; description?: string | null },
   actorId: string,
+  isOwner: boolean,
   ipAddress?: string
 ) {
   return prisma.$transaction(async (tx) => {
@@ -42,9 +43,11 @@ async function createProjectRow(
       include: withEnvironmentCount,
     });
 
-    await tx.projectMembership.create({
-      data: { userId: actorId, projectId: project.id, role: "ADMIN", grantedById: actorId },
-    });
+    if (!isOwner) {
+      await tx.projectMembership.create({
+        data: { userId: actorId, projectId: project.id, role: "ADMIN", grantedById: actorId },
+      });
+    }
 
     await writeAuditLog(tx, {
       orgId,
@@ -71,7 +74,10 @@ export async function createProject(
   await assertSlugAvailable(orgId, input.slug);
 
   if (actorRole === "OWNER") {
-    return { kind: "created" as const, project: await createProjectRow(orgId, input, actorId, ipAddress) };
+    return {
+      kind: "created" as const,
+      project: await createProjectRow(orgId, input, actorId, true, ipAddress),
+    };
   }
 
   const autoApproved = await prisma.projectCreateAutoApproveRule.findUnique({
@@ -79,7 +85,10 @@ export async function createProject(
   });
 
   if (autoApproved) {
-    return { kind: "created" as const, project: await createProjectRow(orgId, input, actorId, ipAddress) };
+    return {
+      kind: "created" as const,
+      project: await createProjectRow(orgId, input, actorId, false, ipAddress),
+    };
   }
 
   const request = await prisma.projectCreationRequest.create({
@@ -164,6 +173,7 @@ export async function approveProjectCreationRequest(
     orgId,
     { name: request.name, slug: request.slug, description: request.description },
     request.requestedById,
+    false,
     ipAddress
   );
 
@@ -301,7 +311,7 @@ export async function listProjects(
     pendingRequestSet = new Set(pending.map((p) => p.projectId));
   }
 
-  let roleByProjectId: Map<string, OrgRole> | null = null;
+  let roleByProjectId: Map<string, ProjectRole> | null = null;
   if (userId && orgRole && orgRole !== "OWNER") {
     const grants = await prisma.projectMembership.findMany({
       where: { userId, project: { orgId } },

@@ -15,7 +15,7 @@ orgPermissionsRouter.get(
 );
 orgPermissionsRouter.patch(
   "/",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("OWNER", orgIdFromParam()),
   validate({ body: setPermissionOverrideSchema }),
   permissionController.setOverride
 );

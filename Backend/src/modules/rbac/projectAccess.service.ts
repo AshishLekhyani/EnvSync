@@ -1,12 +1,15 @@
-import { OrgMembership, OrgRole } from "@prisma/client";
+import { OrgMembership, OrgRole, ProjectRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 
 export function canViewAllProjects(role: OrgRole, membership: OrgMembership): boolean {
   return role === "OWNER" || membership.canViewAllProjects;
 }
 
+// Org role is binary (OWNER or the plain-member placeholder) — every non-owner member
+// can browse the full project list and request access; only the Owner already sees
+// everything and has no need to browse.
 export function canBrowseAllProjects(role: OrgRole): boolean {
-  return role === "ADMIN" || role === "DEVELOPER" || role === "VIEWER";
+  return role !== "OWNER";
 }
 
 export async function getAccessibleProjectIds(
@@ -31,7 +34,7 @@ export async function getProjectRole(
   userId: string,
   projectId: string,
   orgRole: OrgRole
-): Promise<OrgRole | null> {
+): Promise<ProjectRole | null> {
   if (orgRole === "OWNER") return "OWNER";
 
   const grant = await prisma.projectMembership.findUnique({

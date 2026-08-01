@@ -62,9 +62,9 @@ export async function createApiToken(
   return { ...toMetadata(created), token: rawToken };
 }
 
-export async function listApiTokens(orgId: string) {
+export async function listApiTokens(orgId: string, actorId: string, isOwner: boolean) {
   const tokens = await prisma.apiToken.findMany({
-    where: { orgId },
+    where: isOwner ? { orgId } : { orgId, createdById: actorId },
     include: { createdBy: { select: { id: true, name: true, email: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -76,6 +76,7 @@ export async function revokeApiToken(
   orgId: string,
   tokenId: string,
   actorId: string,
+  isOwner: boolean,
   ipAddress?: string
 ) {
   const token = await prisma.apiToken.findUnique({
@@ -83,7 +84,7 @@ export async function revokeApiToken(
     include: { createdBy: { select: { id: true, name: true, email: true } } },
   });
 
-  if (!token || token.orgId !== orgId) {
+  if (!token || token.orgId !== orgId || (!isOwner && token.createdById !== actorId)) {
     throw new NotFoundError("API token not found");
   }
 

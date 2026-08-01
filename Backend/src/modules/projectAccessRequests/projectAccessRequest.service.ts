@@ -1,12 +1,12 @@
-import { OrgMembership, OrgRole } from "@prisma/client";
+import { OrgMembership, OrgRole, ProjectRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
-import { canBrowseAllProjects, hasProjectAccess } from "../rbac/projectAccess.service";
+import { canBrowseAllProjects } from "../rbac/projectAccess.service";
 import { writeAuditLog } from "../audit/audit.service";
 import { notifyUserAccessChanged, notifyUserNotificationCreated } from "../auth/sse";
 import { shouldNotify } from "../notifications/notification.service";
 import { Actor, assertCanAssignRole } from "../orgs/membership.service";
-import { ROLE_WEIGHT } from "../rbac/roles";
+import { hasAtLeastRole, ROLE_WEIGHT } from "../rbac/roles";
 
 async function resolveApprovers(orgId: string, projectId: string): Promise<string[]> {
   const owners = await prisma.orgMembership.findMany({
@@ -14,37 +14,38 @@ async function resolveApprovers(orgId: string, projectId: string): Promise<strin
     select: { userId: true },
   });
 
-  const admins = await prisma.orgMembership.findMany({
-    where: { orgId, role: "ADMIN" },
+  const projectAdmins = await prisma.projectMembership.findMany({
+    where: { projectId, role: "ADMIN" },
+    select: { userId: true },
   });
 
-  const adminApproverIds: string[] = [];
-  for (const admin of admins) {
-    const allowed = await hasProjectAccess(orgId, admin.userId, projectId, admin.role, admin);
-    if (allowed) adminApproverIds.push(admin.userId);
-  }
-
-  return [...new Set([...owners.map((o) => o.userId), ...adminApproverIds])];
+  return [...new Set([...owners.map((o) => o.userId), ...projectAdmins.map((a) => a.userId)])];
 }
 
 export async function createAccessRequest(
   orgId: string,
   projectId: string,
   actor: Actor,
-  requestedRole: OrgRole | null,
+  requestedRole: ProjectRole | null,
   ipAddress?: string
 ) {
-  if (!canBrowseAllProjects(actor.role)) {
+  if (actor.role !== "OWNER" && !canBrowseAllProjects(actor.role)) {
     throw new ForbiddenError("Your role can't request project access");
-  }
-
-  if (requestedRole && !(ROLE_WEIGHT[requestedRole] > ROLE_WEIGHT[actor.role])) {
-    throw new ForbiddenError("The requested role must be above your current role");
   }
 
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project || project.orgId !== orgId) {
     throw new NotFoundError("Project not found");
+  }
+
+  if (requestedRole) {
+    const currentGrant = await prisma.projectMembership.findUnique({
+      where: { userId_projectId: { userId: actor.id, projectId } },
+    });
+    const currentWeight = currentGrant ? ROLE_WEIGHT[currentGrant.role] : 0;
+    if (ROLE_WEIGHT[requestedRole] <= currentWeight) {
+      throw new ForbiddenError("The requested role must be above your current role in this project");
+    }
   }
 
   const existing = await prisma.projectAccessRequest.findFirst({
@@ -121,23 +122,19 @@ async function assertCanDecide(
   orgId: string,
   projectId: string,
   actorMembership: OrgMembership,
-  requestedRole: OrgRole | null
+  requestedRole: ProjectRole | null
 ) {
-  if (actorMembership.role !== "OWNER") {
-    const allowed = await hasProjectAccess(
-      orgId,
-      actorMembership.userId,
-      projectId,
-      actorMembership.role,
-      actorMembership
-    );
-    if (!allowed) {
-      throw new ForbiddenError("You don't have access to this project yourself");
-    }
+  if (actorMembership.role === "OWNER") return;
+
+  const actorGrant = await prisma.projectMembership.findUnique({
+    where: { userId_projectId: { userId: actorMembership.userId, projectId } },
+  });
+  if (!actorGrant || !hasAtLeastRole(actorGrant.role, "ADMIN")) {
+    throw new ForbiddenError("You need Admin access to this project to decide this request");
   }
 
   if (requestedRole) {
-    assertCanAssignRole(actorMembership.role, requestedRole);
+    assertCanAssignRole(actorGrant.role, requestedRole);
   }
 }
 
@@ -151,11 +148,11 @@ export async function approveAccessRequest(
   await assertCanDecide(orgId, request.projectId, actorMembership, request.requestedRole);
   const notify = await shouldNotify(request.requestedById, "accessChanges");
 
-  const requesterMembership = await prisma.orgMembership.findUniqueOrThrow({
-    where: { userId_orgId: { userId: request.requestedById, orgId } },
+  const existingGrant = await prisma.projectMembership.findUnique({
+    where: { userId_projectId: { userId: request.requestedById, projectId: request.projectId } },
   });
-  const roleChanged =
-    !!request.requestedRole && request.requestedRole !== requesterMembership.role;
+  const grantedRole = request.requestedRole ?? existingGrant?.role ?? "VIEWER";
+  const roleChanged = !existingGrant || existingGrant.role !== grantedRole;
 
   await prisma.$transaction(async (tx) => {
     await tx.projectMembership.upsert({
@@ -165,31 +162,11 @@ export async function approveAccessRequest(
       create: {
         userId: request.requestedById,
         projectId: request.projectId,
+        role: grantedRole,
         grantedById: actorMembership.userId,
       },
-      update: {},
+      update: { role: grantedRole },
     });
-
-    if (roleChanged) {
-      await tx.orgMembership.update({
-        where: { id: requesterMembership.id },
-        data: { role: request.requestedRole! },
-      });
-
-      await writeAuditLog(tx, {
-        orgId,
-        actorId: actorMembership.userId,
-        action: "member.role_change",
-        targetType: "OrgMembership",
-        targetId: requesterMembership.id,
-        metadata: {
-          email: request.requestedBy.email,
-          previousRole: requesterMembership.role,
-          newRole: request.requestedRole,
-        },
-        ipAddress,
-      });
-    }
 
     await tx.projectAccessRequest.update({
       where: { id: request.id },
@@ -206,13 +183,14 @@ export async function approveAccessRequest(
       metadata: {
         projectName: request.project.name,
         requesterEmail: request.requestedBy.email,
-        grantedRole: roleChanged ? request.requestedRole : null,
+        grantedRole,
+        roleChanged,
       },
       ipAddress,
     });
 
     if (notify) {
-      const roleNote = roleChanged ? ` (now ${request.requestedRole})` : "";
+      const roleNote = roleChanged ? ` (as ${grantedRole})` : "";
       await tx.notification.create({
         data: {
           orgId,
@@ -279,9 +257,18 @@ export async function rejectAccessRequest(
   if (notify) notifyUserNotificationCreated(request.requestedById);
 }
 
-export async function listAccessRequests(orgId: string) {
+export async function listAccessRequests(orgId: string, userId: string, orgRole: OrgRole) {
+  const where =
+    orgRole === "OWNER"
+      ? { orgId, status: "PENDING" as const }
+      : {
+          orgId,
+          status: "PENDING" as const,
+          project: { memberships: { some: { userId, role: "ADMIN" as const } } },
+        };
+
   const requests = await prisma.projectAccessRequest.findMany({
-    where: { orgId, status: "PENDING" },
+    where,
     include: {
       project: { select: { id: true, name: true } },
       requestedBy: { select: { id: true, name: true, email: true } },

@@ -11,7 +11,7 @@ orgAuditLogsRouter.use(requireAuth);
 
 orgAuditLogsRouter.get(
   "/",
-  requireOrgRole("DEVELOPER", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   validate({ query: listAuditLogsQuerySchema }),
   auditController.listAuditLogs
 );

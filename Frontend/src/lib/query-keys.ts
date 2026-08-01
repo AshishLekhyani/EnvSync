@@ -10,8 +10,6 @@ export const queryKeys = {
   orgInvites: (orgId: string) => ["org", orgId, "invites"] as const,
   orgAutoApproveRules: (orgId: string) => ["org", orgId, "auto-approve"] as const,
   orgAccessRequests: (orgId: string) => ["org", orgId, "access-requests"] as const,
-  orgRoleChangeRequests: (orgId: string) => ["org", orgId, "role-change-requests"] as const,
-  myRoleChangeRequest: (orgId: string) => ["org", orgId, "role-change-requests", "mine"] as const,
   environmentDeletedSecrets: (environmentId: string) =>
     ["environment", environmentId, "secrets", "deleted"] as const,
   projectMembers: (projectId: string) => ["project", projectId, "members"] as const,

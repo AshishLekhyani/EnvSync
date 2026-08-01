@@ -11,17 +11,17 @@ orgApiTokensRouter.use(requireAuth);
 
 orgApiTokensRouter.post(
   "/",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   validate({ body: createApiTokenSchema }),
   apiTokenController.createApiToken
 );
 orgApiTokensRouter.get(
   "/",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   apiTokenController.listApiTokens
 );
 orgApiTokensRouter.delete(
   "/:tokenId",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   apiTokenController.revokeApiToken
 );

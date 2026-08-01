@@ -18,7 +18,7 @@ orgProjectsRouter.use(requireAuth);
 
 orgProjectsRouter.post(
   "/",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   validate({ body: createProjectSchema }),
   projectController.createProject
 );

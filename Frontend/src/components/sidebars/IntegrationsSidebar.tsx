@@ -20,12 +20,11 @@ const NAV_ITEMS = [
 
 function SetupStatus() {
   const { activeOrg: org } = useAuth();
-  const isAdmin = org?.role === "OWNER" || org?.role === "ADMIN";
 
   const tokensQuery = useQuery({
     queryKey: queryKeys.orgTokens(org?.id ?? ""),
     queryFn: () => api.listApiTokens(org!.id),
-    enabled: !!org && isAdmin,
+    enabled: !!org,
   });
 
   const activeCount = (tokensQuery.data ?? []).filter((t) => !t.revokedAt).length;
@@ -37,11 +36,7 @@ function SetupStatus() {
       <p className="mb-xs font-body-sm text-[10px] uppercase tracking-wider text-on-surface-variant">
         Setup
       </p>
-      {!isAdmin ? (
-        <p className="font-body-sm text-body-sm text-on-surface-variant">
-          Ask an Admin to generate a service token for the CLI.
-        </p>
-      ) : tokensQuery.isPending ? (
+      {tokensQuery.isPending ? (
         <div className="flex items-center gap-xs text-secondary">
           <Icon name="progress_activity" className="animate-spin" style={{ fontSize: 16 }} />
         </div>

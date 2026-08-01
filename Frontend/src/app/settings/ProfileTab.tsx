@@ -1,97 +1,10 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
-import { Select } from "@/components/Select";
 import { useAuth } from "@/lib/auth-context";
-import { useConfirm } from "@/lib/confirm-context";
-import { queryKeys } from "@/lib/query-keys";
-import { rolesAboveMine } from "@/lib/roles";
-import { api, ApiError, NotificationPrefs, OrgRole } from "@/lib/api";
-
-function RoleChangeCard() {
-  const { activeOrg: org } = useAuth();
-  const confirm = useConfirm();
-  const options = org ? rolesAboveMine(org.role) : [];
-  const [desiredRole, setDesiredRole] = useState<OrgRole>(options[0] ?? "VIEWER");
-  const [requesting, setRequesting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
-
-  const pendingQuery = useQuery({
-    queryKey: queryKeys.myRoleChangeRequest(org?.id ?? ""),
-    queryFn: () => api.getMyRoleChangeRequest(org!.id),
-    enabled: !!org,
-  });
-
-  if (!org || options.length === 0) return null;
-
-  const pending = pendingQuery.data ?? null;
-
-  const onRequest = async () => {
-    if (!(await confirm(`Request to become ${desiredRole} in ${org.name}?`))) return;
-    setRequesting(true);
-    setError(null);
-    try {
-      await api.requestRoleChange(org.id, desiredRole);
-      setSent(true);
-      await pendingQuery.refetch();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to request role change");
-    } finally {
-      setRequesting(false);
-    }
-  };
-
-  return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
-      <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">
-        <Icon name="upgrade" className="text-primary" />
-        <h2 className="font-h3 text-h3 text-on-surface">Your Role</h2>
-      </div>
-      <div className="flex flex-col gap-md p-md">
-        <p className="font-body-sm text-body-sm text-on-surface-variant">
-          You&apos;re a <strong>{org.role}</strong> in {org.name}. Request an upgrade and it'll
-          go to whoever can grant it.
-        </p>
-        {error && (
-          <p className="font-body-sm text-body-sm text-[#CF222E] dark:text-red-400">{error}</p>
-        )}
-        {pending ? (
-          <p className="font-body-sm text-body-sm text-secondary">
-            Your request to become <strong>{pending.requestedRole}</strong> is awaiting
-            approval.
-          </p>
-        ) : (
-          <div className="flex items-center gap-sm">
-            <Select
-              wrapperClassName="max-w-[160px]"
-              value={desiredRole}
-              onChange={(e) => setDesiredRole(e.target.value as OrgRole)}
-            >
-              {options.map((r) => (
-                <option key={r} value={r}>
-                  {r.charAt(0) + r.slice(1).toLowerCase()}
-                </option>
-              ))}
-            </Select>
-            <button
-              type="button"
-              disabled={requesting}
-              onClick={onRequest}
-              className="rounded-lg border border-outline-variant px-md py-sm font-label-md text-label-md text-on-surface disabled:opacity-60"
-            >
-              {requesting ? "Requesting..." : "Request Upgrade"}
-            </button>
-            {sent && <span className="font-body-sm text-body-sm text-primary">Sent.</span>}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+import { api, ApiError, NotificationPrefs } from "@/lib/api";
 
 const AVATAR_SIZE = 128;
 const AVATAR_MAX_CHARS = 60000;
@@ -285,8 +198,6 @@ export function ProfileTab() {
           </form>
         </div>
       </div>
-
-      <RoleChangeCard />
 
       <div className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-[0_1px_0_rgba(27,31,35,0.04)]">
         <div className="flex items-center gap-sm border-b border-outline-variant bg-surface-container-low p-md">

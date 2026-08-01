@@ -172,8 +172,11 @@ export function CliTab() {
             ) : (
               <>
                 <p className="font-body-sm text-body-sm text-on-surface-variant">
-                  Use a service token to authenticate the EnvSync CLI. Keep it
-                  secret and never commit it to source control.
+                  Use a service token to authenticate the EnvSync CLI. It only ever has your
+                  own access — keep it secret and never commit it to source control.
+                  {org.role === "OWNER"
+                    ? " As Owner, you can see and revoke everyone's tokens."
+                    : " You can only see and manage your own tokens."}
                 </p>
 
                 {tokenError && (

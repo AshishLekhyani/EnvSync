@@ -1,18 +1,17 @@
-import { OrgMembership, OrgRole } from "@prisma/client";
+import { OrgMembership, OrgRole, ProjectRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../common/errors/AppError";
 import { ROLE_WEIGHT, hasAtLeastRole } from "../rbac/roles";
 import { writeAuditLog } from "../audit/audit.service";
 import { notifyUserAccessChanged, notifyUserNotificationCreated } from "../auth/sse";
 import { shouldNotify } from "../notifications/notification.service";
-import { UpdateMemberRoleInput } from "./membership.validators";
 
 export interface Actor {
   id: string;
   role: OrgRole;
 }
 
-export function assertCanAssignRole(actorRole: OrgRole, targetRole: OrgRole) {
+export function assertCanAssignRole(actorRole: ProjectRole, targetRole: ProjectRole) {
   if (actorRole === "OWNER") return;
   if (ROLE_WEIGHT[targetRole] >= ROLE_WEIGHT[actorRole]) {
     throw new ForbiddenError("You can only assign a role below your own");
@@ -26,7 +25,7 @@ export async function listMembers(orgId: string, requesterRole: OrgRole) {
     orderBy: { createdAt: "asc" },
   });
 
-  const canManage = requesterRole === "OWNER" || requesterRole === "ADMIN";
+  const canManage = requesterRole === "OWNER";
   if (!canManage) {
     return memberships.map((m) => ({
       membershipId: m.id,
@@ -39,7 +38,7 @@ export async function listMembers(orgId: string, requesterRole: OrgRole) {
     where: { project: { orgId } },
     include: { project: { select: { id: true, name: true } } },
   });
-  const grantsByUser = new Map<string, { id: string; name: string; role: OrgRole }[]>();
+  const grantsByUser = new Map<string, { id: string; name: string; role: ProjectRole }[]>();
   for (const g of grants) {
     const list = grantsByUser.get(g.userId) ?? [];
     list.push({ ...g.project, role: g.role });
@@ -56,12 +55,6 @@ export async function listMembers(orgId: string, requesterRole: OrgRole) {
 }
 
 export async function listProjectMembers(projectId: string) {
-  const grants = await prisma.projectMembership.findMany({
-    where: { projectId },
-    include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
-    orderBy: { createdAt: "asc" },
-  });
-
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { orgId: true },
@@ -74,9 +67,16 @@ export async function listProjectMembers(projectId: string) {
     where: { orgId: project.orgId, role: "OWNER" },
     include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
   });
+  const ownerIds = new Set(owners.map((o) => o.userId));
+
+  const grants = await prisma.projectMembership.findMany({
+    where: { projectId, userId: { notIn: [...ownerIds] } },
+    include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
+    orderBy: { createdAt: "asc" },
+  });
 
   return [
-    ...owners.map((o) => ({ role: "OWNER" as OrgRole, user: o.user })),
+    ...owners.map((o) => ({ role: "OWNER" as ProjectRole, user: o.user })),
     ...grants.map((g) => ({ role: g.role, user: g.user })),
   ];
 }
@@ -85,7 +85,7 @@ export async function grantProjectAccess(
   orgId: string,
   membershipId: string,
   projectId: string,
-  role: OrgRole,
+  role: ProjectRole,
   actorMembership: OrgMembership,
   ipAddress?: string
 ) {
@@ -236,55 +236,6 @@ export async function checkEmailExists(email: string): Promise<boolean> {
 }
 
 
-export async function updateMemberRole(
-  orgId: string,
-  membershipId: string,
-  input: UpdateMemberRoleInput,
-  actor: Actor,
-  ipAddress?: string
-) {
-  assertCanAssignRole(actor.role, input.role);
-
-  const membership = await prisma.orgMembership.findUnique({
-    where: { id: membershipId },
-    include: { user: { select: { email: true } } },
-  });
-
-  if (!membership || membership.orgId !== orgId) {
-    throw new NotFoundError("Membership not found");
-  }
-
-  if (membership.role === "OWNER" && actor.role !== "OWNER") {
-    throw new ForbiddenError("Only an owner can change another owner's role");
-  }
-
-  const updated = await prisma.$transaction(async (tx) => {
-    const result = await tx.orgMembership.update({
-      where: { id: membershipId },
-      data: { role: input.role },
-    });
-
-    await writeAuditLog(tx, {
-      orgId,
-      actorId: actor.id,
-      action: "member.role_change",
-      targetType: "OrgMembership",
-      targetId: membershipId,
-      metadata: {
-        email: membership.user.email,
-        newRole: input.role,
-        previousRole: membership.role,
-      },
-      ipAddress,
-    });
-
-    return result;
-  });
-
-  notifyUserAccessChanged(membership.userId, orgId);
-
-  return updated;
-}
 
 export async function removeMember(
   orgId: string,
@@ -301,8 +252,14 @@ export async function removeMember(
     throw new NotFoundError("Membership not found");
   }
 
-  if (membership.role === "OWNER" && membership.userId !== actor.id) {
+  const isSelf = membership.userId === actor.id;
+
+  if (membership.role === "OWNER" && !isSelf) {
     throw new ForbiddenError("Owners can only be removed by themselves");
+  }
+
+  if (!isSelf && actor.role !== "OWNER") {
+    throw new ForbiddenError("Only the Owner can remove another member");
   }
 
   await prisma.$transaction(async (tx) => {
@@ -421,7 +378,7 @@ export async function transferOwnership(
   await prisma.$transaction(async (tx) => {
     await tx.orgMembership.update({
       where: { id: actorMembership.id },
-      data: { role: "ADMIN" },
+      data: { role: "VIEWER" },
     });
     await tx.orgMembership.update({
       where: { id: targetMembership.id },

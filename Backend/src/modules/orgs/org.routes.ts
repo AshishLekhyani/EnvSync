@@ -11,7 +11,6 @@ import {
   grantProjectAccessSchema,
   setCanViewAllProjectsSchema,
   transferOwnershipSchema,
-  updateMemberRoleSchema,
 } from "./membership.validators";
 
 export const orgRouter = Router();
@@ -28,7 +27,7 @@ orgRouter.get(
 );
 orgRouter.patch(
   "/:orgId",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("OWNER", orgIdFromParam()),
   validate({ body: updateOrgSchema }),
   orgController.updateOrg
 );
@@ -51,19 +50,13 @@ orgRouter.get(
 orgRouter.get(
   "/:orgId/members/check-email",
   checkEmailRateLimiter,
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   validate({ query: checkEmailQuerySchema }),
   membershipController.checkEmailExists
 );
-orgRouter.patch(
-  "/:orgId/members/:membershipId",
-  requireOrgRole("ADMIN", orgIdFromParam()),
-  validate({ body: updateMemberRoleSchema }),
-  membershipController.updateMemberRole
-);
 orgRouter.delete(
   "/:orgId/members/:membershipId",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   membershipController.removeMember
 );
 orgRouter.post(

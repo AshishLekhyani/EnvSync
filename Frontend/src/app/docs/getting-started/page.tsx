@@ -112,15 +112,14 @@ export default function GettingStartedDocsPage() {
         <section>
           <h2 className="mb-sm font-h3 text-h3 text-on-surface">8. Invite your team</h2>
           <p className="font-body-md text-body-md text-secondary">
-            From Team → Invites, generate a shareable invite link scoped to a role — Admin and
-            Developer invites also require picking the project that role applies to, since
-            those roles are project-scoped; a Viewer invite can stay org-only. Invites created
-            by a Developer need Admin approval
-            before they&apos;re usable — see{" "}
+            From Team → Invites, generate a shareable invite link. Only the Owner or a
+            project&apos;s own Admin can send an Admin/Developer/Viewer invite — it requires
+            picking the project that role applies to, since those roles are project-scoped. Any
+            member can send a plain org-only invite (no project, no role). See{" "}
             <Link href="/docs/permissions" className="text-primary hover:underline">
               Roles &amp; Permissions
             </Link>{" "}
-            for the full hierarchy. Anyone can leave an organization or a project on their own
+            for the full model. Anyone can leave an organization or a project on their own
             from Settings, no admin required.
           </p>
         </section>

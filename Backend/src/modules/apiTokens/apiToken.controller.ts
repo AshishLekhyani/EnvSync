@@ -13,7 +13,11 @@ export const createApiToken = asyncHandler(async (req, res) => {
 });
 
 export const listApiTokens = asyncHandler(async (req, res) => {
-  const tokens = await apiTokenService.listApiTokens(req.params.orgId);
+  const tokens = await apiTokenService.listApiTokens(
+    req.params.orgId,
+    req.user!.id,
+    req.membership!.role === "OWNER"
+  );
   res.status(200).json(tokens);
 });
 
@@ -22,6 +26,7 @@ export const revokeApiToken = asyncHandler(async (req, res) => {
     req.params.orgId,
     req.params.tokenId,
     req.user!.id,
+    req.membership!.role === "OWNER",
     req.ip
   );
   res.status(200).json(token);

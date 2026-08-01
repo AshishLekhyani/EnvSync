@@ -1,10 +1,10 @@
-import { EnvironmentAccessLevel, EnvironmentType, OrgRole } from "@prisma/client";
+import { EnvironmentAccessLevel, EnvironmentType, OrgRole, ProjectRole } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { ForbiddenError } from "../../common/errors/AppError";
 import { writeAuditLog } from "../audit/audit.service";
 import { EnvironmentAccess, getEnvironmentAccess } from "./roles";
 
-const ALL_ROLES: OrgRole[] = ["OWNER", "ADMIN", "DEVELOPER", "VIEWER"];
+const ALL_ROLES: ProjectRole[] = ["OWNER", "ADMIN", "DEVELOPER", "VIEWER"];
 const ALL_ENV_TYPES: EnvironmentType[] = [
   "DEVELOPMENT",
   "TESTING",
@@ -22,7 +22,7 @@ function toUpperAccess(access: EnvironmentAccess): EnvironmentAccessLevel {
 
 async function getEffectiveAccessForRole(
   orgId: string,
-  role: OrgRole,
+  role: ProjectRole,
   environmentType: EnvironmentType
 ): Promise<EnvironmentAccess> {
   if (role === "OWNER") {
@@ -99,7 +99,7 @@ export async function getPermissionMatrix(orgId: string) {
 
 export async function setPermissionOverride(
   orgId: string,
-  input: { role: OrgRole; environmentType: EnvironmentType; access: EnvironmentAccessLevel | null },
+  input: { role: ProjectRole; environmentType: EnvironmentType; access: EnvironmentAccessLevel | null },
   actorId: string,
   ipAddress?: string
 ) {

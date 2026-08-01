@@ -54,6 +54,7 @@ function AuditPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!org) {
@@ -95,6 +96,29 @@ function AuditPageContent() {
     };
   }, [org, projectId, action, actorId, startDate, endDate, page]);
 
+  const filteredLogs = search.trim()
+    ? logs.filter((log) => {
+        const q = search.trim().toLowerCase();
+        const display = getActionDisplay(log.action);
+        const m = log.metadata;
+        const haystack = [
+          display.label,
+          log.action,
+          log.actor?.name,
+          log.actor?.email,
+          log.project?.name,
+          m?.key as string | undefined,
+          m?.email as string | undefined,
+          m?.name as string | undefined,
+          m?.newName as string | undefined,
+        ]
+          .filter((v): v is string => typeof v === "string")
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(q);
+      })
+    : logs;
+
   const onExport = async () => {
     if (!org) return;
     setExporting(true);
@@ -109,7 +133,7 @@ function AuditPageContent() {
   };
 
   return (
-    <AppShell searchPlaceholder="Search audit logs...">
+    <AppShell searchPlaceholder="Search audit logs..." onSearch={setSearch}>
       <div className="mx-auto max-w-container-max pb-xl">
         <div className="mb-xl flex flex-col justify-between gap-md md:flex-row md:items-center">
           <div>
@@ -221,9 +245,13 @@ function AuditPageContent() {
               <p className="px-md py-xl text-center font-body-md text-body-md text-secondary">
                 {projectId ? "No activity for this project yet." : "No activity yet."}
               </p>
+            ) : filteredLogs.length === 0 ? (
+              <p className="px-md py-xl text-center font-body-md text-body-md text-secondary">
+                No activity matches &ldquo;{search}&rdquo;.
+              </p>
             ) : (
               <div className="divide-y divide-[#D0D7DE] dark:divide-outline-variant">
-                {logs.map((log) => {
+                {filteredLogs.map((log) => {
                   const display = getActionDisplay(log.action);
                   const m = log.metadata;
                   const key =

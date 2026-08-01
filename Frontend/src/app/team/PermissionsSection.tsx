@@ -11,8 +11,8 @@ import {
   EnvironmentAccessLevel,
   EnvironmentType,
   MemberSummary,
-  OrgRole,
   PermissionMatrix,
+  ProjectRole,
 } from "@/lib/api";
 
 const ENV_COLUMNS: { type: EnvironmentType; label: string }[] = [
@@ -22,7 +22,7 @@ const ENV_COLUMNS: { type: EnvironmentType; label: string }[] = [
   { type: "PRODUCTION", label: "Prod" },
 ];
 
-const ROLE_ROWS: OrgRole[] = ["OWNER", "ADMIN", "DEVELOPER", "VIEWER"];
+const ROLE_ROWS: ProjectRole[] = ["OWNER", "ADMIN", "DEVELOPER", "VIEWER"];
 
 function TransferOwnershipSection({ orgId }: { orgId: string }) {
   const router = useRouter();
@@ -60,7 +60,7 @@ function TransferOwnershipSection({ orgId }: { orgId: string }) {
     if (
       !(await confirm({
         title: "Transfer Ownership",
-        message: `Make ${selectedMember.user.name} the Owner? You will be demoted to Admin immediately.`,
+        message: `Make ${selectedMember.user.name} the Owner? You will lose Owner status immediately, keeping only Admin access on the projects you already manage.`,
         confirmLabel: "Transfer",
         danger: true,
       }))
@@ -86,8 +86,9 @@ function TransferOwnershipSection({ orgId }: { orgId: string }) {
         Transfer Ownership
       </h4>
       <p className="mt-xs font-body-sm text-body-sm text-[#CF222E]/80 dark:text-red-400/80">
-        Make someone else the Owner of this organization. You&apos;ll be demoted to Admin
-        immediately — this cannot be undone by yourself alone.
+        Make someone else the Owner of this organization. You&apos;ll immediately lose Owner
+        status, keeping only Admin access on the projects you already manage — this cannot be
+        undone by yourself alone.
       </p>
 
       {loading ? (
@@ -157,7 +158,6 @@ function TransferOwnershipSection({ orgId }: { orgId: string }) {
 
 export function PermissionsSection() {
   const { activeOrg: org } = useAuth();
-  const isAdmin = org?.role === "OWNER" || org?.role === "ADMIN";
   const isOwner = org?.role === "OWNER";
 
   const [permissionMatrix, setPermissionMatrix] = useState<PermissionMatrix | null>(null);
@@ -198,7 +198,7 @@ export function PermissionsSection() {
   }, [org]);
 
   const onChangePermission = async (
-    role: OrgRole,
+    role: ProjectRole,
     environmentType: EnvironmentType,
     access: EnvironmentAccessLevel | null
   ) => {
@@ -269,7 +269,7 @@ export function PermissionsSection() {
 
                       const cell = permissionMatrix[role][col.type];
 
-                      if (!isAdmin) {
+                      if (!isOwner) {
                         return (
                           <td key={col.type} className="matrix-cell px-md py-md text-center">
                             {cell.access === "WRITE" && (

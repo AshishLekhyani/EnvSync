@@ -17,9 +17,12 @@ export default function ApiTokensDocsPage() {
         <section>
           <h2 className="mb-sm font-h3 text-h3 text-on-surface">Creating a token</h2>
           <p className="font-body-md text-body-md text-secondary">
-            From Settings → CLI &amp; Tokens (Admin role or above), generate a token and give it
-            a descriptive name. The raw token value is shown exactly once — copy it immediately,
-            it can&apos;t be retrieved again. Only its SHA-256 hash is ever stored.
+            From Settings → CLI &amp; Tokens, any org member can generate a token for their own
+            use — since it can only ever act as its creator, there&apos;s no elevated-access risk
+            in letting anyone self-serve one. Give it a descriptive name; the raw token value is
+            shown exactly once — copy it immediately, it can&apos;t be retrieved again. Only its
+            SHA-256 hash is ever stored. Non-owners only see and manage their own tokens; the
+            Owner can see and revoke every token in the org.
           </p>
         </section>
 
@@ -27,9 +30,9 @@ export default function ApiTokensDocsPage() {
           <h2 className="mb-sm font-h3 text-h3 text-on-surface">Identity-inheriting, not independent</h2>
           <p className="font-body-md text-body-md text-secondary">
             A token isn&apos;t a separately-configured credential — it acts as its creator, with
-            their live role evaluated on every request. If that person&apos;s role changes or
-            they leave the organization, every token they created is affected identically and
-            immediately.
+            their live project access evaluated fresh on every request. If that person&apos;s
+            access to a project changes or they leave the organization, every token they created
+            is affected identically and immediately.
           </p>
         </section>
 

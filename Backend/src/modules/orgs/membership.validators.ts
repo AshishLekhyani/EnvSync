@@ -1,15 +1,9 @@
-import { OrgRole } from "@prisma/client";
 import { z } from "zod";
 
 export const checkEmailQuerySchema = z.object({
   email: z.string().email(),
 });
 export type CheckEmailQuery = z.infer<typeof checkEmailQuerySchema>;
-
-export const updateMemberRoleSchema = z.object({
-  role: z.nativeEnum(OrgRole),
-});
-export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleSchema>;
 
 export const setCanViewAllProjectsSchema = z.object({
   canViewAllProjects: z.boolean(),

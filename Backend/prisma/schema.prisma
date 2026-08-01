@@ -37,12 +37,8 @@ model User {
   invitesApproved                 OrgInvite[]                    @relation("InviteApprover")
   projectAccess                   ProjectMembership[]            @relation("ProjectMember")
   projectAccessGranted            ProjectMembership[]            @relation("ProjectAccessGrantor")
-  autoApproveRulesAsInviter       InviteAutoApproveRule[]        @relation("AutoApproveInviter")
-  autoApproveRulesCreated         InviteAutoApproveRule[]        @relation("AutoApproveCreatedBy")
   projectAccessRequested          ProjectAccessRequest[]         @relation("ProjectAccessRequester")
   projectAccessDecided            ProjectAccessRequest[]         @relation("ProjectAccessDecider")
-  roleChangeRequested             RoleChangeRequest[]            @relation("RoleChangeRequester")
-  roleChangeDecided               RoleChangeRequest[]            @relation("RoleChangeDecider")
   projectCreationRequested        ProjectCreationRequest[]       @relation("ProjectCreationRequester")
   projectCreationDecided          ProjectCreationRequest[]       @relation("ProjectCreationDecider")
   projectCreateAutoApproveAsAdmin ProjectCreateAutoApproveRule[] @relation("ProjectCreateAutoApproveAdmin")
@@ -51,7 +47,19 @@ model User {
   @@unique([authProvider, providerId])
 }
 
+// Org-level role. Deliberately binary: OWNER is the sole org-wide privileged tier,
+// VIEWER is a meaningless placeholder for "plain member" and is never displayed or
+// treated as a distinct capability tier. Real Admin/Developer/Viewer tiers only exist
+// per project — see ProjectRole.
 enum OrgRole {
+  OWNER
+  VIEWER
+}
+
+// Project-scoped role. Used by ProjectMembership, the org-wide environment-tier
+// permission-override table (OrgEnvironmentPermission), and project-scoped
+// invite/access-request role fields — never by OrgMembership.
+enum ProjectRole {
   OWNER
   ADMIN
   DEVELOPER
@@ -73,9 +81,7 @@ model Organization {
   notifications                 Notification[]
   invites                       OrgInvite[]
   permissionOverrides           OrgEnvironmentPermission[]
-  inviteAutoApproveRules        InviteAutoApproveRule[]
   projectAccessRequests         ProjectAccessRequest[]
-  roleChangeRequests            RoleChangeRequest[]
   projectCreationRequests       ProjectCreationRequest[]
   projectCreateAutoApproveRules ProjectCreateAutoApproveRule[]
 }
@@ -117,12 +123,12 @@ model Project {
 }
 
 model ProjectMembership {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   userId      String
   projectId   String
-  role        OrgRole  @default(VIEWER)
+  role        ProjectRole @default(VIEWER)
   grantedById String
-  createdAt   DateTime @default(now())
+  createdAt   DateTime    @default(now())
 
   user      User    @relation("ProjectMember", fields: [userId], references: [id], onDelete: Cascade)
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -334,7 +340,7 @@ enum EnvironmentAccessLevel {
 model OrgEnvironmentPermission {
   id              String                 @id @default(cuid())
   orgId           String
-  role            OrgRole
+  role            ProjectRole
   environmentType EnvironmentType
   access          EnvironmentAccessLevel
   createdAt       DateTime               @default(now())
@@ -357,7 +363,7 @@ model OrgInvite {
   id             String               @id @default(cuid())
   orgId          String
   email          String
-  role           OrgRole
+  role           ProjectRole
   projectId      String?
   tokenHash      String               @unique
   invitedById    String
@@ -379,25 +385,6 @@ model OrgInvite {
   @@index([email])
 }
 
-model InviteAutoApproveRule {
-  id          String   @id @default(cuid())
-  orgId       String
-  inviterId   String?
-  createdById String
-  createdAt   DateTime @default(now())
-
-  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  inviter   User?        @relation("AutoApproveInviter", fields: [inviterId], references: [id], onDelete: Cascade)
-  createdBy User         @relation("AutoApproveCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
-
-  // Postgres does not enforce uniqueness among multiple NULLs in a unique
-  // index, so this only dedupes per-inviter rules — the blanket
-  // (inviterId: null) rule must be kept unique in application code by
-  // deleting any existing blanket row before inserting a new one.
-  @@unique([orgId, inviterId])
-  @@index([orgId])
-}
-
 enum AccessRequestStatus {
   PENDING
   APPROVED
@@ -409,7 +396,7 @@ model ProjectAccessRequest {
   orgId         String
   projectId     String
   requestedById String
-  requestedRole OrgRole?
+  requestedRole ProjectRole?
   status        AccessRequestStatus @default(PENDING)
   decidedById   String?
   decidedAt     DateTime?
@@ -422,22 +409,4 @@ model ProjectAccessRequest {
 
   @@index([orgId])
   @@index([projectId])
-}
-
-model RoleChangeRequest {
-  id            String              @id @default(cuid())
-  orgId         String
-  userId        String
-  requestedRole OrgRole
-  status        AccessRequestStatus @default(PENDING)
-  decidedById   String?
-  decidedAt     DateTime?
-  createdAt     DateTime            @default(now())
-
-  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user      User         @relation("RoleChangeRequester", fields: [userId], references: [id], onDelete: Cascade)
-  decidedBy User?        @relation("RoleChangeDecider", fields: [decidedById], references: [id], onDelete: SetNull)
-
-  @@index([orgId])
-  @@index([userId])
 }

@@ -368,7 +368,6 @@ export function OrganizationTab() {
     );
   }
 
-  const isAdmin = org.role === "OWNER" || org.role === "ADMIN";
   const isOwner = org.role === "OWNER";
 
   const onRename = async (e: FormEvent) => {
@@ -423,7 +422,7 @@ export function OrganizationTab() {
           </button>
         </div>
         <div className="p-md">
-          {isAdmin ? (
+          {isOwner ? (
             <form onSubmit={onRename} className="flex max-w-md flex-col gap-md">
               <label className="block">
                 <span className="mb-xs block font-label-md text-label-md text-on-surface">
@@ -463,7 +462,7 @@ export function OrganizationTab() {
               <p className="font-body-md text-body-md font-bold text-on-surface">{org.name}</p>
               <p className="font-body-sm text-body-sm text-on-surface-variant">{org.slug}</p>
               <p className="mt-sm font-body-sm text-[11px] text-on-surface-variant">
-                Only Admins and Owners can rename this organization.
+                Only the Owner can rename this organization.
               </p>
             </div>
           )}

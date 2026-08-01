@@ -95,7 +95,11 @@ async function request<T>(
   return body as T;
 }
 
-export type OrgRole = "OWNER" | "ADMIN" | "DEVELOPER" | "VIEWER";
+// Org-level role: only OWNER carries real org-wide privilege; VIEWER is a meaningless
+// placeholder for "plain member". Real Admin/Developer/Viewer tiers only exist per
+// project — see ProjectRole.
+export type OrgRole = "OWNER" | "VIEWER";
+export type ProjectRole = "OWNER" | "ADMIN" | "DEVELOPER" | "VIEWER";
 export type EnvironmentType = "DEVELOPMENT" | "TESTING" | "STAGING" | "PRODUCTION";
 
 export type AuthProvider = "PASSWORD" | "GITHUB" | "GOOGLE";
@@ -142,7 +146,7 @@ export interface Project {
   updatedAt: string;
   hasAccess?: boolean;
   hasPendingAccessRequest?: boolean;
-  myRole?: OrgRole | null;
+  myRole?: ProjectRole | null;
 }
 
 export type EnvironmentAccess = "none" | "read" | "write";
@@ -173,11 +177,11 @@ export interface MemberSummary {
   role: OrgRole;
   user: { id: string; name: string; email: string; avatarUrl?: string | null };
   canViewAllProjects?: boolean;
-  projectAccess?: { id: string; name: string; role: OrgRole }[];
+  projectAccess?: { id: string; name: string; role: ProjectRole }[];
 }
 
 export interface ProjectMemberSummary {
-  role: OrgRole;
+  role: ProjectRole;
   user: { id: string; name: string; email: string; avatarUrl?: string | null };
 }
 
@@ -270,16 +274,13 @@ export interface PermissionCell {
   isOverride: boolean;
 }
 
-export type PermissionMatrix = Record<OrgRole, Record<EnvironmentType, PermissionCell>>;
-
-export type InviteApprovalStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+export type PermissionMatrix = Record<ProjectRole, Record<EnvironmentType, PermissionCell>>;
 
 export interface InviteSummary {
   id: string;
   email: string;
-  role: OrgRole;
+  role: ProjectRole | null;
   projectId: string | null;
-  approvalStatus: InviteApprovalStatus;
   createdAt: string;
   expiresAt: string;
   acceptedAt: string | null;
@@ -293,7 +294,7 @@ export interface PublicInvite {
   orgId: string;
   orgName: string;
   orgSlug: string;
-  role: OrgRole;
+  role: ProjectRole | null;
   email: string;
   project: { id: string; name: string } | null;
   expiresAt: string;
@@ -303,25 +304,11 @@ export interface PublicInvite {
   rejected: boolean;
 }
 
-export interface AutoApproveRule {
-  id: string;
-  inviter: { id: string; name: string; email: string } | null;
-  createdByName: string;
-  createdAt: string;
-}
-
 export interface ProjectAccessRequestSummary {
   id: string;
   project: { id: string; name: string };
   requestedBy: { id: string; name: string; email: string };
-  requestedRole: OrgRole | null;
-  createdAt: string;
-}
-
-export interface RoleChangeRequestSummary {
-  id: string;
-  user: { id: string; name: string; email: string };
-  requestedRole: OrgRole;
+  requestedRole: ProjectRole | null;
   createdAt: string;
 }
 
@@ -488,16 +475,10 @@ export const api = {
       `/orgs/${orgId}/members/check-email?email=${encodeURIComponent(email)}`
     ),
 
-  updateMemberRole: (orgId: string, membershipId: string, role: OrgRole) =>
-    request<{ id: string; role: OrgRole }>(`/orgs/${orgId}/members/${membershipId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ role }),
-    }),
-
   removeMember: (orgId: string, membershipId: string) =>
     request<void>(`/orgs/${orgId}/members/${membershipId}`, { method: "DELETE" }),
 
-  grantProjectAccess: (orgId: string, membershipId: string, projectId: string, role: OrgRole) =>
+  grantProjectAccess: (orgId: string, membershipId: string, projectId: string, role: ProjectRole) =>
     request<void>(`/orgs/${orgId}/members/${membershipId}/projects/${projectId}`, {
       method: "POST",
       body: JSON.stringify({ role }),
@@ -529,7 +510,7 @@ export const api = {
       body: JSON.stringify({ membershipId }),
     }),
 
-  requestProjectAccess: (orgId: string, projectId: string, requestedRole?: OrgRole) =>
+  requestProjectAccess: (orgId: string, projectId: string, requestedRole?: ProjectRole) =>
     request<{ id: string }>(`/orgs/${orgId}/projects/${projectId}/access-requests`, {
       method: "POST",
       body: JSON.stringify({ requestedRole }),
@@ -545,28 +526,6 @@ export const api = {
 
   rejectAccessRequest: (orgId: string, requestId: string) =>
     request<void>(`/orgs/${orgId}/project-access-requests/${requestId}/reject`, {
-      method: "POST",
-    }),
-
-  requestRoleChange: (orgId: string, requestedRole: OrgRole) =>
-    request<{ id: string }>(`/orgs/${orgId}/role-change-requests`, {
-      method: "POST",
-      body: JSON.stringify({ requestedRole }),
-    }),
-
-  getMyRoleChangeRequest: (orgId: string) =>
-    request<RoleChangeRequestSummary | null>(`/orgs/${orgId}/role-change-requests/mine`),
-
-  listRoleChangeRequests: (orgId: string) =>
-    request<RoleChangeRequestSummary[]>(`/orgs/${orgId}/role-change-requests`),
-
-  approveRoleChangeRequest: (orgId: string, requestId: string) =>
-    request<void>(`/orgs/${orgId}/role-change-requests/${requestId}/approve`, {
-      method: "POST",
-    }),
-
-  rejectRoleChangeRequest: (orgId: string, requestId: string) =>
-    request<void>(`/orgs/${orgId}/role-change-requests/${requestId}/reject`, {
       method: "POST",
     }),
 
@@ -657,14 +616,14 @@ export const api = {
 
   setPermissionOverride: (
     orgId: string,
-    input: { role: OrgRole; environmentType: EnvironmentType; access: EnvironmentAccessLevel | null }
+    input: { role: ProjectRole; environmentType: EnvironmentType; access: EnvironmentAccessLevel | null }
   ) =>
     request<PermissionMatrix>(`/orgs/${orgId}/permissions`, {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
 
-  createInvite: (orgId: string, input: { email: string; role: OrgRole; projectId?: string }) =>
+  createInvite: (orgId: string, input: { email: string; projectId?: string; role?: ProjectRole }) =>
     request<InviteCreated>(`/orgs/${orgId}/invites`, {
       method: "POST",
       body: JSON.stringify(input),
@@ -677,28 +636,4 @@ export const api = {
   acceptInvite: (token: string) =>
     request<MemberSummary>(`/invites/${token}/accept`, { method: "POST" }),
 
-  approveInvite: (orgId: string, inviteId: string) =>
-    request<InviteCreated>(`/orgs/${orgId}/invites/${inviteId}/approve`, { method: "POST" }),
-
-  rejectInvite: (orgId: string, inviteId: string) =>
-    request<InviteSummary>(`/orgs/${orgId}/invites/${inviteId}/reject`, { method: "POST" }),
-
-  listAutoApproveRules: (orgId: string) =>
-    request<AutoApproveRule[]>(`/orgs/${orgId}/invites/auto-approve`),
-
-  setBlanketAutoApprove: (orgId: string, enabled: boolean) =>
-    request<AutoApproveRule[]>(`/orgs/${orgId}/invites/auto-approve/blanket`, {
-      method: "PATCH",
-      body: JSON.stringify({ enabled }),
-    }),
-
-  enableInviterAutoApprove: (orgId: string, userId: string) =>
-    request<AutoApproveRule[]>(`/orgs/${orgId}/invites/auto-approve/${userId}`, {
-      method: "POST",
-    }),
-
-  disableInviterAutoApprove: (orgId: string, userId: string) =>
-    request<AutoApproveRule[]>(`/orgs/${orgId}/invites/auto-approve/${userId}`, {
-      method: "DELETE",
-    }),
 };

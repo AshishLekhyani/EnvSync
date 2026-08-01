@@ -20,16 +20,16 @@ export const orgAccessRequestsRouter = Router({ mergeParams: true });
 orgAccessRequestsRouter.use(requireAuth);
 orgAccessRequestsRouter.get(
   "/",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   accessRequestController.listAccessRequests
 );
 orgAccessRequestsRouter.post(
   "/:requestId/approve",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   accessRequestController.approveAccessRequest
 );
 orgAccessRequestsRouter.post(
   "/:requestId/reject",
-  requireOrgRole("ADMIN", orgIdFromParam()),
+  requireOrgRole("VIEWER", orgIdFromParam()),
   accessRequestController.rejectAccessRequest
 );

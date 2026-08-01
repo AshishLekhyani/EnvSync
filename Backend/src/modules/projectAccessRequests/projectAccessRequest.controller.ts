@@ -15,7 +15,11 @@ export const createAccessRequest = asyncHandler(async (req, res) => {
 });
 
 export const listAccessRequests = asyncHandler(async (req, res) => {
-  const requests = await accessRequestService.listAccessRequests(req.params.orgId);
+  const requests = await accessRequestService.listAccessRequests(
+    req.params.orgId,
+    req.user!.id,
+    req.membership!.role
+  );
   res.status(200).json(requests);
 });
 

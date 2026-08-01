@@ -32,7 +32,6 @@ import {
   createAccessRequestRouter,
   orgAccessRequestsRouter,
 } from "./modules/projectAccessRequests/projectAccessRequest.routes";
-import { orgRoleChangeRequestsRouter } from "./modules/roleChangeRequests/roleChangeRequest.routes";
 
 let cliVersionCache: { version: string | null; fetchedAt: number } | null = null;
 const CLI_VERSION_CACHE_MS = 60 * 60 * 1000;
@@ -94,7 +93,6 @@ export function createApp() {
     createAccessRequestRouter
   );
   app.use("/api/orgs/:orgId/project-access-requests", orgAccessRequestsRouter);
-  app.use("/api/orgs/:orgId/role-change-requests", orgRoleChangeRequestsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
